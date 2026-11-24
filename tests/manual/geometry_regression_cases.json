@@ -10782,6 +10782,7 @@
       "device": "cuda",
       "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Wan-AI--Wan2.2-T2V-A14B",
       "torch_dtype": "bfloat16",
+      "dit_weight_dtype": "bfloat16",
       "offload_mode": "none"
     },
     "call": {
@@ -10817,6 +10818,7 @@
       "device": "cuda",
       "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Wan-AI--Wan2.2-I2V-A14B",
       "torch_dtype": "bfloat16",
+      "dit_weight_dtype": "bfloat16",
       "offload_mode": "none"
     },
     "call": {
