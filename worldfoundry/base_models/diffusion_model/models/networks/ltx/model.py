@@ -323,31 +323,28 @@ class LTXModel(torch.nn.Module):
     ) -> int:
         """Bind an attention backend to eligible LTX ``Attention`` modules.
 
-        When ``self_only=True`` and ``backend="sol_attn"``, binds every self-attention
-        module with ``dim_head == 128`` (e.g. LTX-2 video ``attn1``) while leaving
-        cross-attention, 64-dim audio attention, and any ``dense_blocks`` indices on
-        their exact dense backend (preserving e.g. ``flash_attention_3`` or defaulting
-        to ``"torch"``).
+        When ``self_only=True`` and ``backend="sol_attn"`` or ``"pisa"``, binds
+        eligible video self-attention modules (``attn1``) while leaving cross-attention,
+        audio self-attention, and any ``dense_blocks`` indices on their exact dense
+        backend (preserving e.g. ``flash_attention_3`` or defaulting to ``"torch"``).
         """
         if self_only and cross_only:
             raise ValueError("self_only and cross_only cannot both be True")
 
-        from .attention import _APPROXIMATE_ATTENTION_BACKENDS, Attention
+        from .attention import _APPROXIMATE_ATTENTION_BACKENDS, Attention, _normalize_ltx_attention_backend
 
         normalized: str | None = None
         if backend is not None:
-            from worldfoundry.core.attention.backends.probe import normalize_attention_backend
-
-            normalized = normalize_attention_backend(str(backend))
+            normalized = _normalize_ltx_attention_backend(str(backend))
 
         resolved_dense_backend: str | None = dense_backend
         if resolved_dense_backend is None and backend_options and "dense_backend" in backend_options:
             raw_opt_dense = backend_options["dense_backend"]
             resolved_dense_backend = None if raw_opt_dense is None else str(raw_opt_dense)
         if resolved_dense_backend is not None:
-            from worldfoundry.core.attention.backends.probe import normalize_attention_backend
-
-            resolved_dense_backend = normalize_attention_backend(resolved_dense_backend)
+            resolved_dense_backend = _normalize_ltx_attention_backend(resolved_dense_backend)
+            if resolved_dense_backend in _APPROXIMATE_ATTENTION_BACKENDS:
+                raise ValueError(f"dense_backend must be an exact attention backend, got {resolved_dense_backend!r}")
 
         num_blocks = len(self.transformer_blocks)
         dense_indices: set[int] = set()
@@ -365,15 +362,23 @@ class LTXModel(torch.nn.Module):
                     if isinstance(child, Attention):
                         dense_modules.add(id(child))
 
+        audio_self_modules: set[int] = set()
+        if self_only and normalized == "pisa" and self.model_type.is_video_enabled():
+            for block in self.transformer_blocks:
+                audio_attn1 = getattr(block, "audio_attn1", None)
+                if isinstance(audio_attn1, Attention):
+                    audio_self_modules.add(id(audio_attn1))
+
         effective_options: Mapping[str, object] | None = backend_options
         if (
             resolved_dense_backend is not None
-            and normalized in {"sol_attn", "cudnn_fp8"}
+            and normalized in {"sol_attn", "pisa", "cudnn_fp8"}
             and (backend_options is None or "dense_backend" not in backend_options)
         ):
             effective_options = {**(backend_options or {}), "dense_backend": resolved_dense_backend}
 
-        configured = 0
+        dense_targets: list[Attention] = []
+        main_targets: list[Attention] = []
         for child in self.modules():
             if not isinstance(child, Attention):
                 continue
@@ -383,23 +388,75 @@ class LTXModel(torch.nn.Module):
                 continue
             if self_only and normalized == "sol_attn" and child.dim_head != 128:
                 continue
-            if id(child) in dense_modules:
-                if resolved_dense_backend is not None:
-                    child.set_attention_backend(resolved_dense_backend)
-                elif normalized is None:
-                    child.set_attention_backend(None)
-                elif child.attention_backend in {None, "torch", "auto", *_APPROXIMATE_ATTENTION_BACKENDS}:
-                    child.set_attention_backend(child._dense_attention_backend or "torch")
-                # Otherwise preserve an existing exact dense backend (e.g. flash_attention_3).
+            if id(child) in audio_self_modules:
                 continue
-            child.set_attention_backend(normalized, backend_options=effective_options)
-            configured += 1
-        if backend is not None and configured == 0:
+            if id(child) in dense_modules:
+                dense_targets.append(child)
+            else:
+                main_targets.append(child)
+
+        if backend is not None and not main_targets:
             raise ValueError(
                 f"no eligible LTX attention modules matched backend={backend!r} "
                 f"(self_only={self_only}, cross_only={cross_only})"
             )
-        return configured
+
+        # Configure primary targets before dense edge blocks so invalid backend_options fail
+        # before mutating dense edge blocks.
+        for child in main_targets:
+            child.set_attention_backend(normalized, backend_options=effective_options)
+        for child in dense_targets:
+            if resolved_dense_backend is not None:
+                child.set_attention_backend(resolved_dense_backend)
+            elif normalized is None:
+                child.set_attention_backend(None)
+            elif child.attention_backend in {None, "torch", "auto", *_APPROXIMATE_ATTENTION_BACKENDS}:
+                child.set_attention_backend(child._dense_attention_backend or "torch")
+            # Otherwise preserve an existing exact dense backend (e.g. flash_attention_3).
+        return len(main_targets)
+
+    def configure_token_pruning(
+        self,
+        config: Any = None,
+    ) -> dict[str, Any] | None:
+        """Install or clear opt-in Stage-2 interior video token pruning."""
+        if config is None or config is False:
+            self.__dict__.pop("_worldfoundry_token_pruning_config", None)
+            self.__dict__.pop("_worldfoundry_token_pruning_runtime", None)
+            return None
+        from .acceleration import LTXTokenPruningConfig
+
+        if config is True:
+            parsed = LTXTokenPruningConfig()
+        elif isinstance(config, LTXTokenPruningConfig):
+            parsed = config
+        elif isinstance(config, Mapping):
+            parsed = LTXTokenPruningConfig(**dict(config))
+        else:
+            raise TypeError(
+                f"token_pruning config must be LTXTokenPruningConfig, Mapping, bool, or None, got {config!r}"
+            )
+
+        start_blk, end_blk = parsed.resolve_span(len(self.transformer_blocks))
+        runtime: dict[str, Any] = {
+            "pruned_calls": 0,
+            "dense_calls": 0,
+            "distilled_guard_skips": 0,
+            "last_kept_tokens": None,
+            "last_total_tokens": None,
+            "keep_ratio": float(parsed.keep_ratio),
+            "method": parsed.normalized_method,
+            "restore_mode": parsed.normalized_restore_mode,
+            "stratify_group_size": parsed.stratify_group_size,
+            "block_span": [start_blk, end_blk],
+            "min_tokens": int(parsed.min_tokens),
+            "min_steps_to_enable": int(parsed.min_steps_to_enable),
+            "allow_distilled_pruning": bool(parsed.allow_distilled_pruning),
+            "preserve_conditioning_tokens": bool(parsed.preserve_conditioning_tokens),
+        }
+        self.__dict__["_worldfoundry_token_pruning_config"] = parsed
+        self.__dict__["_worldfoundry_token_pruning_runtime"] = runtime
+        return runtime
 
     def fuse_projections(
         self,
@@ -731,16 +788,22 @@ class LTXModel(torch.nn.Module):
 
         return video, audio
 
-    def _run_blocks_maybe_graphed(
+    def _run_block_range_maybe_graphed(
         self,
         video_args: TransformerArgs | None,
         audio_args: TransformerArgs | None,
+        start_block: int,
+        end_block: int,
         perturbations: BatchedPerturbationConfig | None,
         piecewise_graph: Any,
         *,
         segment_name: str = "ltx_blocks",
     ) -> tuple[TransformerArgs | None, TransformerArgs | None, bool, str]:
-        """Execute transformer blocks through ``piecewise_graph`` when eligible."""
+        """Execute ``transformer_blocks[start_block:end_block]`` through ``piecewise_graph`` when eligible."""
+        num_blocks = len(self.transformer_blocks)
+        if start_block >= end_block:
+            return video_args, audio_args, False, segment_name
+        full_stack = start_block == 0 and end_block == num_blocks
         piecewise_seg_name = segment_name
         piecewise_eligible = (
             piecewise_graph is not None
@@ -752,19 +815,33 @@ class LTXModel(torch.nn.Module):
             and (video_args is None or (video_args.video_control is None and video_args.attention_cache is None))
             and (audio_args is None or audio_args.attention_cache is None)
         )
+
+        def _run_eager(
+            v_in: TransformerArgs | None,
+            a_in: TransformerArgs | None,
+        ) -> tuple[TransformerArgs | None, TransformerArgs | None]:
+            if full_stack:
+                return self._process_transformer_blocks(video=v_in, audio=a_in, perturbations=perturbations)
+            v_cur, a_cur = v_in, a_in
+            for idx in range(start_block, end_block):
+                v_cur, a_cur = gradient_checkpoint_forward(
+                    self.transformer_blocks[idx],
+                    self._enable_gradient_checkpointing and self.training,
+                    False,
+                    v_cur,
+                    a_cur,
+                )
+            return v_cur, a_cur
+
         if not piecewise_eligible:
-            video_out, audio_out = self._process_transformer_blocks(
-                video=video_args,
-                audio=audio_args,
-                perturbations=perturbations,
-            )
+            video_out, audio_out = _run_eager(video_args, audio_args)
             return video_out, audio_out, False, piecewise_seg_name
 
-        def _graphed_stack(
+        def _graphed_range(
             v_in: TransformerArgs | None,
             a_in: TransformerArgs | None,
         ) -> tuple[torch.Tensor | None, torch.Tensor | None]:
-            v_out, a_out = self._process_transformer_blocks(video=v_in, audio=a_in, perturbations=None)
+            v_out, a_out = _run_eager(v_in, a_in)
             return (
                 None if v_out is None else v_out.x,
                 None if a_out is None else a_out.x,
@@ -772,13 +849,176 @@ class LTXModel(torch.nn.Module):
 
         piecewise_graph.get_or_register_segment(
             piecewise_seg_name,
-            _graphed_stack,
+            _graphed_range,
             extra_key=f"ltx_piecewise:{id(self)}:{piecewise_seg_name}",
         )
         vx_out, ax_out = piecewise_graph.run_segment(piecewise_seg_name, video_args, audio_args)
         video_out = None if video_args is None else replace(video_args, x=vx_out)
         audio_out = None if audio_args is None else replace(audio_args, x=ax_out)
         return video_out, audio_out, True, piecewise_seg_name
+
+    def _run_blocks_maybe_graphed(
+        self,
+        video_args: TransformerArgs | None,
+        audio_args: TransformerArgs | None,
+        perturbations: BatchedPerturbationConfig | None,
+        piecewise_graph: Any,
+        *,
+        segment_name: str = "ltx_blocks",
+    ) -> tuple[TransformerArgs | None, TransformerArgs | None, bool, str]:
+        """Execute the full transformer block stack through ``piecewise_graph`` when eligible."""
+        return self._run_block_range_maybe_graphed(
+            video_args,
+            audio_args,
+            0,
+            len(self.transformer_blocks),
+            perturbations,
+            piecewise_graph,
+            segment_name=segment_name,
+        )
+
+    def _run_blocks_with_optional_pruning(
+        self,
+        video_args: TransformerArgs | None,
+        audio_args: TransformerArgs | None,
+        *,
+        start_offset: int,
+        perturbations: BatchedPerturbationConfig | None,
+        piecewise_graph: Any,
+        segment_name: str,
+        tile_sink_tokens: int | None,
+        protected_mask: torch.Tensor | None,
+        protected_count: int,
+        token_prune_step_eligible: bool,
+    ) -> tuple[TransformerArgs | None, TransformerArgs | None, bool, str]:
+        """Run blocks ``[start_offset, num_blocks)``, optionally pruning interior video tokens."""
+        num_blocks = len(self.transformer_blocks)
+        tp_cfg = getattr(self, "_worldfoundry_token_pruning_config", None)
+        tp_rt = getattr(self, "_worldfoundry_token_pruning_runtime", None)
+
+        prune_active = False
+        start_blk = start_offset
+        end_blk = num_blocks
+        keep_tokens = 0
+        total_tokens = 0
+        if (
+            tp_cfg is not None
+            and tp_cfg.keep_ratio < 1.0
+            and token_prune_step_eligible
+            and not self.training
+            and not torch.is_grad_enabled()
+            and perturbations is None
+            and video_args is not None
+            and video_args.enabled
+            and video_args.x.numel() > 0
+            and video_args.self_attention_mask is None
+            and video_args.video_control is None
+            and video_args.attention_cache is None
+        ):
+            total_tokens = int(video_args.x.shape[1])
+            if total_tokens >= int(tp_cfg.min_tokens):
+                cand_start, cand_end = tp_cfg.resolve_span(num_blocks)
+                cand_keep = max(1, min(total_tokens, round(total_tokens * float(tp_cfg.keep_ratio))))
+                if (
+                    cand_start >= start_offset
+                    and cand_keep < total_tokens
+                    and (not tp_cfg.preserve_conditioning_tokens or protected_count < cand_keep)
+                ):
+                    prune_active = True
+                    start_blk, end_blk, keep_tokens = cand_start, cand_end, cand_keep
+
+        if not prune_active:
+            if tp_rt is not None and not torch.compiler.is_compiling():
+                tp_rt["dense_calls"] = int(tp_rt.get("dense_calls", 0)) + 1
+            return self._run_block_range_maybe_graphed(
+                video_args,
+                audio_args,
+                start_offset,
+                num_blocks,
+                perturbations,
+                piecewise_graph,
+                segment_name=segment_name,
+            )
+
+        assert video_args is not None and tp_cfg is not None
+        from .acceleration import restore_ltx_pruned_tokens, select_ltx_salient_tokens
+
+        if tp_rt is not None and not torch.compiler.is_compiling():
+            tp_rt["pruned_calls"] = int(tp_rt.get("pruned_calls", 0)) + 1
+            tp_rt["last_kept_tokens"] = keep_tokens
+            tp_rt["last_total_tokens"] = total_tokens
+
+        x_entry = video_args.x
+        head_seg_name = f"{segment_name}_tp_head_{start_offset}_{start_blk}"
+        v_pre, a_pre, used_head, _ = self._run_block_range_maybe_graphed(
+            video_args,
+            audio_args,
+            start_offset,
+            start_blk,
+            None,
+            piecewise_graph,
+            segment_name=head_seg_name,
+        )
+        assert v_pre is not None
+        eff_protected = protected_mask if tp_cfg.preserve_conditioning_tokens else None
+        keep_idx = select_ltx_salient_tokens(
+            v_pre.x,
+            keep_tokens,
+            method=tp_cfg.normalized_method,
+            entry_hidden=x_entry,
+            protected_mask=eff_protected,
+            stratify_group_size=tp_cfg.stratify_group_size,
+        )
+        v_mid_in = _permute_video_args(v_pre, keep_idx)
+
+        mid_sink_saved: list[tuple[Any, int | None]] = []
+        if tile_sink_tokens is not None:
+            for idx in range(start_blk, end_blk):
+                attn1 = getattr(self.transformer_blocks[idx], "attn1", None)
+                if attn1 is not None and getattr(attn1, "_worldfoundry_sol_sink_tokens", None) is not None:
+                    mid_sink_saved.append((attn1, attn1._worldfoundry_sol_sink_tokens))
+                    attn1._worldfoundry_sol_sink_tokens = None
+        mid_seg_name = f"{segment_name}_tp_mid_{start_blk}_{end_blk}_k{keep_tokens}"
+        try:
+            v_mid_out, a_mid_out, used_mid, _ = self._run_block_range_maybe_graphed(
+                v_mid_in,
+                a_pre,
+                start_blk,
+                end_blk,
+                None,
+                piecewise_graph,
+                segment_name=mid_seg_name,
+            )
+        finally:
+            for mod, saved_sink in mid_sink_saved:
+                mod._worldfoundry_sol_sink_tokens = saved_sink
+
+        assert v_mid_out is not None
+        x_restored = restore_ltx_pruned_tokens(
+            v_pre.x,
+            v_mid_in.x,
+            v_mid_out.x,
+            keep_idx,
+            restore_mode=tp_cfg.normalized_restore_mode,
+        )
+        v_post_mid = replace(v_pre, x=x_restored)
+        tail_seg_name = f"{segment_name}_tp_tail_{end_blk}_{num_blocks}"
+        v_out, a_out, used_tail, _ = self._run_block_range_maybe_graphed(
+            v_post_mid,
+            a_mid_out,
+            end_blk,
+            num_blocks,
+            None,
+            piecewise_graph,
+            segment_name=tail_seg_name,
+        )
+        used_pw = used_head or used_mid or used_tail
+        registered_seg = (
+            mid_seg_name
+            if used_mid
+            else (head_seg_name if used_head else (tail_seg_name if used_tail else segment_name))
+        )
+        return v_out, a_out, used_pw, registered_seg
 
     def _process_output(
         self,
@@ -809,9 +1049,13 @@ class LTXModel(torch.nn.Module):
         feature_cache: Any = None,
         feature_cache_step: int = 0,
         feature_cache_total_steps: int | None = None,
+        fbcache: Any = None,
         _worldfoundry_piecewise_graph: Any = None,
         _video_grid_shape: tuple[int, int, int] | None = None,
         _sol_force_dense: bool = False,
+        _token_prune_step_eligible: bool = True,
+        _video_protected_mask: torch.Tensor | None = None,
+        _video_protected_count: int = 0,
     ) -> tuple[torch.Tensor | None, torch.Tensor | None]:
         """Predict velocity for each enabled modality; unused streams return ``None``.
 
@@ -823,6 +1067,8 @@ class LTXModel(torch.nn.Module):
             raise ValueError("Video is not enabled for this model")
         if not self.model_type.is_audio_enabled() and audio is not None:
             raise ValueError("Audio is not enabled for this model")
+        if feature_cache is not None and fbcache is not None:
+            raise ValueError("LTXModel.forward cannot combine feature_cache and fbcache in the same call")
 
         video_args = self.video_args_preprocessor.prepare(video, audio) if video is not None else None
         audio_args = self.audio_args_preprocessor.prepare(audio, video) if audio is not None else None
@@ -830,8 +1076,57 @@ class LTXModel(torch.nn.Module):
         if perturbations is None and self._needs_materialized_perturbations():
             perturbations = self._keep_all_perturbations(video_args or audio_args)
 
+        tp_cfg = getattr(self, "_worldfoundry_token_pruning_config", None)
+        tp_rt = getattr(self, "_worldfoundry_token_pruning_runtime", None)
+        if tp_cfg is not None and _token_prune_step_eligible and feature_cache_total_steps is not None:
+            step_ok, step_reason = tp_cfg.is_step_eligible(int(feature_cache_step), int(feature_cache_total_steps))
+            if not step_ok:
+                _token_prune_step_eligible = False
+                if (
+                    step_reason == "distilled_short_step_guard"
+                    and float(tp_cfg.keep_ratio) < 1.0
+                    and video_args is not None
+                    and int(video_args.x.shape[1]) >= int(tp_cfg.min_tokens)
+                ):
+                    from .acceleration import record_distilled_pruning_guard
+
+                    record_distilled_pruning_guard(tp_cfg, tp_rt, total_steps=int(feature_cache_total_steps))
+        protected_mask = _video_protected_mask
+        protected_count = int(_video_protected_count)
+        if (
+            protected_mask is None
+            and tp_cfg is not None
+            and tp_cfg.keep_ratio < 1.0
+            and _token_prune_step_eligible
+            and tp_cfg.preserve_conditioning_tokens
+            and not self.training
+            and not torch.is_grad_enabled()
+            and perturbations is None
+            and video is not None
+            and video_args is not None
+            and video_args.enabled
+            and int(video_args.x.shape[1]) >= int(tp_cfg.min_tokens)
+            and video_args.self_attention_mask is None
+            and video_args.video_control is None
+            and video_args.attention_cache is None
+            and not (video_args.x.device.type == "cuda" and torch.cuda.is_current_stream_capturing())
+        ):
+            from .acceleration import derive_ltx_protected_token_mask
+
+            derived = derive_ltx_protected_token_mask(
+                video.timesteps,
+                video.keyframes_mask,
+                int(video_args.x.shape[1]),
+                device=video_args.x.device,
+            )
+            if derived is not None:
+                protected_count = int(derived.sum().item())
+                if protected_count > 0:
+                    protected_mask = derived
+
         sol_schedule = getattr(self, "_worldfoundry_sol_schedule", None)
         orig_video_args = video_args
+        tile_perm: torch.Tensor | None = None
         tile_inv_perm: torch.Tensor | None = None
         tile_sink_tokens: int | None = None
         if (
@@ -880,35 +1175,129 @@ class LTXModel(torch.nn.Module):
                 if cached_perm is not None:
                     tile_perm, tile_inv_perm, sink = cached_perm
                     video_args = _permute_video_args(video_args, tile_perm)
+                    if protected_mask is not None:
+                        protected_mask = protected_mask.index_select(0, tile_perm)
                     if sink > 0:
                         tile_sink_tokens = sink
 
-        sol_attn_modules: list[Any] = []
+        sparse_attn_modules: list[Any] = []
+        sol_sink_modules: list[Any] = []
         if _sol_force_dense or tile_sink_tokens is not None:
             for block in self.transformer_blocks:
                 attn1 = getattr(block, "attn1", None)
-                if attn1 is not None and getattr(attn1, "attention_backend", None) == "sol_attn":
-                    sol_attn_modules.append(attn1)
-            for mod in sol_attn_modules:
-                if _sol_force_dense:
-                    mod._worldfoundry_force_dense = True
-                if tile_sink_tokens is not None:
-                    mod._worldfoundry_sol_sink_tokens = tile_sink_tokens
+                if attn1 is None:
+                    continue
+                attn_backend = getattr(attn1, "attention_backend", None)
+                if _sol_force_dense and attn_backend in {"sol_attn", "pisa"}:
+                    sparse_attn_modules.append(attn1)
+                    attn1._worldfoundry_force_dense = True
+                if tile_sink_tokens is not None and attn_backend == "sol_attn":
+                    sol_sink_modules.append(attn1)
+                    attn1._worldfoundry_sol_sink_tokens = tile_sink_tokens
 
         seg_label = "ltx_blocks"
         if _sol_force_dense:
             seg_label = f"{seg_label}_dense"
-        elif tile_sink_tokens is not None:
+        elif tile_sink_tokens is not None and sol_sink_modules:
             seg_label = f"{seg_label}_sink{tile_sink_tokens}"
 
+        pw_skip_targets: dict[tuple[int, str], str] | None = (
+            self.__dict__.setdefault("_worldfoundry_piecewise_skip_targets", {})
+            if _worldfoundry_piecewise_graph is not None
+            else None
+        )
+
         try:
-            if feature_cache is None or perturbations is not None:
-                video_out, audio_out, _, _ = self._run_blocks_maybe_graphed(
+            if fbcache is not None and perturbations is None and len(self.transformer_blocks) >= 2:
+                num_blocks = len(self.transformer_blocks)
+                v_b0, a_b0, _, _ = self._run_block_range_maybe_graphed(
                     video_args,
                     audio_args,
-                    perturbations,
+                    0,
+                    1,
+                    None,
                     _worldfoundry_piecewise_graph,
+                    segment_name=f"{seg_label}_b0",
+                )
+                can_hit, reason, metric, v_probe, a_probe = fbcache.evaluate_probe(
+                    step=int(feature_cache_step),
+                    total_steps=feature_cache_total_steps,
+                    num_blocks=num_blocks,
+                    block0_video_in=None if video_args is None or not video_args.enabled else video_args.x,
+                    block0_video_out=None if v_b0 is None or not v_b0.enabled else v_b0.x,
+                    block0_audio_in=None if audio_args is None or not audio_args.enabled else audio_args.x,
+                    block0_audio_out=None if a_b0 is None or not a_b0.enabled else a_b0.x,
+                    force_dense=_sol_force_dense,
+                    tiled=tile_inv_perm is not None,
+                )
+                tail_seg_name = f"{seg_label}_b1_{num_blocks}"
+                if can_hit:
+                    v_res = fbcache.cached_video_residual
+                    a_res = fbcache.cached_audio_residual
+                    video_out = (
+                        None
+                        if v_b0 is None
+                        else (v_b0 if v_res is None or v_b0.x.numel() == 0 else replace(v_b0, x=v_b0.x + v_res))
+                    )
+                    audio_out = (
+                        None
+                        if a_b0 is None
+                        else (a_b0 if a_res is None or a_b0.x.numel() == 0 else replace(a_b0, x=a_b0.x + a_res))
+                    )
+                    if _worldfoundry_piecewise_graph is not None and pw_skip_targets is not None:
+                        skip_seg = pw_skip_targets.get(
+                            (id(_worldfoundry_piecewise_graph), tail_seg_name), tail_seg_name
+                        )
+                        _worldfoundry_piecewise_graph.record_skip(skip_seg)
+                    fbcache.record_hit(
+                        step=int(feature_cache_step),
+                        num_blocks=num_blocks,
+                        reason=reason,
+                        metric=metric,
+                        v_probe=v_probe,
+                        a_probe=a_probe,
+                    )
+                else:
+                    video_out, audio_out, used_tail_pw, actual_tail_seg = self._run_blocks_with_optional_pruning(
+                        v_b0,
+                        a_b0,
+                        start_offset=1,
+                        perturbations=None,
+                        piecewise_graph=_worldfoundry_piecewise_graph,
+                        segment_name=tail_seg_name,
+                        tile_sink_tokens=tile_sink_tokens,
+                        protected_mask=protected_mask,
+                        protected_count=protected_count,
+                        token_prune_step_eligible=_token_prune_step_eligible,
+                    )
+                    if used_tail_pw and _worldfoundry_piecewise_graph is not None and pw_skip_targets is not None:
+                        pw_skip_targets[(id(_worldfoundry_piecewise_graph), tail_seg_name)] = actual_tail_seg
+                    fbcache.record_miss(
+                        step=int(feature_cache_step),
+                        num_blocks=num_blocks,
+                        reason=reason,
+                        metric=metric,
+                        v_probe=v_probe,
+                        a_probe=a_probe,
+                        video_tail_base=None if v_b0 is None or not v_b0.enabled else v_b0.x,
+                        video_tail_out=None if video_out is None or not video_out.enabled else video_out.x,
+                        audio_tail_base=None if a_b0 is None or not a_b0.enabled else a_b0.x,
+                        audio_tail_out=None if audio_out is None or not audio_out.enabled else audio_out.x,
+                        force_dense=_sol_force_dense,
+                        tiled=tile_inv_perm is not None,
+                    )
+            elif feature_cache is None or perturbations is not None:
+                video_out, audio_out, _, _ = self._run_blocks_with_optional_pruning(
+                    video_args,
+                    audio_args,
+                    start_offset=0,
+                    perturbations=perturbations,
+                    piecewise_graph=_worldfoundry_piecewise_graph,
                     segment_name=seg_label,
+                    tile_sink_tokens=tile_sink_tokens,
+                    protected_mask=protected_mask,
+                    protected_count=protected_count,
+                    token_prune_step_eligible=_token_prune_step_eligible,
                 )
             else:
                 if video_args is not None and audio_args is not None:
@@ -928,15 +1317,22 @@ class LTXModel(torch.nn.Module):
 
                 def _compute_residual() -> torch.Tensor:
                     ran_dense[0] = True
-                    v_out, a_out, used_pw, name = self._run_blocks_maybe_graphed(
+                    v_out, a_out, used_pw, name = self._run_blocks_with_optional_pruning(
                         video_args,
                         audio_args,
-                        None,
-                        _worldfoundry_piecewise_graph,
+                        start_offset=0,
+                        perturbations=None,
+                        piecewise_graph=_worldfoundry_piecewise_graph,
                         segment_name=seg_label,
+                        tile_sink_tokens=tile_sink_tokens,
+                        protected_mask=protected_mask,
+                        protected_count=protected_count,
+                        token_prune_step_eligible=_token_prune_step_eligible,
                     )
                     piecewise_used[0] = used_pw
                     seg_name[0] = name
+                    if used_pw and _worldfoundry_piecewise_graph is not None and pw_skip_targets is not None:
+                        pw_skip_targets[(id(_worldfoundry_piecewise_graph), seg_label)] = name
                     if video_args is not None and audio_args is not None:
                         assert v_out is not None and a_out is not None
                         return torch.cat(
@@ -956,7 +1352,12 @@ class LTXModel(torch.nn.Module):
                     total_steps=feature_cache_total_steps,
                 )
                 if _worldfoundry_piecewise_graph is not None and not ran_dense[0]:
-                    _worldfoundry_piecewise_graph.record_skip(seg_name[0])
+                    skip_seg = (
+                        pw_skip_targets.get((id(_worldfoundry_piecewise_graph), seg_name[0]), seg_name[0])
+                        if pw_skip_targets is not None
+                        else seg_name[0]
+                    )
+                    _worldfoundry_piecewise_graph.record_skip(skip_seg)
 
                 if video_args is not None and audio_args is not None:
                     v_numel = video_args.x.numel()
@@ -972,11 +1373,10 @@ class LTXModel(torch.nn.Module):
                     video_out = None
                     audio_out = replace(audio_args, x=audio_args.x + residual)
         finally:
-            for mod in sol_attn_modules:
-                if _sol_force_dense:
-                    mod._worldfoundry_force_dense = False
-                if tile_sink_tokens is not None:
-                    mod._worldfoundry_sol_sink_tokens = None
+            for mod in sparse_attn_modules:
+                mod._worldfoundry_force_dense = False
+            for mod in sol_sink_modules:
+                mod._worldfoundry_sol_sink_tokens = None
 
         if tile_inv_perm is not None and video_out is not None and orig_video_args is not None:
             video_out = replace(orig_video_args, x=video_out.x.index_select(1, tile_inv_perm))

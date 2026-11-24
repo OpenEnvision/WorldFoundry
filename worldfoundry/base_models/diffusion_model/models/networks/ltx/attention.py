@@ -6,6 +6,7 @@ optional per-head gating.  Backends come from :class:`TransformerAttentionOps`.
 """
 
 import math
+import os
 from collections.abc import Mapping
 from typing import Any
 
@@ -19,10 +20,23 @@ from .rope import LTXRopeType, apply_rotary_emb
 
 _CUDNN_FP8_ALLOWED_OPTIONS = frozenset({"descale_q", "descale_k", "descale_v", "scale_o", "dynamic_scale"})
 _CUDNN_FP8_SCALE_KEYS = ("descale_q", "descale_k", "descale_v", "scale_o")
+_PISA_ALIASES = frozenset({"pisa", "piecewise", "piecewise_attention", "pisa_attn", "pisa_attention"})
+_PISA_ALLOWED_OPTIONS = frozenset({"density", "block_size", "min_sequence_length", "strict"})
+_PISA_BLOCK_SIZES = frozenset({16, 32, 64, 128})
 _APPROXIMATE_ATTENTION_BACKENDS = frozenset(
-    {"sol_attn", "cudnn_fp8", "sage_attention", "sage_attention_3", "scaled_int8_fp8"}
+    {"sol_attn", "pisa", "cudnn_fp8", "sage_attention", "sage_attention_3", "scaled_int8_fp8"}
 )
 _FP8_E4M3_MAX = 448.0
+
+
+def _normalize_ltx_attention_backend(backend: str) -> str:
+    """Normalize an LTX attention backend name, including the in-tree ``'pisa'`` sparse path."""
+    key = str(backend).strip().lower().replace("-", "_")
+    if key in _PISA_ALIASES:
+        return "pisa"
+    from worldfoundry.core.attention.backends.probe import normalize_attention_backend
+
+    return normalize_attention_backend(str(backend))
 
 
 def _validate_min_tokens(raw: object) -> int:
@@ -30,6 +44,58 @@ def _validate_min_tokens(raw: object) -> int:
     if isinstance(raw, bool) or not isinstance(raw, int) or raw < 0:
         raise ValueError(f"attention min_tokens must be a non-negative integer, got {raw!r}")
     return int(raw)
+
+
+def _resolve_pisa_default_min_sequence() -> int:
+    """Resolve the default PISA minimum sequence length from env or the 1024-token default."""
+    env_min = os.getenv("WORLDFOUNDRY_PISA_MIN_SEQUENCE")
+    if env_min is None or not env_min.strip():
+        return 1024
+    try:
+        parsed = int(env_min.strip())
+    except ValueError as exc:
+        raise ValueError(f"WORLDFOUNDRY_PISA_MIN_SEQUENCE must be a non-negative integer, got {env_min!r}") from exc
+    if parsed < 0:
+        raise ValueError(f"WORLDFOUNDRY_PISA_MIN_SEQUENCE must be a non-negative integer, got {env_min!r}")
+    return parsed
+
+
+def _validate_pisa_options(options: Mapping[str, object]) -> dict[str, Any]:
+    """Validate and normalize in-tree ``pisa`` piecewise sparse attention options upfront."""
+    unknown = set(options) - _PISA_ALLOWED_OPTIONS
+    if unknown:
+        raise ValueError(f"unknown pisa options: {sorted(unknown)}")
+    normalized: dict[str, Any] = {}
+    if "density" in options and options["density"] is not None:
+        raw_density = options["density"]
+        if isinstance(raw_density, bool) or not isinstance(raw_density, (int, float)):
+            raise ValueError(f"pisa density must be a float in (0, 1], got {raw_density!r}")
+        density = float(raw_density)
+        if not math.isfinite(density) or not (0.0 < density <= 1.0):
+            raise ValueError(f"pisa density must be in (0, 1], got {raw_density!r}")
+        normalized["density"] = density
+    else:
+        normalized["density"] = 0.1
+    if "block_size" in options and options["block_size"] is not None:
+        raw_bs = options["block_size"]
+        if isinstance(raw_bs, bool) or not isinstance(raw_bs, int) or raw_bs not in _PISA_BLOCK_SIZES:
+            raise ValueError(f"pisa block_size must be one of 16, 32, 64 or 128, got {raw_bs!r}")
+        normalized["block_size"] = int(raw_bs)
+    else:
+        normalized["block_size"] = 64
+    if "min_sequence_length" in options and options["min_sequence_length"] is not None:
+        raw_min_seq = options["min_sequence_length"]
+        if isinstance(raw_min_seq, bool) or not isinstance(raw_min_seq, int) or raw_min_seq < 0:
+            raise ValueError(f"pisa min_sequence_length must be a non-negative integer, got {raw_min_seq!r}")
+        normalized["min_sequence_length"] = int(raw_min_seq)
+    if "strict" in options and options["strict"] is not None:
+        raw_strict = options["strict"]
+        if not isinstance(raw_strict, bool):
+            raise ValueError(f"pisa strict must be a bool, got {type(raw_strict).__name__}")
+        normalized["strict"] = raw_strict
+    else:
+        normalized["strict"] = False
+    return normalized
 
 
 def _validate_cudnn_fp8_options(options: Mapping[str, object]) -> dict[str, object]:
@@ -86,10 +152,12 @@ class Attention(torch.nn.Module):
         self.attention_backend: str | None = None
         self._attention_backend_options: dict[str, Any] | None = None
         self._attention_min_tokens: int = 0
+        self._attention_min_tokens_explicit: bool = False
         self._dense_attention_backend: str | None = None
         self._worldfoundry_force_dense: bool = False
         self._worldfoundry_sol_sink_tokens: int | None = None
         self._use_fused_gated_out: bool = False
+        self._pisa_availability_cache: dict[int, bool] = {}
 
         self.is_self_attention = context_dim is None
         inner_dim = dim_head * heads
@@ -117,15 +185,14 @@ class Attention(torch.nn.Module):
     def set_attention_backend(
         self,
         backend: str | None,
-        *,
         backend_options: Mapping[str, object] | None = None,
     ) -> None:
         """Bind a request-scoped attention backend (``AttentionBackendConfigurable`` seam).
 
         ``None`` or ``"torch"`` keeps the configured ``TransformerAttentionOps`` callables.
-        Explicit backends (``"cudnn_fp8"``, ``"sol_attn"``, ``"triton_tma"``,
+        Explicit backends (``"pisa"``, ``"sol_attn"``, ``"cudnn_fp8"``, ``"triton_tma"``,
         ``"scaled_int8_fp8"``, ``"flash_attention_3"``, etc.) route unmasked attention
-        through :mod:`worldfoundry.core.attention.backends.dispatch`.
+        through the in-tree PISA kernel or :mod:`worldfoundry.core.attention.backends.dispatch`.
         """
         if backend is None:
             if backend_options:
@@ -133,26 +200,28 @@ class Attention(torch.nn.Module):
             self.attention_backend = None
             self._attention_backend_options = None
             self._attention_min_tokens = 0
+            self._attention_min_tokens_explicit = False
             self._dense_attention_backend = None
             return
 
-        from worldfoundry.core.attention.backends.probe import normalize_attention_backend
-
-        normalized = normalize_attention_backend(str(backend))
+        normalized = _normalize_ltx_attention_backend(str(backend))
         options: dict[str, Any] = dict(backend_options) if backend_options else {}
+        min_tokens_specified = "min_tokens" in options
         min_tokens = 0
         dense_backend_specified = "dense_backend" in options
         dense_backend: str | None = None
-        if "min_tokens" in options:
-            if normalized not in {"sol_attn", "cudnn_fp8"}:
-                raise ValueError(f"min_tokens is only supported for sol_attn and cudnn_fp8, got {normalized!r}")
+        if min_tokens_specified:
+            if normalized not in {"sol_attn", "pisa", "cudnn_fp8"}:
+                raise ValueError(f"min_tokens is only supported for sol_attn, pisa, and cudnn_fp8, got {normalized!r}")
             min_tokens = _validate_min_tokens(options.pop("min_tokens"))
         if dense_backend_specified:
-            if normalized not in {"sol_attn", "cudnn_fp8"}:
-                raise ValueError(f"dense_backend is only supported for sol_attn and cudnn_fp8, got {normalized!r}")
+            if normalized not in {"sol_attn", "pisa", "cudnn_fp8"}:
+                raise ValueError(
+                    f"dense_backend is only supported for sol_attn, pisa, and cudnn_fp8, got {normalized!r}"
+                )
             raw_dense = options.pop("dense_backend")
             if raw_dense is not None:
-                dense_backend = normalize_attention_backend(str(raw_dense))
+                dense_backend = _normalize_ltx_attention_backend(str(raw_dense))
                 if dense_backend in _APPROXIMATE_ATTENTION_BACKENDS:
                     raise ValueError(f"dense_backend must be an exact attention backend, got {dense_backend!r}")
         if normalized == "sol_attn":
@@ -163,6 +232,12 @@ class Attention(torch.nn.Module):
             from worldfoundry.core.attention.backends.sol import validate_sol_options
 
             options = validate_sol_options(**options)
+        elif normalized == "pisa":
+            if not self.is_self_attention:
+                raise ValueError("PISA is supported only on LTX self-attention modules")
+            if not (0 < self.dim_head <= 256):
+                raise ValueError(f"PISA requires 0 < dim_head <= 256, got {self.dim_head}")
+            options = _validate_pisa_options(options)
         elif normalized == "cudnn_fp8":
             if self.dim_head not in {64, 128}:
                 raise ValueError(f"cudnn_fp8 requires dim_head in {{64, 128}}, got {self.dim_head}")
@@ -170,10 +245,10 @@ class Attention(torch.nn.Module):
         elif options and normalized != "scaled_int8_fp8":
             raise ValueError(f"backend_options are not supported for attention backend {normalized!r}")
 
-        if normalized in {"sol_attn", "cudnn_fp8"}:
+        if normalized in {"sol_attn", "pisa", "cudnn_fp8"}:
             if dense_backend_specified:
                 self._dense_attention_backend = dense_backend
-            elif self.attention_backend in {"sol_attn", "cudnn_fp8"}:
+            elif self.attention_backend in {"sol_attn", "pisa", "cudnn_fp8"}:
                 # Re-configuring approximate backend options keeps any previously bound exact dense fallback.
                 pass
             elif self.attention_backend not in {None, "torch", "auto", *_APPROXIMATE_ATTENTION_BACKENDS}:
@@ -188,6 +263,7 @@ class Attention(torch.nn.Module):
         self.attention_backend = normalized
         self._attention_backend_options = options or None
         self._attention_min_tokens = min_tokens
+        self._attention_min_tokens_explicit = min_tokens_specified
 
     def fuse_qkv(self) -> bool:
         """Merge self-attention ``to_q``/``to_k``/``to_v`` into one ``to_qkv`` projection."""
@@ -405,6 +481,147 @@ class Attention(torch.nn.Module):
             )
         return out.transpose(1, 2).reshape(batch, q_tokens, width).to(dtype=v.dtype)
 
+    def _is_pisa_available(self, device: torch.device) -> bool:
+        """Cache the Hopper/DC-Blackwell Triton TMA availability probe per CUDA device."""
+        if device.type != "cuda":
+            return False
+        idx = 0 if device.index is None else int(device.index)
+        cached = self._pisa_availability_cache.get(idx)
+        if cached is not None:
+            return cached
+        from worldfoundry.core.attention.sparse.piecewise import piecewise_attention_available
+
+        available = bool(piecewise_attention_available(device))
+        self._pisa_availability_cache[idx] = available
+        return available
+
+    def _run_dense_backend(
+        self,
+        q: torch.Tensor,
+        k: torch.Tensor,
+        v: torch.Tensor,
+        mask: torch.Tensor | None,
+    ) -> torch.Tensor:
+        """Run the configured exact dense backend (e.g. FA3) or default SDPA ops."""
+        dense = self._dense_attention_backend
+        if mask is not None:
+            return self.masked_attention_function(q, k, v, self.heads, mask)
+        if dense is None or dense in {"torch", "auto"}:
+            if (q.device.type != "cuda" or v.dtype not in {torch.float16, torch.bfloat16}) and getattr(
+                self.attention_function, "label", ""
+            ) in {"FlashAttention3", "FlashAttention4"}:
+                return self.masked_attention_function(q, k, v, self.heads, None)
+            return self.attention_function(q, k, v, self.heads)
+        if q.device.type == "cuda" and torch.is_autocast_enabled("cuda"):
+            target_dtype = torch.get_autocast_dtype("cuda")
+            if q.dtype != target_dtype:
+                q = q.to(dtype=target_dtype)
+            if k.dtype != target_dtype:
+                k = k.to(dtype=target_dtype)
+            if v.dtype != target_dtype:
+                v = v.to(dtype=target_dtype)
+        from worldfoundry.core.attention.backends.dispatch import attention_forward
+
+        batch, q_tokens, width = q.shape
+        k_tokens = k.shape[1]
+        out = attention_forward(
+            q.view(batch, q_tokens, self.heads, self.dim_head),
+            k.view(batch, k_tokens, self.heads, self.dim_head),
+            v.view(batch, k_tokens, self.heads, self.dim_head),
+            q_pattern="b s n d",
+            k_pattern="b s n d",
+            v_pattern="b s n d",
+            out_pattern="b s n d",
+            backend=dense,
+        )
+        return out.reshape(batch, q_tokens, width)
+
+    def _run_pisa_attention(
+        self,
+        q: torch.Tensor,
+        k: torch.Tensor,
+        v: torch.Tensor,
+    ) -> torch.Tensor:
+        """Run in-tree PISA piecewise sparse attention with exact dense fallback when ineligible."""
+        opts = self._attention_backend_options or {}
+        density = float(opts.get("density", 0.1))
+        block_size = int(opts.get("block_size", 64))
+        strict = bool(opts.get("strict", False))
+
+        raw_min_seq = opts.get("min_sequence_length")
+        if raw_min_seq is not None:
+            threshold = max(int(raw_min_seq), self._attention_min_tokens)
+        elif self._attention_min_tokens_explicit:
+            threshold = int(self._attention_min_tokens)
+        else:
+            threshold = _resolve_pisa_default_min_sequence()
+
+        # Density == 1.0 or sequences below the configured length gate intentionally stay exact dense
+        # even when strict=True (matching min_tokens behavior across Stage-1 / Stage-2 workloads).
+        if density >= 1.0 or min(q.shape[1], k.shape[1]) < threshold:
+            return self._run_dense_backend(q, k, v, None)
+
+        eligible = (
+            q.device.type == "cuda"
+            and q.dtype in {torch.float16, torch.bfloat16}
+            and k.dtype == q.dtype
+            and v.dtype == q.dtype
+            and 0 < self.dim_head <= 256
+            and self._is_pisa_available(q.device)
+        )
+        if not eligible:
+            if strict:
+                raise RuntimeError("the in-tree PISA TMA kernel is not eligible for this workload")
+            return self._run_dense_backend(q, k, v, None)
+
+        from worldfoundry.core.attention.backends.dispatch import (
+            _record_compiled_provider_graph_trace,
+            _record_provider_runtime,
+        )
+        from worldfoundry.core.attention.sparse.piecewise import piecewise_attention
+
+        batch, q_tokens, width = q.shape
+        k_tokens = k.shape[1]
+        q_bhld = q.view(batch, q_tokens, self.heads, self.dim_head).transpose(1, 2).contiguous()
+        k_bhld = k.view(batch, k_tokens, self.heads, self.dim_head).transpose(1, 2).contiguous()
+        v_bhld = v.view(batch, k_tokens, self.heads, self.dim_head).transpose(1, 2).contiguous()
+        try:
+            out = piecewise_attention(
+                q_bhld,
+                k_bhld,
+                v_bhld,
+                density=density,
+                block_size=block_size,
+                min_sequence_length=threshold,
+                strict=True,
+            )
+        except Exception as exc:
+            message = str(exc).casefold()
+            if isinstance(exc, torch.cuda.OutOfMemoryError) or any(
+                marker in message for marker in ("out of memory", "alloc_failed")
+            ):
+                _record_provider_runtime("pisa", attempts=1, errors=1)
+                raise
+            from_triton = exc.__class__.__module__.startswith("triton")
+            optional_failure = (
+                isinstance(exc, (ImportError, OSError))
+                or any(
+                    marker in message
+                    for marker in ("triton", "ptxas", "no kernel image", "invalid device function", "out of resource")
+                )
+                or from_triton
+            )
+            if strict or not optional_failure:
+                _record_provider_runtime("pisa", attempts=1, errors=1)
+                raise
+            _record_provider_runtime("pisa", attempts=1, fallbacks=1)
+            return self._run_dense_backend(q, k, v, None)
+        if torch.compiler.is_compiling():
+            _record_compiled_provider_graph_trace("pisa")
+        else:
+            _record_provider_runtime("pisa", attempts=1, successes=1)
+        return out.transpose(1, 2).reshape(batch, q_tokens, width)
+
     def _run_attention(
         self,
         q: torch.Tensor,
@@ -416,7 +633,7 @@ class Attention(torch.nn.Module):
         backend = self.attention_backend
         use_dense_fallback = backend in _APPROXIMATE_ATTENTION_BACKENDS and (
             self._worldfoundry_force_dense
-            or (self._attention_min_tokens > 0 and q.shape[1] < self._attention_min_tokens)
+            or (self._attention_min_tokens > 0 and min(q.shape[1], k.shape[1]) < self._attention_min_tokens)
         )
         backend_options = self._attention_backend_options
         if use_dense_fallback:
@@ -435,15 +652,17 @@ class Attention(torch.nn.Module):
         if mask is not None:
             if backend == "sol_attn":
                 raise ValueError("Sol-Attn does not support attention masks")
+            if backend == "pisa" and bool((backend_options or {}).get("strict", False)):
+                raise ValueError("PISA does not support attention masks")
             return self.masked_attention_function(q, k, v, self.heads, mask)
 
         if backend == "cudnn_fp8":
             return self._run_cudnn_fp8_attention(q, k, v)
 
-        # External providers (Sol-Attn, Triton TMA, FA3/FA4, etc.) are not in
-        # PyTorch's autocast dispatch table. Under CUDA autocast, align Q/K/V to
-        # the active autocast dtype just as F.scaled_dot_product_attention does
-        # (e.g., FP32 RoPE promotes Q/K to FP32 while V stays BF16).
+        # External and Triton providers (PISA, Sol-Attn, Triton TMA, FA3/FA4, etc.)
+        # are not in PyTorch's autocast dispatch table. Under CUDA autocast, align
+        # Q/K/V to the active autocast dtype just as F.scaled_dot_product_attention
+        # does (e.g., FP32 RoPE promotes Q/K to FP32 while V stays BF16).
         if q.device.type == "cuda" and torch.is_autocast_enabled("cuda"):
             target_dtype = torch.get_autocast_dtype("cuda")
             if q.dtype != target_dtype:
@@ -452,6 +671,9 @@ class Attention(torch.nn.Module):
                 k = k.to(dtype=target_dtype)
             if v.dtype != target_dtype:
                 v = v.to(dtype=target_dtype)
+
+        if backend == "pisa":
+            return self._run_pisa_attention(q, k, v)
 
         from worldfoundry.core.attention.backends.dispatch import attention_forward
 

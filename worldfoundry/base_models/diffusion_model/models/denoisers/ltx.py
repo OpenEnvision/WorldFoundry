@@ -9,8 +9,10 @@ from __future__ import annotations
 
 import weakref
 from collections.abc import Mapping
+from contextvars import ContextVar
 from dataclasses import replace
 from functools import partial
+from threading import RLock
 from types import SimpleNamespace
 from typing import Any
 
@@ -120,7 +122,7 @@ def _feature_cache_input_view(model_input: MultiModalDenoiserInput) -> Any:
     return model_input
 
 
-_APPROXIMATE_ATTENTION_BACKENDS = frozenset({"sol_attn", "sage_attention", "sage_attention_3", "cudnn_fp8"})
+_APPROXIMATE_ATTENTION_BACKENDS = frozenset({"sol_attn", "pisa", "sage_attention", "sage_attention_3", "cudnn_fp8"})
 
 
 def _normalize_ltx_cuda_graph_mode(enable_cuda_graph: bool | str) -> bool | str:
@@ -339,13 +341,284 @@ def _resolve_teacache_max_tokens(context: ComponentBuildContext) -> int | None:
     return int(raw)
 
 
+def _parse_fbcache_config(
+    raw: object,
+    *,
+    max_tokens_override: int | None = None,
+) -> Any:
+    """Normalize an opt-in LTX FirstBlockCache configuration (bool, float, mapping, or dataclass)."""
+    if raw is None or raw is False:
+        return None
+    from ..networks.ltx.acceleration import LTXFirstBlockCacheConfig
+
+    if isinstance(raw, LTXFirstBlockCacheConfig):
+        cfg = raw
+    elif raw is True:
+        cfg = LTXFirstBlockCacheConfig()
+    elif isinstance(raw, (int, float)):
+        cfg = LTXFirstBlockCacheConfig(residual_diff_threshold=float(raw))
+    elif isinstance(raw, Mapping):
+        opts = dict(raw)
+        if "threshold" in opts and "residual_diff_threshold" not in opts:
+            opts["residual_diff_threshold"] = opts.pop("threshold")
+        cfg = LTXFirstBlockCacheConfig(**opts)
+    else:
+        raise TypeError(f"fbcache option must be bool, float, Mapping, or LTXFirstBlockCacheConfig, got {raw!r}")
+    if max_tokens_override is not None:
+        cfg = replace(cfg, max_tokens=max_tokens_override)
+    return cfg
+
+
+def _resolve_fbcache_max_tokens(context: ComponentBuildContext) -> int | None:
+    """Resolve optional ``fbcache_max_tokens`` override from component or policy options."""
+    comp = context.component_options
+    opts = context.policy.options
+    raw_max = comp.get("fbcache_max_tokens", opts.get("fbcache_max_tokens"))
+    if raw_max is None:
+        return None
+    if isinstance(raw_max, bool) or not isinstance(raw_max, int) or raw_max <= 0:
+        raise ValueError(f"fbcache_max_tokens must be a positive integer, got {raw_max!r}")
+    return int(raw_max)
+
+
+def _resolve_fbcache_config(context: ComponentBuildContext) -> Any:
+    """Resolve optional FirstBlockCache config from component/policy options."""
+    comp = context.component_options
+    opts = context.policy.options
+    raw = comp.get("fbcache", comp.get("first_block_cache", opts.get("fbcache", opts.get("first_block_cache"))))
+    max_tokens = _resolve_fbcache_max_tokens(context)
+    if raw is None or raw is False:
+        return None
+    if isinstance(raw, (bool, int, float)):
+        extra: dict[str, Any] = {}
+        if not isinstance(raw, bool):
+            extra["residual_diff_threshold"] = float(raw)
+        for opt_key, field_name in (
+            ("fbcache_dense_first", "dense_first"),
+            ("fbcache_dense_last", "dense_last"),
+            ("fbcache_max_consecutive_skips", "max_consecutive_skips"),
+            ("fbcache_downsample_factor", "downsample_factor"),
+            ("fbcache_cumulative", "cumulative"),
+            ("fbcache_min_steps", "min_steps_to_enable"),
+        ):
+            val = comp.get(opt_key, opts.get(opt_key))
+            if val is not None:
+                extra[field_name] = val
+        if max_tokens is not None:
+            extra["max_tokens"] = max_tokens
+        return _parse_fbcache_config(extra)
+    return _parse_fbcache_config(raw, max_tokens_override=max_tokens)
+
+
+_ProtectedCacheEntry = tuple[
+    weakref.ref[torch.Tensor],
+    int,
+    int,
+    int,
+    tuple[int, ...],
+    tuple[int, ...],
+    torch.dtype,
+    weakref.ref[torch.Tensor] | None,
+    int,
+    int,
+    int,
+    tuple[int, ...],
+    tuple[int, ...],
+    torch.dtype | None,
+    torch.Tensor | None,
+    int,
+]
+
+
+def _evict_protected_cache_entries(cache: dict[tuple[int, int], _ProtectedCacheEntry]) -> None:
+    stale = [
+        key
+        for key, entry in cache.items()
+        if entry[0]() is None or entry[3] < 0 or (entry[7] is not None and (entry[7]() is None or entry[10] < 0))
+    ]
+    for key in stale:
+        cache.pop(key, None)
+
+
+def _resolve_protected_tokens(
+    cache: dict[tuple[int, int], _ProtectedCacheEntry],
+    denoise_mask: torch.Tensor,
+    keyframes_mask: torch.Tensor | None,
+    *,
+    uniform_denoise_mask: bool,
+    allow_inference_cache: bool = False,
+) -> tuple[torch.Tensor | None, int]:
+    """Resolve and cache ``(protected_mask, protected_count)`` for I2V / keyframe tokens outside graph capture."""
+    token_count = int(denoise_mask.shape[1]) if denoise_mask.ndim >= 2 else 0
+    if token_count <= 0:
+        return None, 0
+    if torch.is_grad_enabled() or (denoise_mask.device.type == "cuda" and torch.cuda.is_current_stream_capturing()):
+        return None, 0
+
+    key = (id(denoise_mask), 0 if keyframes_mask is None else id(keyframes_mask))
+    is_inf = denoise_mask.is_inference() or (keyframes_mask is not None and keyframes_mask.is_inference())
+    ptr = int(denoise_mask.data_ptr())
+    offset = int(denoise_mask.storage_offset())
+    ver = -1 if is_inf else int(denoise_mask._version)
+    shape = tuple(int(dim) for dim in denoise_mask.shape)
+    stride = tuple(int(step) for step in denoise_mask.stride())
+    if keyframes_mask is None:
+        kf_ptr, kf_off, kf_ver, kf_shape, kf_stride, kf_dtype = 0, 0, 0, (), (), None
+    else:
+        kf_ptr = int(keyframes_mask.data_ptr())
+        kf_off = int(keyframes_mask.storage_offset())
+        kf_ver = -1 if keyframes_mask.is_inference() else int(keyframes_mask._version)
+        kf_shape = tuple(int(dim) for dim in keyframes_mask.shape)
+        kf_stride = tuple(int(step) for step in keyframes_mask.stride())
+        kf_dtype = keyframes_mask.dtype
+
+    if not is_inf or allow_inference_cache:
+        entry = cache.get(key)
+        if entry is not None:
+            (
+                ref,
+                c_ptr,
+                c_off,
+                c_ver,
+                c_shape,
+                c_stride,
+                c_dtype,
+                kf_ref,
+                c_kf_ptr,
+                c_kf_off,
+                c_kf_ver,
+                c_kf_shape,
+                c_kf_stride,
+                c_kf_dtype,
+                c_mask,
+                c_cnt,
+            ) = entry
+            kf_ok = (keyframes_mask is None and kf_ref is None) or (
+                keyframes_mask is not None
+                and kf_ref is not None
+                and kf_ref() is keyframes_mask
+                and c_kf_ptr == kf_ptr
+                and c_kf_off == kf_off
+                and c_kf_ver == kf_ver
+                and c_kf_shape == kf_shape
+                and c_kf_stride == kf_stride
+                and c_kf_dtype == kf_dtype
+            )
+            if (
+                ref() is denoise_mask
+                and c_ptr == ptr
+                and c_off == offset
+                and c_ver == ver
+                and c_shape == shape
+                and c_stride == stride
+                and c_dtype == denoise_mask.dtype
+                and kf_ok
+            ):
+                return c_mask, c_cnt
+
+    if uniform_denoise_mask:
+        # Even a constant denoise_mask can be < 1.0 (e.g. all-0 frozen/conditioned latents).
+        all_conditioned = bool((denoise_mask.detach().float().reshape(-1)[0] < (1.0 - 1e-6)).item())
+        if all_conditioned:
+            mask = torch.ones(token_count, device=denoise_mask.device, dtype=torch.bool)
+            count = token_count
+            result_mask: torch.Tensor | None = mask
+        elif keyframes_mask is None:
+            count = 0
+            result_mask = None
+        else:
+            mask = torch.zeros(token_count, device=denoise_mask.device, dtype=torch.bool)
+            if keyframes_mask.ndim >= 2 and int(keyframes_mask.shape[1]) == token_count:
+                mask = mask | (keyframes_mask.detach() > 0).movedim(1, 0).reshape(token_count, -1).any(dim=1).to(
+                    device=denoise_mask.device
+                )
+            count = int(mask.sum().item())
+            result_mask = mask if count > 0 else None
+    else:
+        mask = (denoise_mask.detach().float() < (1.0 - 1e-6)).movedim(1, 0).reshape(token_count, -1).any(dim=1)
+        if keyframes_mask is not None and keyframes_mask.ndim >= 2 and int(keyframes_mask.shape[1]) == token_count:
+            mask = mask | (keyframes_mask.detach() > 0).movedim(1, 0).reshape(token_count, -1).any(dim=1).to(
+                device=denoise_mask.device
+            )
+        count = int(mask.sum().item())
+        result_mask = mask if count > 0 else None
+
+    if not is_inf or allow_inference_cache:
+        if len(cache) >= 32:
+            dead = [k for k, v in cache.items() if v[0]() is None or (v[7] is not None and v[7]() is None)]
+            for k in dead:
+                cache.pop(k, None)
+            if len(cache) >= 32:
+                cache.pop(next(iter(cache)))
+        cache[key] = (
+            weakref.ref(denoise_mask),
+            ptr,
+            offset,
+            ver,
+            shape,
+            stride,
+            denoise_mask.dtype,
+            None if keyframes_mask is None else weakref.ref(keyframes_mask),
+            kf_ptr,
+            kf_off,
+            kf_ver,
+            kf_shape,
+            kf_stride,
+            kf_dtype,
+            result_mask,
+            count,
+        )
+    return result_mask, count
+
+
+def _token_pruning_kwargs(
+    velocity_model: LTXModel,
+    denoise_mask: torch.Tensor,
+    keyframes_mask: torch.Tensor | None,
+    *,
+    step_index: int,
+    total_steps: int | None,
+    uniform_denoise_mask: bool,
+    protected_cache: dict[tuple[int, int], _ProtectedCacheEntry],
+) -> dict[str, Any]:
+    """Compute graph-safe token pruning step eligibility and protected-token kwargs outside capture."""
+    tp_cfg = getattr(velocity_model, "_worldfoundry_token_pruning_config", None)
+    if tp_cfg is None:
+        return {}
+    step_ok, step_reason = tp_cfg.is_step_eligible(int(step_index), total_steps)
+    if (
+        not step_ok
+        and step_reason == "distilled_short_step_guard"
+        and float(tp_cfg.keep_ratio) < 1.0
+        and denoise_mask.ndim >= 2
+        and int(denoise_mask.shape[1]) >= int(tp_cfg.min_tokens)
+    ):
+        from ..networks.ltx.acceleration import record_distilled_pruning_guard
+
+        tp_rt = getattr(velocity_model, "_worldfoundry_token_pruning_runtime", None)
+        record_distilled_pruning_guard(tp_cfg, tp_rt, total_steps=total_steps)
+    kwargs: dict[str, Any] = {"_token_prune_step_eligible": step_ok}
+    if step_ok and tp_cfg.preserve_conditioning_tokens:
+        pmask, pcount = _resolve_protected_tokens(
+            protected_cache,
+            denoise_mask,
+            keyframes_mask,
+            uniform_denoise_mask=uniform_denoise_mask,
+            allow_inference_cache=True,
+        )
+        if pmask is not None:
+            kwargs["_video_protected_mask"] = pmask
+            kwargs["_video_protected_count"] = pcount
+    return kwargs
+
+
 def _sol_schedule_kwargs(
     velocity_model: LTXModel,
     positions: torch.Tensor,
     step_index: int,
     grid_cache: dict[int, Any],
 ) -> dict[str, Any]:
-    """Resolve zero-sync Sol-Attn schedule kwargs outside CUDA Graph capture."""
+    """Resolve zero-sync sparse-attention (Sol-Attn / PISA) schedule kwargs outside CUDA Graph capture."""
     schedule = getattr(velocity_model, "_worldfoundry_sol_schedule", None)
     if not isinstance(schedule, Mapping):
         return {}
@@ -364,7 +637,7 @@ def _apply_ltx_post_load_accelerations(
     model: LTXAVTransformerModule | LTXVideoTransformerModule,
     context: ComponentBuildContext,
 ) -> None:
-    """Apply LTX-specific post-load fused ops, FP8 FFN fusion, and scoped attention routing."""
+    """Apply LTX-specific post-load fused ops, FP8 FFN fusion, sparse attention, pruning, and FBCache."""
     options = context.policy.options
     comp = context.component_options
     if _resolve_ltx_fused_ops(context):
@@ -396,127 +669,425 @@ def _apply_ltx_post_load_accelerations(
     if not active_plugins:
         return
 
-    unsupported = sorted(set(active_plugins) - {"attention_policy"})
+    allowed_plugins = {"attention_policy", "token_pruning", "fbcache", "first_block_cache"}
+    unsupported = sorted(set(active_plugins) - allowed_plugins)
     if unsupported:
         raise ValueError(f"LTX denoiser does not support requested acceleration plugins: {unsupported}")
+    if "fbcache" in active_plugins and "first_block_cache" in active_plugins:
+        raise ValueError("fbcache and first_block_cache cannot both be specified in accelerations")
 
-    attn_policy = active_plugins["attention_policy"]
-    if not isinstance(attn_policy, Mapping):
-        raise TypeError("attention_policy must be a mapping of scope names to backend configs")
-    if set(attn_policy) - {"self", "cross"} or not attn_policy:
-        raise ValueError("attention_policy requires self and/or cross options")
+    installed_entries: list[dict[str, Any]] = []
+    any_approximate = False
 
-    from worldfoundry.core.attention.backends.probe import normalize_attention_backend, resolve_attention_backend
+    if "attention_policy" in active_plugins:
+        attn_policy = active_plugins["attention_policy"]
+        if not isinstance(attn_policy, Mapping):
+            raise TypeError("attention_policy must be a mapping of scope names to backend configs")
+        if set(attn_policy) - {"self", "cross"} or not attn_policy:
+            raise ValueError("attention_policy requires self and/or cross options")
 
-    scopes_report: dict[str, dict[str, Any]] = {}
-    for scope, raw in attn_policy.items():
-        if not isinstance(raw, (str, Mapping)):
-            raise TypeError("attention_policy scopes require a backend string or mapping")
-        values = {"backend": raw} if isinstance(raw, str) else dict(raw)
-        if "backend" not in values:
-            raise ValueError("attention_policy scopes require a backend")
-        requested = normalize_attention_backend(str(values.pop("backend")))
-        resolved = resolve_attention_backend(requested, context.policy.device)
+        from worldfoundry.core.attention.backends.probe import resolve_attention_backend
 
-        dense_blocks: tuple[int, ...] = ()
-        dense_backend: str | None = None
-        schedule_report: dict[str, Any] | None = None
-        if resolved in {"sol_attn", "cudnn_fp8"} and "dense_backend" in values:
-            raw_dense_backend = values.pop("dense_backend")
-            if raw_dense_backend is not None:
-                dense_backend = resolve_attention_backend(
-                    normalize_attention_backend(str(raw_dense_backend)),
-                    context.policy.device,
-                )
-        if resolved == "sol_attn":
-            if scope != "self":
-                raise ValueError("Sol-Attn is supported only for unmasked self-attention")
-            if context.policy.dtype != torch.bfloat16:
-                raise ValueError(f"Sol-Attn requires BF16 inference, got dtype={context.policy.dtype}")
-            raw_dense_steps = values.pop("dense_steps", 0)
-            if isinstance(raw_dense_steps, bool) or not isinstance(raw_dense_steps, int) or raw_dense_steps < 0:
-                raise ValueError("Sol-Attn dense_steps must be a non-negative integer")
-            raw_dense_blocks = values.pop("dense_blocks", ())
-            dense_blocks = _parse_dense_blocks(raw_dense_blocks)
-            parsed_tile_3d = _parse_tile_3d(values.pop("tile_3d", None))
-            raw_min_tokens = values.get("min_tokens", 0)
-            if isinstance(raw_min_tokens, bool) or not isinstance(raw_min_tokens, int) or raw_min_tokens < 0:
-                raise ValueError("Sol-Attn min_tokens must be a non-negative integer")
-            if (
-                raw_dense_steps > 0
-                or parsed_tile_3d is not None
-                or dense_blocks
-                or raw_min_tokens > 0
-                or dense_backend is not None
-            ):
-                sol_schedule: dict[str, Any] = {
-                    "dense_steps": int(raw_dense_steps),
-                    "dense_blocks": dense_blocks,
-                    "tile_3d": parsed_tile_3d,
-                    "min_tokens": int(raw_min_tokens),
-                }
-                model.velocity_model.__dict__["_worldfoundry_sol_schedule"] = sol_schedule
+        from ..networks.ltx.attention import _normalize_ltx_attention_backend, _resolve_pisa_default_min_sequence
+
+        scopes_report: dict[str, dict[str, Any]] = {}
+        for scope, raw in attn_policy.items():
+            if not isinstance(raw, (str, Mapping)):
+                raise TypeError("attention_policy scopes require a backend string or mapping")
+            values = {"backend": raw} if isinstance(raw, str) else dict(raw)
+            if "backend" not in values:
+                raise ValueError("attention_policy scopes require a backend")
+            requested = _normalize_ltx_attention_backend(str(values.pop("backend")))
+            resolved = "pisa" if requested == "pisa" else resolve_attention_backend(requested, context.policy.device)
+
+            dense_blocks: tuple[int, ...] = ()
+            dense_backend: str | None = None
+            schedule_report: dict[str, Any] | None = None
+            if resolved in {"sol_attn", "pisa", "cudnn_fp8"} and "dense_backend" in values:
+                raw_dense_backend = values.pop("dense_backend")
+                if raw_dense_backend is not None:
+                    dense_backend = resolve_attention_backend(
+                        _normalize_ltx_attention_backend(str(raw_dense_backend)),
+                        context.policy.device,
+                    )
+            if resolved in {"sol_attn", "pisa"}:
+                backend_label = "Sol-Attn" if resolved == "sol_attn" else "PISA"
+                if scope != "self":
+                    raise ValueError(f"{backend_label} is supported only for unmasked self-attention")
+                if resolved == "sol_attn" and context.policy.dtype != torch.bfloat16:
+                    raise ValueError(f"Sol-Attn requires BF16 inference, got dtype={context.policy.dtype}")
+                raw_dense_steps = values.pop("dense_steps", 0)
+                if isinstance(raw_dense_steps, bool) or not isinstance(raw_dense_steps, int) or raw_dense_steps < 0:
+                    raise ValueError(f"{backend_label} dense_steps must be a non-negative integer")
+                num_blocks = len(model.velocity_model.transformer_blocks)
+                if "dense_blocks" in values:
+                    raw_dense_blocks = values.pop("dense_blocks")
+                    dense_blocks = _parse_dense_blocks(raw_dense_blocks)
+                elif resolved == "pisa" and num_blocks >= 4:
+                    dense_blocks = (0, 1, -1)
+                parsed_tile_3d = _parse_tile_3d(values.pop("tile_3d", None))
+                min_tokens_explicit = "min_tokens" in values
+                raw_min_tokens = values.get("min_tokens", 0)
+                if isinstance(raw_min_tokens, bool) or not isinstance(raw_min_tokens, int) or raw_min_tokens < 0:
+                    raise ValueError(f"{backend_label} min_tokens must be a non-negative integer")
+                schedule_min_tokens = int(raw_min_tokens)
+                if resolved == "pisa":
+                    raw_min_seq = values.get("min_sequence_length")
+                    if raw_min_seq is not None:
+                        if isinstance(raw_min_seq, bool) or not isinstance(raw_min_seq, int) or raw_min_seq < 0:
+                            raise ValueError(
+                                f"pisa min_sequence_length must be a non-negative integer, got {raw_min_seq!r}"
+                            )
+                        schedule_min_tokens = max(schedule_min_tokens, int(raw_min_seq))
+                    elif not min_tokens_explicit:
+                        schedule_min_tokens = _resolve_pisa_default_min_sequence()
+                if (
+                    raw_dense_steps > 0
+                    or parsed_tile_3d is not None
+                    or dense_blocks
+                    or schedule_min_tokens > 0
+                    or dense_backend is not None
+                ):
+                    sol_schedule: dict[str, Any] = {
+                        "dense_steps": int(raw_dense_steps),
+                        "dense_blocks": dense_blocks,
+                        "tile_3d": parsed_tile_3d,
+                        "min_tokens": schedule_min_tokens,
+                    }
+                    model.velocity_model.__dict__["_worldfoundry_sol_schedule"] = sol_schedule
+                    norm_dense = sorted(
+                        {
+                            idx + num_blocks if idx < 0 else idx
+                            for idx in dense_blocks
+                            if -num_blocks <= idx < num_blocks
+                        }
+                    )
+                    schedule_report = {
+                        "dense_steps": int(raw_dense_steps),
+                        "dense_blocks": norm_dense,
+                        "tile_3d": parsed_tile_3d,
+                        "min_tokens": schedule_min_tokens,
+                    }
+                    if dense_backend is not None:
+                        schedule_report["dense_backend"] = dense_backend
+            elif resolved == "cudnn_fp8" and ("dense_blocks" in values or dense_backend is not None):
+                if "dense_blocks" in values:
+                    dense_blocks = _parse_dense_blocks(values.pop("dense_blocks"))
                 num_blocks = len(model.velocity_model.transformer_blocks)
                 norm_dense = sorted(
                     {idx + num_blocks if idx < 0 else idx for idx in dense_blocks if -num_blocks <= idx < num_blocks}
                 )
-                schedule_report = {
-                    "dense_steps": int(raw_dense_steps),
-                    "dense_blocks": norm_dense,
-                    "tile_3d": parsed_tile_3d,
-                    "min_tokens": int(raw_min_tokens),
-                }
+                schedule_report = {"dense_blocks": norm_dense}
                 if dense_backend is not None:
                     schedule_report["dense_backend"] = dense_backend
-        elif resolved == "cudnn_fp8" and ("dense_blocks" in values or dense_backend is not None):
-            if "dense_blocks" in values:
-                dense_blocks = _parse_dense_blocks(values.pop("dense_blocks"))
-            num_blocks = len(model.velocity_model.transformer_blocks)
-            norm_dense = sorted(
-                {idx + num_blocks if idx < 0 else idx for idx in dense_blocks if -num_blocks <= idx < num_blocks}
+
+            configured = model.velocity_model.configure_attention_backend(
+                resolved,
+                self_only=(scope == "self"),
+                cross_only=(scope == "cross"),
+                backend_options=values or None,
+                dense_blocks=dense_blocks,
+                dense_backend=dense_backend,
             )
-            schedule_report = {"dense_blocks": norm_dense}
-            if dense_backend is not None:
-                schedule_report["dense_backend"] = dense_backend
+            scope_entry: dict[str, Any] = {
+                "requested": requested,
+                "resolved": resolved,
+                "configured_modules": configured,
+                "options": values,
+            }
+            if schedule_report is not None:
+                scope_entry["schedule"] = schedule_report
+            scopes_report[scope] = scope_entry
 
-        configured = model.velocity_model.configure_attention_backend(
-            resolved,
-            self_only=(scope == "self"),
-            cross_only=(scope == "cross"),
-            backend_options=values or None,
-            dense_blocks=dense_blocks,
-            dense_backend=dense_backend,
+        attn_approx = any(
+            row["resolved"] in _APPROXIMATE_ATTENTION_BACKENDS
+            and not (row["resolved"] == "pisa" and float(row.get("options", {}).get("density", 0.1)) >= 1.0)
+            for row in scopes_report.values()
         )
-        scope_entry: dict[str, Any] = {
-            "requested": requested,
-            "resolved": resolved,
-            "configured_modules": configured,
-            "options": values,
-        }
-        if schedule_report is not None:
-            scope_entry["schedule"] = schedule_report
-        scopes_report[scope] = scope_entry
-
-    approximate = any(row["resolved"] in _APPROXIMATE_ATTENTION_BACKENDS for row in scopes_report.values())
-    manifest: dict[str, Any] = {
-        "installed": [
+        any_approximate = any_approximate or attn_approx
+        installed_entries.append(
             {
                 "name": "attention_policy",
-                "approximate": approximate,
+                "approximate": attn_approx,
                 "scopes": scopes_report,
             }
-        ],
+        )
+
+    if "token_pruning" in active_plugins:
+        tp_rt = model.velocity_model.configure_token_pruning(active_plugins["token_pruning"])
+        assert tp_rt is not None
+        tp_approx = float(tp_rt["keep_ratio"]) < 1.0
+        any_approximate = any_approximate or tp_approx
+        installed_entries.append(
+            {
+                "name": "token_pruning",
+                "approximate": tp_approx,
+                "keep_ratio": tp_rt["keep_ratio"],
+                "method": tp_rt["method"],
+                "restore_mode": tp_rt["restore_mode"],
+                "stratify_group_size": tp_rt["stratify_group_size"],
+                "block_span": tp_rt["block_span"],
+                "min_tokens": tp_rt["min_tokens"],
+                "min_steps_to_enable": tp_rt["min_steps_to_enable"],
+                "allow_distilled_pruning": tp_rt["allow_distilled_pruning"],
+                "preserve_conditioning_tokens": tp_rt["preserve_conditioning_tokens"],
+            }
+        )
+
+    fb_plugin_name = (
+        "fbcache"
+        if "fbcache" in active_plugins
+        else ("first_block_cache" if "first_block_cache" in active_plugins else None)
+    )
+    if fb_plugin_name is not None:
+        direct_fb = comp.get(
+            "fbcache", comp.get("first_block_cache", options.get("fbcache", options.get("first_block_cache")))
+        )
+        if direct_fb is not None and direct_fb is not False:
+            raise ValueError("fbcache cannot be specified in both runtime options and accelerations")
+        fb_max_tokens = _resolve_fbcache_max_tokens(context)
+        fb_cfg = _parse_fbcache_config(active_plugins[fb_plugin_name], max_tokens_override=fb_max_tokens)
+        if fb_cfg is not None:
+            model.__dict__["_worldfoundry_ltx_fbcache_config"] = fb_cfg
+            fb_approx = fb_cfg.residual_diff_threshold > 0.0
+            any_approximate = any_approximate or fb_approx
+            installed_entries.append(
+                {
+                    "name": fb_plugin_name,
+                    "approximate": fb_approx,
+                    "config": fb_cfg.to_dict(),
+                }
+            )
+
+    manifest: dict[str, Any] = {
+        "installed": installed_entries,
         "execution_verified": False,
     }
     model.__dict__["_worldfoundry_ltx_accelerations"] = manifest
     if applied is not None:
         applied.requested["accelerations"] = dict(active_plugins)
         applied.effective["accelerations"] = manifest
-        if approximate:
+        if any_approximate:
             applied.quality_tier = "approximate"
 
 
-class LTXJointDenoiser(FeatureCacheDenoiserMixin, GraphWrappedDenoiserMixin):
+class _LTXFirstBlockCacheMixin:
+    """Request- and CFG-branch-scoped FirstBlockCache ownership for LTX denoisers."""
+
+    _fbcache_config: Any = None
+
+    def _fbcache_lock(self) -> RLock:
+        lock = self.__dict__.get("_fbcache_state_lock")
+        if lock is None:
+            lock = RLock()
+            self.__dict__["_fbcache_state_lock"] = lock
+        return lock
+
+    def _fbcache_context_var(self) -> ContextVar[str | None]:
+        context = self.__dict__.get("_fbcache_current_request")
+        if isinstance(context, ContextVar):
+            return context
+        context = ContextVar(f"worldfoundry_fbcache_request_{id(self)}", default=None)
+        self.__dict__["_fbcache_current_request"] = context
+        return context
+
+    def _init_fbcache(
+        self,
+        model: torch.nn.Module,
+        *,
+        graph_mode: bool | str,
+        teacache_threshold: float | None,
+        fbcache_threshold: float | None,
+        fbcache_config: Any,
+        fbcache_max_tokens: int | None,
+    ) -> None:
+        resolved = None
+        if fbcache_config is not None:
+            resolved = _parse_fbcache_config(fbcache_config, max_tokens_override=fbcache_max_tokens)
+        elif fbcache_threshold is not None:
+            resolved = _parse_fbcache_config(float(fbcache_threshold), max_tokens_override=fbcache_max_tokens)
+        else:
+            plugin_cfg = getattr(model, "_worldfoundry_ltx_fbcache_config", None)
+            if plugin_cfg is not None:
+                resolved = _parse_fbcache_config(plugin_cfg, max_tokens_override=fbcache_max_tokens)
+
+        if resolved is not None:
+            if teacache_threshold is not None:
+                raise ValueError("LTX FirstBlockCache and TeaCache are mutually exclusive")
+            if graph_mode is True:
+                raise ValueError("LTX FirstBlockCache requires cuda_graph='piecewise' or 'off'")
+            applied = getattr(model, "_worldfoundry_applied_optimizations", None)
+            if resolved.residual_diff_threshold > 0.0 and applied is not None:
+                applied.quality_tier = "approximate"
+
+        self._fbcache_config = resolved
+        self._fbcache_requests: dict[str, dict[str, Any]] = {}
+        self._fbcache_last_request_id: str | None = None
+        self._fbcache_epoch_counter: int = 0
+        self._fbcache_receipt_snapshots: dict[str, dict[str, Any]] = {}
+        self._fbcache_state_lock = RLock()
+        self._fbcache_current_request: ContextVar[str | None] = ContextVar(
+            f"worldfoundry_fbcache_request_{id(self)}",
+            default=None,
+        )
+
+    def _fbcache_kwargs(
+        self,
+        model_input: MultiModalDenoiserInput,
+        *,
+        video_tokens: int,
+    ) -> dict[str, Any]:
+        cfg = self._fbcache_config
+        if cfg is None:
+            return {}
+        if cfg.max_tokens is not None and video_tokens > int(cfg.max_tokens):
+            return {}
+
+        from ..networks.ltx.acceleration import LTXFirstBlockCache
+
+        raw_req = getattr(model_input, "request_id", None)
+        if not isinstance(raw_req, str) or not raw_req.strip():
+            cond_req = model_input.conditioning.get("request_id")
+            raw_req = cond_req if isinstance(cond_req, str) and cond_req.strip() else "__default__"
+        request_id = str(raw_req)
+        self._fbcache_context_var().set(request_id)
+
+        step = int(model_input.step_index)
+        branch = str(model_input.branch)
+        with self._fbcache_lock():
+            self._fbcache_last_request_id = request_id
+            state: dict[str, Any] | None = self._fbcache_requests.get(request_id)
+            if state is None:
+                self._fbcache_epoch_counter += 1
+                new_state: dict[str, Any] = {
+                    "request_id": request_id,
+                    "request_epoch": self._fbcache_epoch_counter,
+                    "caches": {},
+                    "complete": False,
+                }
+                state = new_state
+                self._fbcache_requests[request_id] = state
+                if len(self._fbcache_requests) > 64:
+                    completed = sorted(
+                        (
+                            cand
+                            for cand in self._fbcache_requests.values()
+                            if bool(cand.get("complete")) and cand.get("request_id") != request_id
+                        ),
+                        key=lambda cand: int(cand["request_epoch"]),
+                    )
+                    for cand in completed[: max(len(self._fbcache_requests) - 32, 0)]:
+                        self._fbcache_requests.pop(str(cand["request_id"]), None)
+
+            caches: dict[str, LTXFirstBlockCache] = state["caches"]
+            cache = caches.get(branch)
+            if cache is None:
+                cache = LTXFirstBlockCache(
+                    cfg,
+                    branch=branch,
+                    request_id=request_id,
+                    request_epoch=int(state["request_epoch"]),
+                )
+                caches[branch] = cache
+            elif step == 0:
+                if request_id == "__default__":
+                    cache.reset()
+                else:
+                    # Explicit request_id starting a new denoising stage (e.g. Stage 2): clear
+                    # cached probe/residual tensors without erasing Stage-1 request telemetry.
+                    cache.clear_state()
+            if model_input.total_steps is not None and step >= int(model_input.total_steps) - 1:
+                state["complete"] = True
+
+        return {
+            "fbcache": cache,
+            "feature_cache_step": step,
+            "feature_cache_total_steps": model_input.total_steps,
+        }
+
+    def fbcache_report(self, request_id: str | None = None) -> dict[str, Any]:
+        """Return FirstBlockCache telemetry for one request (or the most recent request)."""
+        cfg = self._fbcache_config
+        if cfg is None:
+            return {
+                "enabled": False,
+                "algorithm": "none",
+                "threshold": None,
+                "effective": "disabled",
+                "events": 0,
+                "hits": 0,
+                "misses": 0,
+                "hit_rate": 0.0,
+                "dense_block_calls": 0,
+                "skipped_block_calls": 0,
+                "branches": {},
+            }
+        with self._fbcache_lock():
+            if isinstance(request_id, str):
+                resolved_req: str | None = request_id
+            else:
+                ctx_req = self._fbcache_context_var().get()
+                resolved_req = ctx_req if ctx_req is not None else self._fbcache_last_request_id
+            state = self._fbcache_requests.get(resolved_req) if resolved_req is not None else None
+            if state is None and resolved_req is not None and resolved_req in self._fbcache_receipt_snapshots:
+                return dict(self._fbcache_receipt_snapshots[resolved_req])
+
+            branches: dict[str, dict[str, Any]] = {}
+            total_events = 0
+            total_hits = 0
+            total_dense = 0
+            total_skipped = 0
+            caches = state["caches"] if state is not None else {}
+            for branch, cache in caches.items():
+                rec = cache.receipt()
+                branches[str(branch)] = rec
+                total_events += int(rec["events"])
+                total_hits += int(rec["hits"])
+                total_dense += int(rec["dense_block_calls"])
+                total_skipped += int(rec["skipped_block_calls"])
+
+            if total_events == 0:
+                effective = "pending"
+            elif total_hits > 0:
+                effective = "firstblock-reuse"
+            else:
+                effective = "dense-no-hit"
+            return {
+                "enabled": True,
+                "algorithm": "firstblock",
+                "threshold": cfg.residual_diff_threshold,
+                "config": cfg.to_dict(),
+                "request_id": resolved_req,
+                "request_epoch": int(state["request_epoch"]) if state is not None else 0,
+                "request_local": state is not None and bool(branches),
+                "effective": effective,
+                "events": total_events,
+                "hits": total_hits,
+                "misses": total_events - total_hits,
+                "hit_rate": total_hits / total_events if total_events else 0.0,
+                "dense_block_calls": total_dense,
+                "skipped_block_calls": total_skipped,
+                "branches": branches,
+            }
+
+    def _end_fbcache_request(self, request_id: str) -> None:
+        with self._fbcache_lock():
+            state = self._fbcache_requests.get(request_id)
+            if state is None:
+                return
+            snapshot = self.fbcache_report(request_id)
+            snapshot["finalized"] = True
+            removed = self._fbcache_requests.pop(request_id, None)
+            if removed is not None:
+                for cache in removed["caches"].values():
+                    cache.reset()
+                removed["caches"].clear()
+            self._fbcache_receipt_snapshots[request_id] = snapshot
+            while len(self._fbcache_receipt_snapshots) > 32:
+                self._fbcache_receipt_snapshots.pop(next(iter(self._fbcache_receipt_snapshots)), None)
+
+
+class LTXJointDenoiser(_LTXFirstBlockCacheMixin, FeatureCacheDenoiserMixin, GraphWrappedDenoiserMixin):
     """Adapt the LTX joint velocity model to the canonical multi-modal contract.
 
     ``precision="autocast"`` runs the transformer under autocast to ``compute_dtype`` and
@@ -534,6 +1105,9 @@ class LTXJointDenoiser(FeatureCacheDenoiserMixin, GraphWrappedDenoiserMixin):
         enable_cuda_graph: bool | str = False,
         teacache_threshold: float | None = None,
         teacache_max_tokens: int | None = None,
+        fbcache_threshold: float | None = None,
+        fbcache_config: Any = None,
+        fbcache_max_tokens: int | None = None,
     ) -> None:
         if precision not in {"autocast", "weights"}:
             raise ValueError(f"unsupported LTX denoiser precision: {precision!r}")
@@ -544,9 +1118,18 @@ class LTXJointDenoiser(FeatureCacheDenoiserMixin, GraphWrappedDenoiserMixin):
         self.precision = precision
         self._teacache_threshold = teacache_threshold
         self._teacache_max_tokens = teacache_max_tokens
+        self._init_fbcache(
+            model,
+            graph_mode=graph_mode,
+            teacache_threshold=teacache_threshold,
+            fbcache_threshold=fbcache_threshold,
+            fbcache_config=fbcache_config,
+            fbcache_max_tokens=fbcache_max_tokens,
+        )
         self._video_grid_cache: dict[int, Any] = {}
         self._uniform_mask_cache: dict[int, Any] = {}
         self._trivial_context_mask_cache: dict[int, Any] = {}
+        self._protected_token_cache: dict[tuple[int, int], _ProtectedCacheEntry] = {}
         self._init_graph_runner(
             model,
             enabled=graph_mode,
@@ -609,11 +1192,17 @@ class LTXJointDenoiser(FeatureCacheDenoiserMixin, GraphWrappedDenoiserMixin):
             self._begin_graph_request_window()
             _evict_inference_cache_entries(self._uniform_mask_cache)
             _evict_inference_cache_entries(self._trivial_context_mask_cache)
+            _evict_protected_cache_entries(self._protected_token_cache)
         if _is_trivial_context_mask(self._trivial_context_mask_cache, video_context_mask, allow_inference_cache=True):
             video_context_mask = None
         if _is_trivial_context_mask(self._trivial_context_mask_cache, audio_context_mask, allow_inference_cache=True):
             audio_context_mask = None
 
+        video_uniform_mask = _is_uniform_denoise_mask(
+            self._uniform_mask_cache,
+            video_state.denoise_mask,
+            allow_inference_cache=True,
+        )
         video = self._modality(
             video_state,
             sigma=model_input.timestep,
@@ -621,11 +1210,7 @@ class LTXJointDenoiser(FeatureCacheDenoiserMixin, GraphWrappedDenoiserMixin):
             context_mask=video_context_mask,
             video_control=model_input.conditioning.get("video_control"),
             attention_cache=model_input.conditioning.get("attention_cache"),
-            uniform_denoise_mask=_is_uniform_denoise_mask(
-                self._uniform_mask_cache,
-                video_state.denoise_mask,
-                allow_inference_cache=True,
-            ),
+            uniform_denoise_mask=video_uniform_mask,
         )
         audio = self._modality(
             audio_state,
@@ -640,11 +1225,17 @@ class LTXJointDenoiser(FeatureCacheDenoiserMixin, GraphWrappedDenoiserMixin):
             ),
         )
         extra_kwargs: dict[str, Any] = {}
-        allow_cache = self._teacache_max_tokens is None or int(video_state.latent.shape[1]) <= self._teacache_max_tokens
-        if allow_cache:
-            cache_kwargs = self.feature_cache_kwargs(_feature_cache_input_view(model_input))
-            if cache_kwargs:
-                extra_kwargs.update(cache_kwargs)
+        video_tokens = int(video_state.latent.shape[1])
+        if self._fbcache_config is not None:
+            fb_kwargs = self._fbcache_kwargs(model_input, video_tokens=video_tokens)
+            if fb_kwargs:
+                extra_kwargs.update(fb_kwargs)
+        else:
+            allow_cache = self._teacache_max_tokens is None or video_tokens <= self._teacache_max_tokens
+            if allow_cache:
+                cache_kwargs = self.feature_cache_kwargs(_feature_cache_input_view(model_input))
+                if cache_kwargs:
+                    extra_kwargs.update(cache_kwargs)
         if getattr(self, "_piecewise_graph", None) is not None:
             extra_kwargs["_worldfoundry_piecewise_graph"] = self._piecewise_graph
         sol_kwargs = _sol_schedule_kwargs(
@@ -655,6 +1246,17 @@ class LTXJointDenoiser(FeatureCacheDenoiserMixin, GraphWrappedDenoiserMixin):
         )
         if sol_kwargs:
             extra_kwargs.update(sol_kwargs)
+        tp_kwargs = _token_pruning_kwargs(
+            self.model.velocity_model,
+            video_state.denoise_mask,
+            video_state.keyframes_mask,
+            step_index=int(model_input.step_index),
+            total_steps=model_input.total_steps,
+            uniform_denoise_mask=video_uniform_mask,
+            protected_cache=self._protected_token_cache,
+        )
+        if tp_kwargs:
+            extra_kwargs.update(tp_kwargs)
         with torch.autocast(
             device_type=video_state.latent.device.type,
             dtype=self.compute_dtype,
@@ -670,17 +1272,35 @@ class LTXJointDenoiser(FeatureCacheDenoiserMixin, GraphWrappedDenoiserMixin):
             }
         )
 
+    def end_feature_cache_request(
+        self,
+        request_id: str,
+        *,
+        error: BaseException | None = None,
+    ) -> None:
+        if self._fbcache_config is not None:
+            self._end_fbcache_request(request_id)
+        super().end_feature_cache_request(request_id, error=error)
+
     def runtime_optimization_report(self, request_id: str | None = None) -> dict[str, Any]:
-        """Return CUDA Graph, feature-cache, and load-time optimization telemetry."""
+        """Return CUDA Graph, feature-cache, token-pruning, and load-time optimization telemetry."""
         applied = getattr(self.model, "_worldfoundry_applied_optimizations", None)
+        cache_report = (
+            self.fbcache_report(request_id)
+            if self._fbcache_config is not None
+            else self.feature_cache_report(request_id)
+        )
         report: dict[str, Any] = {
             "cuda_graph": self.graph_report(),
-            "feature_cache": self.feature_cache_report(request_id),
+            "feature_cache": cache_report,
             "applied_optimizations": None if applied is None else applied.to_optimization_snapshot(),
         }
         accelerations = getattr(self.model, "_worldfoundry_ltx_accelerations", None)
         if accelerations is not None:
             report["accelerations"] = accelerations
+        tp_rt = getattr(self.model.velocity_model, "_worldfoundry_token_pruning_runtime", None)
+        if isinstance(tp_rt, Mapping):
+            report["token_pruning"] = {k: v for k, v in tp_rt.items() if not str(k).startswith("_")}
         return report
 
     def _clean_prediction(self, modality: Modality, velocity: torch.Tensor) -> torch.Tensor:
@@ -707,7 +1327,7 @@ class LTXJointDenoiser(FeatureCacheDenoiserMixin, GraphWrappedDenoiserMixin):
         return value
 
 
-class LTXVideoDenoiser(FeatureCacheDenoiserMixin, GraphWrappedDenoiserMixin):
+class LTXVideoDenoiser(_LTXFirstBlockCacheMixin, FeatureCacheDenoiserMixin, GraphWrappedDenoiserMixin):
     """Adapt the video-only velocity model to the joint-state runner contract."""
 
     def __init__(
@@ -718,6 +1338,9 @@ class LTXVideoDenoiser(FeatureCacheDenoiserMixin, GraphWrappedDenoiserMixin):
         enable_cuda_graph: bool | str = False,
         teacache_threshold: float | None = None,
         teacache_max_tokens: int | None = None,
+        fbcache_threshold: float | None = None,
+        fbcache_config: Any = None,
+        fbcache_max_tokens: int | None = None,
     ) -> None:
         graph_mode = _normalize_ltx_cuda_graph_mode(enable_cuda_graph)
         _validate_ltx_graph_attention_compatibility(model, graph_mode)
@@ -725,9 +1348,18 @@ class LTXVideoDenoiser(FeatureCacheDenoiserMixin, GraphWrappedDenoiserMixin):
         self.compute_dtype = compute_dtype
         self._teacache_threshold = teacache_threshold
         self._teacache_max_tokens = teacache_max_tokens
+        self._init_fbcache(
+            model,
+            graph_mode=graph_mode,
+            teacache_threshold=teacache_threshold,
+            fbcache_threshold=fbcache_threshold,
+            fbcache_config=fbcache_config,
+            fbcache_max_tokens=fbcache_max_tokens,
+        )
         self._video_grid_cache: dict[int, Any] = {}
         self._uniform_mask_cache: dict[int, Any] = {}
         self._trivial_context_mask_cache: dict[int, Any] = {}
+        self._protected_token_cache: dict[tuple[int, int], _ProtectedCacheEntry] = {}
         self._init_graph_runner(
             model,
             enabled=graph_mode,
@@ -751,25 +1383,33 @@ class LTXVideoDenoiser(FeatureCacheDenoiserMixin, GraphWrappedDenoiserMixin):
             self._begin_graph_request_window()
             _evict_inference_cache_entries(self._uniform_mask_cache)
             _evict_inference_cache_entries(self._trivial_context_mask_cache)
+            _evict_protected_cache_entries(self._protected_token_cache)
         if _is_trivial_context_mask(self._trivial_context_mask_cache, context_mask, allow_inference_cache=True):
             context_mask = None
+        video_uniform_mask = _is_uniform_denoise_mask(
+            self._uniform_mask_cache,
+            state.denoise_mask,
+            allow_inference_cache=True,
+        )
         video = LTXJointDenoiser._modality(
             state,
             sigma=model_input.timestep,
             context=context,
             context_mask=context_mask,
-            uniform_denoise_mask=_is_uniform_denoise_mask(
-                self._uniform_mask_cache,
-                state.denoise_mask,
-                allow_inference_cache=True,
-            ),
+            uniform_denoise_mask=video_uniform_mask,
         )
         extra_kwargs: dict[str, Any] = {}
-        allow_cache = self._teacache_max_tokens is None or int(state.latent.shape[1]) <= self._teacache_max_tokens
-        if allow_cache:
-            cache_kwargs = self.feature_cache_kwargs(_feature_cache_input_view(model_input))
-            if cache_kwargs:
-                extra_kwargs.update(cache_kwargs)
+        video_tokens = int(state.latent.shape[1])
+        if self._fbcache_config is not None:
+            fb_kwargs = self._fbcache_kwargs(model_input, video_tokens=video_tokens)
+            if fb_kwargs:
+                extra_kwargs.update(fb_kwargs)
+        else:
+            allow_cache = self._teacache_max_tokens is None or video_tokens <= self._teacache_max_tokens
+            if allow_cache:
+                cache_kwargs = self.feature_cache_kwargs(_feature_cache_input_view(model_input))
+                if cache_kwargs:
+                    extra_kwargs.update(cache_kwargs)
         if getattr(self, "_piecewise_graph", None) is not None:
             extra_kwargs["_worldfoundry_piecewise_graph"] = self._piecewise_graph
         sol_kwargs = _sol_schedule_kwargs(
@@ -780,6 +1420,17 @@ class LTXVideoDenoiser(FeatureCacheDenoiserMixin, GraphWrappedDenoiserMixin):
         )
         if sol_kwargs:
             extra_kwargs.update(sol_kwargs)
+        tp_kwargs = _token_pruning_kwargs(
+            self.model.velocity_model,
+            state.denoise_mask,
+            state.keyframes_mask,
+            step_index=int(model_input.step_index),
+            total_steps=model_input.total_steps,
+            uniform_denoise_mask=video_uniform_mask,
+            protected_cache=self._protected_token_cache,
+        )
+        if tp_kwargs:
+            extra_kwargs.update(tp_kwargs)
         with torch.autocast(
             device_type=state.latent.device.type,
             dtype=self.compute_dtype,
@@ -790,17 +1441,35 @@ class LTXVideoDenoiser(FeatureCacheDenoiserMixin, GraphWrappedDenoiserMixin):
             raise RuntimeError("LTX-Video transformer returned an unexpected modality set")
         return MultiModalDenoiserOutput(samples={"video": video.latent - video.timesteps * velocity})
 
+    def end_feature_cache_request(
+        self,
+        request_id: str,
+        *,
+        error: BaseException | None = None,
+    ) -> None:
+        if self._fbcache_config is not None:
+            self._end_fbcache_request(request_id)
+        super().end_feature_cache_request(request_id, error=error)
+
     def runtime_optimization_report(self, request_id: str | None = None) -> dict[str, Any]:
-        """Return CUDA Graph, feature-cache, and load-time optimization telemetry."""
+        """Return CUDA Graph, feature-cache, token-pruning, and load-time optimization telemetry."""
         applied = getattr(self.model, "_worldfoundry_applied_optimizations", None)
+        cache_report = (
+            self.fbcache_report(request_id)
+            if self._fbcache_config is not None
+            else self.feature_cache_report(request_id)
+        )
         report: dict[str, Any] = {
             "cuda_graph": self.graph_report(),
-            "feature_cache": self.feature_cache_report(request_id),
+            "feature_cache": cache_report,
             "applied_optimizations": None if applied is None else applied.to_optimization_snapshot(),
         }
         accelerations = getattr(self.model, "_worldfoundry_ltx_accelerations", None)
         if accelerations is not None:
             report["accelerations"] = accelerations
+        tp_rt = getattr(self.model.velocity_model, "_worldfoundry_token_pruning_runtime", None)
+        if isinstance(tp_rt, Mapping):
+            report["token_pruning"] = {k: v for k, v in tp_rt.items() if not str(k).startswith("_")}
         return report
 
 
@@ -884,6 +1553,7 @@ def build_ltx_joint_denoiser(
     cuda_graph_mode = resolve_cuda_graph_mode(context)
     teacache_threshold = resolve_teacache_threshold(context)
     teacache_max_tokens = _resolve_teacache_max_tokens(context)
+    fbcache_config = _resolve_fbcache_config(context)
 
     fuse_qkv = bool(context.component_options.get("fuse_qkv", context.policy.options.get("fuse_qkv", False)))
     fuse_cross_kv = bool(
@@ -951,6 +1621,7 @@ def build_ltx_joint_denoiser(
         enable_cuda_graph=cuda_graph_mode,
         teacache_threshold=teacache_threshold,
         **({"teacache_max_tokens": teacache_max_tokens} if teacache_max_tokens is not None else {}),
+        **({"fbcache_config": fbcache_config} if fbcache_config is not None else {}),
         **({"precision": context.component_options["precision"]} if "precision" in context.component_options else {}),
     )
 
@@ -968,6 +1639,7 @@ def build_ltx_video_denoiser(context: ComponentBuildContext) -> LTXVideoDenoiser
     cuda_graph_mode = resolve_cuda_graph_mode(context)
     teacache_threshold = resolve_teacache_threshold(context)
     teacache_max_tokens = _resolve_teacache_max_tokens(context)
+    fbcache_config = _resolve_fbcache_config(context)
 
     fuse_qkv = bool(context.component_options.get("fuse_qkv", context.policy.options.get("fuse_qkv", False)))
     fuse_cross_kv = bool(
@@ -1021,6 +1693,7 @@ def build_ltx_video_denoiser(context: ComponentBuildContext) -> LTXVideoDenoiser
         enable_cuda_graph=cuda_graph_mode,
         teacache_threshold=teacache_threshold,
         teacache_max_tokens=teacache_max_tokens,
+        fbcache_config=fbcache_config,
     )
 
 

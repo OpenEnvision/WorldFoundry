@@ -2088,6 +2088,7 @@ def test_fused_gelu_tanh_rowwise_fp8_cpu_and_empty_and_mixed_dtype_guards() -> N
         audio=None,
         ops=TransformerOpsConfig(ada_zero_function=PytorchAdaZeroFunction(backend="torch")),
     )
+    _init_deterministic_weights(block)
     block._use_fused_residual_gate = True
 
     def _forbid_fused_adaln(*args, **kwargs):
@@ -2424,3 +2425,1161 @@ def test_gpu_fused_ops_noncontiguous_and_mixed_dtype_parity() -> None:
         (fused_ops._ltx_gelu_tanh_rowwise_fp8_op, (h2d, False)),
     ):
         torch.library.opcheck(op, args, test_utils=("test_schema", "test_faketensor"), raise_exception=True)
+
+
+# =====================================================================
+# WAVE 3 UNIT + GPU TESTS (PISA, Token Pruning, FirstBlockCache)
+# =====================================================================
+
+
+_PISA_USABLE = False
+if _CUDA_AVAILABLE:
+    from worldfoundry.core.attention.sparse.piecewise import piecewise_attention_available
+
+    _PISA_USABLE = piecewise_attention_available("cuda")
+
+
+@pytest.mark.unit
+def test_ltx_pisa_validation_scoping_dense_edge_blocks_and_cpu_fallback() -> None:
+    """PISA option validation, positional backend_options, edge-block scoping, and exact CPU fallback."""
+    cross_attn = Attention(query_dim=256, context_dim=256, heads=2, dim_head=128)
+    with pytest.raises(ValueError, match="self-attention"):
+        cross_attn.set_attention_backend("pisa", {"density": 0.15, "block_size": 64})
+
+    self_attn = Attention(query_dim=256, context_dim=None, heads=2, dim_head=128).eval()
+    with pytest.raises(ValueError, match="unknown pisa options"):
+        self_attn.set_attention_backend("pisa", {"bogus": 1})
+    with pytest.raises(ValueError, match="density"):
+        self_attn.set_attention_backend("pisa", {"density": 0.0})
+    with pytest.raises(ValueError, match="density"):
+        self_attn.set_attention_backend("pisa", {"density": 1.5})
+    with pytest.raises(ValueError, match="density"):
+        self_attn.set_attention_backend("pisa", {"density": True})
+    with pytest.raises(ValueError, match="block_size"):
+        self_attn.set_attention_backend("pisa", {"block_size": 48})
+    with pytest.raises(ValueError, match="strict must be a bool"):
+        self_attn.set_attention_backend("pisa", {"strict": "yes"})
+    with pytest.raises(ValueError, match="exact attention backend"):
+        self_attn.set_attention_backend("pisa", {"dense_backend": "pisa"})
+
+    # Positional backend_options dict works and CPU ineligible workload falls back to exact SDPA.
+    torch.manual_seed(0)
+    x = torch.randn((1, 16, 256))
+    with torch.inference_mode():
+        y_ref = self_attn(x)
+
+    reset_attention_provider_runtime()
+    self_attn.set_attention_backend("pisa", {"density": 0.15, "block_size": 64, "min_tokens": 8, "strict": False})
+    assert self_attn.attention_backend == "pisa"
+    with torch.inference_mode():
+        y_pisa_cpu = self_attn(x)
+    torch.testing.assert_close(y_pisa_cpu, y_ref, rtol=1e-5, atol=1e-5)
+    assert attention_provider_runtime_report().get("pisa", {}).get("successes", 0) == 0
+
+    # Non-strict masked attention also falls back to exact masked SDPA; strict fails closed.
+    attn_mask = torch.zeros((1, 1, 16, 16))
+    with torch.inference_mode():
+        y_masked = self_attn(x, mask=attn_mask)
+    torch.testing.assert_close(y_masked, y_ref, rtol=1e-5, atol=1e-5)
+
+    self_attn.set_attention_backend("pisa", {"density": 0.15, "block_size": 64, "min_tokens": 8, "strict": True})
+    with pytest.raises(RuntimeError, match="not eligible"):
+        self_attn(x)
+    with pytest.raises(ValueError, match="does not support attention masks"):
+        self_attn(x, mask=attn_mask)
+
+    # 5-layer AV model: configure_attention_backend("pisa", self_only=True, dense_blocks=(0, 1, -1))
+    # configures only video attn1 blocks 2 & 3, leaving edge blocks (0, 1, 4) dense and audio_attn1 untouched.
+    av_model = _build_small_av_model(num_layers=5, video_heads=2, video_dim_head=128, audio_heads=2, audio_dim_head=64)
+    n_cfg = av_model.configure_attention_backend(
+        "pisa",
+        self_only=True,
+        dense_blocks=(0, 1, -1),
+        dense_backend="torch",
+        backend_options={"density": 0.15, "block_size": 64, "min_tokens": 128},
+    )
+    assert n_cfg == 2
+    blocks = [cast(BasicAVTransformerBlock, b) for b in av_model.transformer_blocks]
+    assert blocks[0].attn1.attention_backend == "torch"
+    assert blocks[1].attn1.attention_backend == "torch"
+    assert blocks[2].attn1.attention_backend == "pisa"
+    assert blocks[2].attn1._dense_attention_backend == "torch"
+    assert blocks[3].attn1.attention_backend == "pisa"
+    assert blocks[4].attn1.attention_backend == "torch"
+    for blk in blocks:
+        assert blk.audio_attn1.attention_backend is None
+        assert blk.attn2.attention_backend is None
+
+    # Accelerations plugin defaults dense_blocks to (0, 1, -1) on >=4-block models and passes validation.
+    av_model2 = _build_small_av_model(num_layers=5, video_heads=2, video_dim_head=128, audio_heads=2, audio_dim_head=64)
+    wrapper2 = _as_av_wrapper(av_model2)
+    ctx = ComponentBuildContext(
+        model_id="ltx-2.3-t2v",
+        key=ComponentKey(ComponentKind.DENOISER, "main"),
+        policy=RuntimePolicy(
+            device=torch.device("cpu"),
+            dtype=torch.float32,
+            options={
+                "accelerations": {
+                    "attention_policy": {
+                        "self": {
+                            "backend": "pisa",
+                            "density": 0.15,
+                            "block_size": 64,
+                            "min_tokens": 64,
+                            "tile_3d": (1, 4, 4),
+                            "dense_backend": "torch",
+                        }
+                    }
+                }
+            },
+        ),
+        checkpoints={},
+    )
+    _apply_ltx_post_load_accelerations(wrapper2, ctx)
+    den = LTXJointDenoiser(wrapper2, compute_dtype=torch.float32)
+    validate_acceleration_installation(den, ctx)
+    blocks2 = [cast(BasicAVTransformerBlock, b) for b in av_model2.transformer_blocks]
+    assert [b.attn1.attention_backend for b in blocks2] == ["torch", "torch", "pisa", "pisa", "torch"]
+    report = den.runtime_optimization_report()
+    scope_rep = report["accelerations"]["installed"][0]["scopes"]["self"]
+    assert scope_rep["resolved"] == "pisa"
+    assert scope_rep["schedule"]["dense_blocks"] == [0, 1, 4]
+    assert scope_rep["schedule"]["tile_3d"] == (1, 4, 4)
+
+
+@pytest.mark.unit
+def test_ltx_token_pruning_validation_residual_preservation_and_i2v_conditioning_protection() -> None:
+    """Interior token pruning validates configs, keeps edge blocks full, and strictly preserves I2V conditioning."""
+    from worldfoundry.base_models.diffusion_model.models.networks.ltx.acceleration import (
+        LTXTokenPruningConfig,
+        select_ltx_salient_tokens,
+    )
+
+    with pytest.raises(ValueError, match="keep_ratio"):
+        LTXTokenPruningConfig(keep_ratio=0.0)
+    with pytest.raises(ValueError, match="keep_ratio"):
+        LTXTokenPruningConfig(keep_ratio=1.2)
+    with pytest.raises(TypeError, match="keep_ratio"):
+        LTXTokenPruningConfig(keep_ratio=True)  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="method"):
+        LTXTokenPruningConfig(method="unknown")
+    with pytest.raises(ValueError, match="block span"):
+        LTXTokenPruningConfig(start_block=3, end_block=-2).resolve_span(4)
+
+    # Protected I2V conditioning tokens must NEVER be dropped even when their feature norm is ~0.
+    h = torch.ones((1, 64, 32)) * 10.0
+    h[:, :16, :] = 1e-4
+    prot = torch.zeros(64, dtype=torch.bool)
+    prot[:16] = True
+    for method in ("feat_norm", "delta_norm", "feat_l1", "feat_var", "uniform"):
+        idx = select_ltx_salient_tokens(h, 32, method=method, entry_hidden=torch.zeros_like(h), protected_mask=prot)
+        assert idx.shape == (32,)
+        assert torch.equal(idx, torch.sort(idx).values)
+        assert set(range(16)).issubset(set(idx.tolist()))
+
+    # Stratified selection preserves uniform spatial/temporal coverage per group; restore modes match contract.
+    from worldfoundry.base_models.diffusion_model.models.networks.ltx.acceleration import restore_ltx_pruned_tokens
+
+    h_strat = torch.arange(64, dtype=torch.float32).view(1, 64, 1).expand(1, 64, 8).clone()
+    strat_idx = select_ltx_salient_tokens(h_strat, 48, method="feat_norm", stratify_group_size=8)
+    assert strat_idx.shape == (48,)
+    for g in range(8):
+        in_group = [i for i in strat_idx.tolist() if g * 8 <= i < (g + 1) * 8]
+        assert len(in_group) == 6
+    pre = torch.zeros((1, 8, 4))
+    keep_idx = torch.tensor([0, 3, 7], dtype=torch.long)
+    mid_in = pre.index_select(1, keep_idx)
+    mid_out = torch.tensor([[[1.0] * 4, [4.0] * 4, [10.0] * 4]])
+    out_zero = restore_ltx_pruned_tokens(pre, mid_in, mid_out, keep_idx, restore_mode="zero")
+    assert out_zero[0, 1, 0].item() == 0.0 and out_zero[0, 3, 0].item() == 4.0
+    out_mean = restore_ltx_pruned_tokens(pre, mid_in, mid_out, keep_idx, restore_mode="mean_delta")
+    assert out_mean[0, 1, 0].item() == pytest.approx(5.0) and out_mean[0, 7, 0].item() == 10.0
+    out_near = restore_ltx_pruned_tokens(pre, mid_in, mid_out, keep_idx, restore_mode="nearest_delta")
+    assert out_near[0, 1, 0].item() == 1.0  # nearest kept to idx 1 is 0
+    assert out_near[0, 2, 0].item() == 4.0  # nearest kept to idx 2 is 3
+    assert out_near[0, 6, 0].item() == 10.0  # nearest kept to idx 6 is 7
+
+    # 5-layer AV model: verify keep_ratio=1.0 bitwise parity, distilled short-step guard, min_tokens, and I2V protection.
+    av_ref = _build_small_av_model(num_layers=5, video_heads=2, video_dim_head=64, audio_heads=2, audio_dim_head=64)
+    av_tp = _build_small_av_model(num_layers=5, video_heads=2, video_dim_head=64, audio_heads=2, audio_dim_head=64)
+    av_tp.load_state_dict(av_ref.state_dict())
+
+    inp_short = _make_av_input(t_v=16, t_a=8, t_txt=6, v_ctx_dim=128, a_ctx_dim=128, total_steps=8)
+    inp_long_distilled = _make_av_input(t_v=64, t_a=8, t_txt=6, v_ctx_dim=128, a_ctx_dim=128, total_steps=3)
+    inp_long_multi = _make_av_input(t_v=64, t_a=8, t_txt=6, v_ctx_dim=128, a_ctx_dim=128, total_steps=6)
+    den_ref = LTXJointDenoiser(_as_av_wrapper(av_ref), compute_dtype=torch.float32)
+
+    av_tp.configure_token_pruning({"keep_ratio": 1.0, "start_block": 1, "end_block": -1, "min_tokens": 0})
+    wrapper_tp = _as_av_wrapper(av_tp)
+    den_tp = LTXJointDenoiser(wrapper_tp, compute_dtype=torch.float32)
+    with torch.inference_mode():
+        ref_long = den_ref(inp_long_distilled).samples
+        out_k1 = den_tp(inp_long_distilled).samples
+    torch.testing.assert_close(out_k1["video"], ref_long["video"], rtol=0, atol=0)
+    torch.testing.assert_close(out_k1["audio"], ref_long["audio"], rtol=0, atol=0)
+    _release_denoiser(den_tp)
+    del den_tp
+    gc.collect()
+
+    # Configure Stage-2 pruning with default allow_distilled_pruning=False (min_steps_to_enable=5).
+    ctx_tp = ComponentBuildContext(
+        model_id="ltx-2.3-t2v",
+        key=ComponentKey(ComponentKind.DENOISER, "main"),
+        policy=RuntimePolicy(
+            device=torch.device("cpu"),
+            dtype=torch.float32,
+            options={
+                "accelerations": {
+                    "token_pruning": {
+                        "keep_ratio": 0.75,
+                        "method": "delta_norm",
+                        "restore_mode": "nearest_delta",
+                        "stratify_group_size": 8,
+                        "start_block": 1,
+                        "end_block": -1,
+                        "min_tokens": 32,
+                    }
+                }
+            },
+        ),
+        checkpoints={},
+    )
+    _apply_ltx_post_load_accelerations(wrapper_tp, ctx_tp)
+    den_tp2 = LTXJointDenoiser(wrapper_tp, compute_dtype=torch.float32)
+    validate_acceleration_installation(den_tp2, ctx_tp)
+
+    observed_seq_lens: dict[int, list[int]] = {i: [] for i in range(5)}
+    handles = []
+    for i, blk in enumerate(av_tp.transformer_blocks):
+
+        def _hook(_mod: torch.nn.Module, args: tuple[Any, ...], idx: int = i) -> None:
+            v_arg = args[0]
+            if v_arg is not None:
+                observed_seq_lens[idx].append(int(v_arg.x.shape[1]))
+
+        handles.append(blk.register_forward_pre_hook(_hook))
+    try:
+        with torch.inference_mode():
+            # Stage 1 (t_v=16 < min_tokens=32): runs dense on all 5 blocks without triggering guard warning
+            out_s1 = den_tp2(inp_short).samples
+            assert all(observed_seq_lens[i][-1] == 16 for i in range(5))
+
+            # Short distilled Stage 2 (total_steps=3 < 5, allow_distilled_pruning=False):
+            # safety guard keeps all 5 blocks dense (bitwise identical to unpruned ref) and emits warning.
+            with pytest.warns(UserWarning, match="distilled short-step safety guard"):
+                out_guarded = den_tp2(inp_long_distilled).samples
+            assert all(observed_seq_lens[i][-1] == 64 for i in range(5))
+            torch.testing.assert_close(out_guarded["video"], ref_long["video"], rtol=0, atol=0)
+            torch.testing.assert_close(out_guarded["audio"], ref_long["audio"], rtol=0, atol=0)
+
+            # Multi-step Stage 2 (total_steps=6 >= 5, t_v=64 >= 32): edge blocks 0 & 4 see 64, middle 1..3 see 48
+            out_s2 = den_tp2(inp_long_multi).samples
+            assert observed_seq_lens[0][-1] == 64
+            assert observed_seq_lens[1][-1] == 48
+            assert observed_seq_lens[2][-1] == 48
+            assert observed_seq_lens[3][-1] == 48
+            assert observed_seq_lens[4][-1] == 64
+            assert torch.isfinite(out_s1["video"]).all()
+            assert torch.isfinite(out_s2["video"]).all()
+
+            # Non-uniform I2V denoise_mask where 56/64 tokens are conditioned (> keep_tokens=48):
+            # pruning must safely skip and run dense rather than drop any conditioning token.
+            v_st = inp_long_multi.modalities["video"]
+            heavy_cond_mask = torch.ones_like(v_st.denoise_mask)
+            heavy_cond_mask[:, :56, :] = 0.0
+            inp_heavy_i2v = MultiModalDenoiserInput(
+                modalities={
+                    "video": ModalityState(
+                        latent=v_st.latent,
+                        clean_latent=v_st.clean_latent,
+                        denoise_mask=heavy_cond_mask,
+                        positions=v_st.positions,
+                    ),
+                    "audio": inp_long_multi.modalities["audio"],
+                },
+                timestep=inp_long_multi.timestep,
+                conditioning=inp_long_multi.conditioning,
+                step_index=0,
+                total_steps=6,
+            )
+            _ = den_tp2(inp_heavy_i2v)
+            assert all(observed_seq_lens[i][-1] == 64 for i in range(5))
+    finally:
+        for h_ref in handles:
+            h_ref.remove()
+
+    rep = den_tp2.runtime_optimization_report()
+    assert rep["token_pruning"]["pruned_calls"] == 1
+    assert rep["token_pruning"]["dense_calls"] == 3
+    assert rep["token_pruning"]["distilled_guard_skips"] == 1
+    assert rep["token_pruning"]["allow_distilled_pruning"] is False
+    assert rep["token_pruning"]["last_kept_tokens"] == 48
+    assert rep["token_pruning"]["last_total_tokens"] == 64
+
+
+@pytest.mark.unit
+def test_ltx_firstblock_cache_isolation_boundaries_and_mutual_exclusion() -> None:
+    """FirstBlockCache respects boundaries, max_consecutive_skips, branch/request isolation, and rejects conflicts."""
+    from worldfoundry.base_models.diffusion_model.models.networks.ltx.acceleration import LTXFirstBlockCacheConfig
+
+    with pytest.raises(ValueError, match="residual_diff_threshold"):
+        LTXFirstBlockCacheConfig(residual_diff_threshold=-0.1)
+    with pytest.raises(ValueError, match="dense_first"):
+        LTXFirstBlockCacheConfig(dense_first=0)
+
+    av_model = _build_small_av_model(num_layers=4, video_heads=2, video_dim_head=64, audio_heads=2, audio_dim_head=64)
+    wrapper = _as_av_wrapper(av_model)
+
+    # Mutual exclusion with TeaCache and whole CUDA Graph.
+    with pytest.raises(ValueError, match="mutually exclusive"):
+        LTXJointDenoiser(wrapper, compute_dtype=torch.float32, teacache_threshold=0.1, fbcache_threshold=0.08)
+    with pytest.raises(ValueError, match="piecewise"):
+        LTXJointDenoiser(wrapper, compute_dtype=torch.float32, enable_cuda_graph="whole", fbcache_threshold=0.08)
+
+    # Plugin installation + validate_acceleration_installation contract.
+    ctx = ComponentBuildContext(
+        model_id="ltx-2.3-t2v",
+        key=ComponentKey(ComponentKind.DENOISER, "main"),
+        policy=RuntimePolicy(
+            device=torch.device("cpu"),
+            dtype=torch.float32,
+            options={
+                "accelerations": {
+                    "fbcache": {
+                        "residual_diff_threshold": 0.50,
+                        "dense_first": 1,
+                        "dense_last": 1,
+                        "max_consecutive_skips": 2,
+                        "downsample_factor": 2,
+                        "min_steps_to_enable": 4,
+                        "max_tokens": 32,
+                    }
+                }
+            },
+        ),
+        checkpoints={},
+    )
+    _apply_ltx_post_load_accelerations(wrapper, ctx)
+    den = LTXJointDenoiser(wrapper, compute_dtype=torch.float32)
+    validate_acceleration_installation(den, ctx)
+
+    # Run 6 Stage-1 steps (t_v=16 <= 32) across two requests and verify hits + boundaries + max_consecutive_skips.
+    with torch.inference_mode():
+        for step, sigma in enumerate((0.500, 0.499, 0.498, 0.497, 0.496, 0.495)):
+            inp_a = _make_av_input(
+                t_v=16,
+                t_a=8,
+                t_txt=6,
+                v_ctx_dim=128,
+                a_ctx_dim=128,
+                sigma=sigma,
+                step_index=step,
+                total_steps=6,
+                request_id="fb-req-a",
+                seed=11,
+            )
+            inp_b = _make_av_input(
+                t_v=16,
+                t_a=8,
+                t_txt=6,
+                v_ctx_dim=128,
+                a_ctx_dim=128,
+                sigma=sigma,
+                step_index=step,
+                total_steps=6,
+                request_id="fb-req-b",
+                seed=29,
+            )
+            out_a = den(inp_a).samples
+            out_b = den(inp_b).samples
+            assert torch.isfinite(out_a["video"]).all() and torch.isfinite(out_b["video"]).all()
+
+        # Stage 2 (t_v=64 > max_tokens=32) bypasses FBCache cleanly without modifying Stage-1 receipts.
+        for step, sigma in enumerate((0.9, 0.7, 0.4)):
+            inp_s2 = _make_av_input(
+                t_v=64,
+                t_a=8,
+                t_txt=6,
+                v_ctx_dim=128,
+                a_ctx_dim=128,
+                sigma=sigma,
+                step_index=step,
+                total_steps=3,
+                request_id="fb-req-a",
+            )
+            out_s2 = den(inp_s2).samples
+            assert torch.isfinite(out_s2["video"]).all()
+
+    rep_a = den.runtime_optimization_report("fb-req-a")["feature_cache"]
+    assert rep_a["algorithm"] == "firstblock"
+    assert rep_a["events"] == 6
+    assert rep_a["hits"] >= 2
+    assert rep_a["skipped_block_calls"] == rep_a["hits"] * 3  # 3 skipped blocks per hit on 4-layer model
+    events_a = rep_a["branches"]["positive"]["event_receipts"]
+    assert events_a[0]["reason"] == "seed" and events_a[0]["hit"] is False
+    assert events_a[-1]["reason"] == "dense-boundary" and events_a[-1]["hit"] is False
+    # Max consecutive skips = 2 means step 3 must force a dense refresh if steps 1 & 2 hit.
+    if events_a[1]["hit"] and events_a[2]["hit"]:
+        assert events_a[3]["hit"] is False
+        assert events_a[3]["reason"] == "max-consecutive-skips"
+
+    den.end_feature_cache_request("fb-req-a")
+    snap_a = den.fbcache_report("fb-req-a")
+    assert snap_a["finalized"] is True
+    assert snap_a["hits"] == rep_a["hits"]
+    den.end_feature_cache_request("fb-req-b")
+
+
+@pytest.mark.gpu
+@pytest.mark.skipif(not _PISA_USABLE, reason="In-tree PISA TMA kernel requires Hopper/DC-Blackwell CUDA + Triton TMA")
+@pytest.mark.parametrize("graph_mode", ["whole", "piecewise"])
+def test_gpu_pisa_tile3d_dense_blocks_and_cuda_graph(graph_mode: str) -> None:
+    """In-tree PISA with dense edge blocks (0, 1, -1), tile_3d=(2,4,4), dense_steps=1, and CUDA Graph capture."""
+    device = torch.device("cuda")
+    dtype = torch.bfloat16
+    dense_bk = "flash_attention_3" if _FA3_USABLE else "torch"
+
+    m_av = _build_small_av_model(num_layers=5, video_heads=4, video_dim_head=128, device=device, dtype=dtype)
+    m_av.fuse_projections()
+    m_av.enable_fused_ops()
+    wrapper = _as_av_wrapper(m_av)
+    ctx = ComponentBuildContext(
+        model_id="ltx-2.3-t2v",
+        key=ComponentKey(ComponentKind.DENOISER, "main"),
+        policy=RuntimePolicy(
+            device=device,
+            dtype=dtype,
+            options={
+                "accelerations": {
+                    "attention_policy": {
+                        "self": {
+                            "backend": "pisa",
+                            "density": 0.25,
+                            "block_size": 64,
+                            "min_tokens": 128,
+                            "dense_blocks": (0, 1, -1),
+                            "dense_steps": 1,
+                            "tile_3d": (2, 4, 4),
+                            "dense_backend": dense_bk,
+                            "strict": True,
+                        }
+                    }
+                }
+            },
+        ),
+        checkpoints={},
+    )
+    _apply_ltx_post_load_accelerations(wrapper, ctx)
+    den = LTXJointDenoiser(wrapper, compute_dtype=dtype, enable_cuda_graph=graph_mode)
+    validate_acceleration_installation(den, ctx)
+
+    g = torch.Generator(device="cpu").manual_seed(77)
+    grid = torch.stack(
+        torch.meshgrid(
+            torch.arange(2, dtype=torch.float32),
+            torch.arange(8, dtype=torch.float32),
+            torch.arange(8, dtype=torch.float32),
+            indexing="ij",
+        ),
+        dim=0,
+    ).reshape(3, -1)
+    v_pos = torch.stack((grid, grid + 1.0), dim=-1).unsqueeze(0).to(device=device)
+    v_lat = torch.randn((1, 128, 32), generator=g).to(device=device, dtype=dtype)
+    v_mask = torch.ones((1, 128, 1), device=device, dtype=dtype)
+    v_ctx = torch.randn((1, 16, 512), generator=g).to(device=device, dtype=dtype)
+    a_lat = torch.randn((1, 32, 32), generator=g).to(device=device, dtype=dtype)
+    a_mask = torch.ones((1, 32, 1), device=device, dtype=dtype)
+    a_grid = torch.arange(32, dtype=torch.float32).reshape(1, -1)
+    a_pos = torch.stack((a_grid, a_grid + 1.0), dim=-1).unsqueeze(0).to(device=device)
+    a_ctx = torch.randn((1, 16, 256), generator=g).to(device=device, dtype=dtype)
+
+    def _inp(step: int) -> MultiModalDenoiserInput:
+        return MultiModalDenoiserInput(
+            modalities={
+                "video": ModalityState(latent=v_lat, clean_latent=v_lat, denoise_mask=v_mask, positions=v_pos),
+                "audio": ModalityState(latent=a_lat, clean_latent=a_lat, denoise_mask=a_mask, positions=a_pos),
+            },
+            timestep=torch.tensor([0.5], device=device, dtype=dtype),
+            conditioning={"video_context": v_ctx, "audio_context": a_ctx},
+            step_index=step,
+            total_steps=4,
+        )
+
+    reset_attention_provider_runtime()
+    with torch.inference_mode():
+        # Step 0: dense_steps=1 forces dense backend (0 PISA calls).
+        out0 = den(_inp(0)).samples
+        assert attention_provider_runtime_report().get("pisa", {}).get("successes", 0) == 0
+
+        # Short Stage-1 input (t_v=64 < min_tokens=128) also bypasses PISA cleanly.
+        short_inp = _make_av_input(
+            t_v=64, t_a=32, t_txt=16, v_ctx_dim=512, a_ctx_dim=256, step_index=1, device=device, dtype=dtype
+        )
+        out_short = den(short_inp).samples
+        assert torch.isfinite(out_short["video"]).all()
+        assert attention_provider_runtime_report().get("pisa", {}).get("successes", 0) == 0
+
+        # Steps 1..3 at t_v=128: PISA runs on blocks 2..3 with tile_3d=(2,4,4) and captures/replays in CUDA Graph!
+        for step in (1, 2, 3):
+            out_s = den(_inp(step)).samples
+            assert torch.isfinite(out_s["video"]).all()
+            assert torch.isfinite(out_s["audio"]).all()
+
+    pisa_rep = attention_provider_runtime_report().get("pisa", {})
+    assert pisa_rep.get("successes", 0) > 0
+    assert pisa_rep.get("fallbacks", 0) == 0
+    assert pisa_rep.get("errors", 0) == 0
+    cg_rep = den.graph_report()
+    assert cg_rep is not None
+    assert cg_rep["capture_failed"] == 0
+    assert torch.isfinite(out0["video"]).all()
+    _release_denoiser(den)
+
+
+@pytest.mark.gpu
+@pytest.mark.skipif(not (_PISA_USABLE and _HOPPER_PLUS), reason="Requires Hopper+ CUDA with PISA TMA and FP8")
+def test_gpu_full_sol_engine_stack_fbcache_pisa_fp8_token_pruning_and_i2v() -> None:
+    """Full SOL-Engine stack: FBCache (Stage 1) + PISA + tile_3d + Token Pruning + FP8 + Piecewise CUDA Graph (T2V & I2V)."""
+    device = torch.device("cuda")
+    dtype = torch.bfloat16
+    dense_bk = "flash_attention_3" if _FA3_USABLE else "torch"
+
+    m_av = _build_small_av_model(
+        num_layers=6, video_heads=8, video_dim_head=128, audio_heads=8, audio_dim_head=64, device=device, dtype=dtype
+    )
+    m_av.fuse_projections()
+    m_av.enable_fused_ops()
+    enable_ltx_fp8_quantization(
+        m_av,
+        min_features=512,
+        scaling="rowwise",
+        use_fast_accum=False,
+        keep_dense_fallback=False,
+        fuse_fp8_ffn=True,
+    )
+    wrapper = _as_av_wrapper(m_av)
+    ctx = ComponentBuildContext(
+        model_id="ltx-2.3-t2v",
+        key=ComponentKey(ComponentKind.DENOISER, "main"),
+        policy=RuntimePolicy(
+            device=device,
+            dtype=dtype,
+            options={
+                "cuda_graph": "piecewise",
+                "accelerations": {
+                    "attention_policy": {
+                        "self": {
+                            "backend": "pisa",
+                            "density": 0.25,
+                            "block_size": 64,
+                            "min_tokens": 128,
+                            "dense_blocks": (0, 1, -1),
+                            "tile_3d": (2, 4, 4),
+                            "dense_backend": dense_bk,
+                            "strict": True,
+                        }
+                    },
+                    "token_pruning": {
+                        "keep_ratio": 0.75,
+                        "method": "feat_norm",
+                        "restore_mode": "nearest_delta",
+                        "start_block": 2,
+                        "end_block": -1,
+                        "min_tokens": 128,
+                        "allow_distilled_pruning": True,
+                    },
+                    "fbcache": {
+                        "residual_diff_threshold": 0.50,
+                        "dense_first": 1,
+                        "dense_last": 1,
+                        "max_consecutive_skips": 2,
+                        "min_steps_to_enable": 4,
+                        "max_tokens": 96,
+                    },
+                },
+            },
+        ),
+        checkpoints={},
+    )
+    _apply_ltx_post_load_accelerations(wrapper, ctx)
+    den = LTXJointDenoiser(wrapper, compute_dtype=dtype, enable_cuda_graph="piecewise")
+    validate_acceleration_installation(den, ctx)
+
+    reset_attention_provider_runtime()
+    with torch.inference_mode():
+        # Stage 1 (t_v=64 <= 96, 6 steps): FBCache hits, PISA & Token Pruning stay bypassed!
+        for step, sigma in enumerate((0.500, 0.499, 0.498, 0.497, 0.496, 0.495)):
+            inp_s1 = _make_av_input(
+                t_v=64,
+                t_a=32,
+                t_txt=16,
+                v_ctx_dim=1024,
+                a_ctx_dim=512,
+                sigma=sigma,
+                step_index=step,
+                total_steps=6,
+                request_id="sol-full-req",
+                device=device,
+                dtype=dtype,
+            )
+            out_s1 = den(inp_s1).samples
+            assert torch.isfinite(out_s1["video"]).all() and torch.isfinite(out_s1["audio"]).all()
+
+        # Stage 2 T2V (t_v=256 >= 128, pruned to 192 >= 128 & multiple of block_size=64, 3 steps):
+        # FBCache bypassed, PISA + tile_3d + Token Pruning + FP8 all active simultaneously!
+        g = torch.Generator(device="cpu").manual_seed(91)
+        grid = torch.stack(
+            torch.meshgrid(
+                torch.arange(4, dtype=torch.float32),
+                torch.arange(8, dtype=torch.float32),
+                torch.arange(8, dtype=torch.float32),
+                indexing="ij",
+            ),
+            dim=0,
+        ).reshape(3, -1)
+        v_pos = torch.stack((grid, grid + 1.0), dim=-1).unsqueeze(0).to(device=device)
+        v_lat = torch.randn((1, 256, 32), generator=g).to(device=device, dtype=dtype)
+        v_mask_t2v = torch.ones((1, 256, 1), device=device, dtype=dtype)
+        v_ctx = torch.randn((1, 16, 1024), generator=g).to(device=device, dtype=dtype)
+        a_lat = torch.randn((1, 32, 32), generator=g).to(device=device, dtype=dtype)
+        a_mask = torch.ones((1, 32, 1), device=device, dtype=dtype)
+        a_grid = torch.arange(32, dtype=torch.float32).reshape(1, -1)
+        a_pos = torch.stack((a_grid, a_grid + 1.0), dim=-1).unsqueeze(0).to(device=device)
+        a_ctx = torch.randn((1, 16, 512), generator=g).to(device=device, dtype=dtype)
+
+        for step, sigma in enumerate((0.9, 0.7, 0.4)):
+            inp_s2 = MultiModalDenoiserInput(
+                modalities={
+                    "video": ModalityState(latent=v_lat, clean_latent=v_lat, denoise_mask=v_mask_t2v, positions=v_pos),
+                    "audio": ModalityState(latent=a_lat, clean_latent=a_lat, denoise_mask=a_mask, positions=a_pos),
+                },
+                timestep=torch.tensor([sigma], device=device, dtype=dtype),
+                conditioning={"video_context": v_ctx, "audio_context": a_ctx, "request_id": "sol-full-req"},
+                step_index=step,
+                total_steps=3,
+            )
+            out_s2 = den(inp_s2).samples
+            assert torch.isfinite(out_s2["video"]).all() and torch.isfinite(out_s2["audio"]).all()
+
+        # Stage 2 I2V (non-uniform denoise_mask: frame-0 tokens 0..63 conditioned = 0.0 -> protected!)
+        v_mask_i2v = torch.ones((1, 256, 1), device=device, dtype=dtype)
+        v_mask_i2v[:, :64, :] = 0.0
+        for step, sigma in enumerate((0.9, 0.7, 0.4)):
+            inp_i2v = MultiModalDenoiserInput(
+                modalities={
+                    "video": ModalityState(latent=v_lat, clean_latent=v_lat, denoise_mask=v_mask_i2v, positions=v_pos),
+                    "audio": ModalityState(latent=a_lat, clean_latent=a_lat, denoise_mask=a_mask, positions=a_pos),
+                },
+                timestep=torch.tensor([sigma], device=device, dtype=dtype),
+                conditioning={"video_context": v_ctx, "audio_context": a_ctx, "request_id": "sol-i2v-req"},
+                step_index=step,
+                total_steps=3,
+            )
+            out_i2v = den(inp_i2v).samples
+            assert torch.isfinite(out_i2v["video"]).all() and torch.isfinite(out_i2v["audio"]).all()
+
+    rep = den.runtime_optimization_report("sol-full-req")
+    assert rep["feature_cache"]["algorithm"] == "firstblock"
+    assert rep["feature_cache"]["hits"] > 0
+    assert rep["feature_cache"]["skipped_block_calls"] > 0
+    assert rep["token_pruning"]["pruned_calls"] == 6  # 3 T2V + 3 I2V Stage-2 steps
+    assert rep["token_pruning"]["last_kept_tokens"] == 192
+    assert rep["cuda_graph"]["capture_failed"] == 0
+    assert rep["cuda_graph"]["cache_skips"] > 0
+    pisa_rep = attention_provider_runtime_report().get("pisa", {})
+    assert pisa_rep.get("successes", 0) > 0
+    assert pisa_rep.get("fallbacks", 0) == 0
+    assert pisa_rep.get("errors", 0) == 0
+    fp8_fb = sum(int(getattr(m, "dense_fallback_calls", 0)) for m in m_av.modules() if isinstance(m, Float8Linear))
+    assert fp8_fb == 0
+    den.end_feature_cache_request("sol-full-req")
+    _release_denoiser(den)
+
+
+@pytest.mark.unit
+def test_ltx_wave3_edge_cases_regression_unit(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Regression unit tests for NaN-safe protection, mixed-dtype restore, empty-modality FBCache, and config guards."""
+    from worldfoundry.base_models.diffusion_model.models.denoisers.ltx import _resolve_protected_tokens
+    from worldfoundry.base_models.diffusion_model.models.networks.ltx import acceleration as acc_mod
+    from worldfoundry.base_models.diffusion_model.models.networks.ltx.acceleration import (
+        LTXFirstBlockCache,
+        LTXFirstBlockCacheConfig,
+        LTXTokenPruningConfig,
+        restore_ltx_pruned_tokens,
+        select_ltx_salient_tokens,
+    )
+    from worldfoundry.base_models.diffusion_model.models.networks.ltx.modality import Modality
+
+    # 1. NaN / +inf unprotected activations must NEVER outrank protected conditioning tokens.
+    h = torch.randn((1, 16, 8), dtype=torch.float32)
+    h[0, 15, 0] = float("nan")
+    h[0, 14, 0] = float("inf")
+    prot = torch.zeros(16, dtype=torch.bool)
+    prot[:4] = True
+    kept = select_ltx_salient_tokens(h, 4, protected_mask=prot)
+    assert kept.tolist() == [0, 1, 2, 3]
+
+    # 2. Mixed-dtype token restoration (fp32 pre_hidden + bf16 mid_out_hidden) works in all modes.
+    pre = torch.randn((1, 16, 8), dtype=torch.float32)
+    mid_in = pre[:, :8].to(torch.bfloat16)
+    mid_out = (mid_in + 0.5).to(torch.bfloat16)
+    idx = torch.arange(8, dtype=torch.long)
+    for mode in ("zero", "mean_delta", "nearest_delta"):
+        restored = restore_ltx_pruned_tokens(pre, mid_in, mid_out, idx, restore_mode=mode)
+        assert restored.dtype == torch.float32 and torch.isfinite(restored).all()
+
+    # 3. FBCache treats empty/disabled modality tensors (numel() == 0) cleanly instead of producing NaN metrics.
+    fb_cfg = LTXFirstBlockCacheConfig(
+        residual_diff_threshold=0.5,
+        audio_diff_threshold=0.5,
+        dense_first=1,
+        dense_last=0,
+        min_steps_to_enable=4,
+    )
+    with torch.inference_mode():
+        fb_va = LTXFirstBlockCache(fb_cfg)
+        v_in = torch.ones((1, 16, 8))
+        v_out = v_in + 0.1
+        a_empty = torch.empty((1, 0, 8))
+        hit0, r0, m0, vp0, ap0 = fb_va.evaluate_probe(
+            step=0,
+            total_steps=5,
+            num_blocks=4,
+            block0_video_in=v_in,
+            block0_video_out=v_out,
+            block0_audio_in=a_empty,
+            block0_audio_out=a_empty,
+        )
+        assert not hit0
+        fb_va.record_miss(
+            step=0,
+            num_blocks=4,
+            reason=r0,
+            metric=m0,
+            v_probe=vp0,
+            a_probe=ap0,
+            video_tail_base=v_out,
+            video_tail_out=v_out + 0.2,
+            audio_tail_base=a_empty,
+            audio_tail_out=a_empty,
+        )
+        hit1, r1, _, _, _ = fb_va.evaluate_probe(
+            step=1,
+            total_steps=5,
+            num_blocks=4,
+            block0_video_in=v_in,
+            block0_video_out=v_out,
+            block0_audio_in=a_empty,
+            block0_audio_out=a_empty,
+        )
+        assert hit1 and r1 == "below-threshold"
+
+        fb_ao = LTXFirstBlockCache(fb_cfg)
+        v_empty = torch.empty((1, 0, 8))
+        a_in = torch.ones((1, 16, 8))
+        a_out = a_in + 0.1
+        hit0_a, r0_a, m0_a, vp0_a, ap0_a = fb_ao.evaluate_probe(
+            step=0,
+            total_steps=5,
+            num_blocks=4,
+            block0_video_in=v_empty,
+            block0_video_out=v_empty,
+            block0_audio_in=a_in,
+            block0_audio_out=a_out,
+        )
+        assert not hit0_a
+        fb_ao.record_miss(
+            step=0,
+            num_blocks=4,
+            reason=r0_a,
+            metric=m0_a,
+            v_probe=vp0_a,
+            a_probe=ap0_a,
+            video_tail_base=v_empty,
+            video_tail_out=v_empty,
+            audio_tail_base=a_out,
+            audio_tail_out=a_out + 0.2,
+        )
+        hit1_a, r1_a, _, _, _ = fb_ao.evaluate_probe(
+            step=1,
+            total_steps=5,
+            num_blocks=4,
+            block0_video_in=v_empty,
+            block0_video_out=v_empty,
+            block0_audio_in=a_in,
+            block0_audio_out=a_out,
+        )
+        assert hit1_a and r1_a == "below-threshold"
+        hit_empty, r_empty, _, _, _ = fb_ao.evaluate_probe(
+            step=1,
+            total_steps=5,
+            num_blocks=4,
+            block0_video_in=v_empty,
+            block0_video_out=v_empty,
+            block0_audio_in=a_empty,
+            block0_audio_out=a_empty,
+        )
+        assert not hit_empty and r_empty == "empty-probe"
+
+    # 4. configure_attention_backend validates upfront with zero partial mutation on failure.
+    av_model = _build_small_av_model(num_layers=6, video_heads=2, video_dim_head=128, audio_heads=2, audio_dim_head=64)
+    blocks = [cast(BasicAVTransformerBlock, b) for b in av_model.transformer_blocks]
+    before = [blk.attn1.attention_backend for blk in blocks]
+    with pytest.raises(ValueError, match="exact attention backend"):
+        av_model.configure_attention_backend("pisa", self_only=True, dense_blocks=(0, 1, -1), dense_backend="sol_attn")
+    assert [blk.attn1.attention_backend for blk in blocks] == before
+
+    # 5. _resolve_protected_tokens tracks keyframes_mask in-place mutations and protects uniform all-zero denoise_mask.
+    pcache: dict[tuple[int, int], Any] = {}
+    with torch.no_grad():
+        dm = torch.ones((1, 16, 1))
+        kf = torch.zeros((1, 16, 1))
+        kf[:, :2, :] = 1.0
+        _, c1 = _resolve_protected_tokens(pcache, dm, kf, uniform_denoise_mask=True, allow_inference_cache=True)
+        kf[:, :6, :] = 1.0
+        _, c2 = _resolve_protected_tokens(pcache, dm, kf, uniform_denoise_mask=True, allow_inference_cache=True)
+        assert c1 == 2 and c2 == 6
+        dm_zero = torch.zeros((1, 16, 1))
+        m_zero, c_zero = _resolve_protected_tokens(
+            pcache, dm_zero, None, uniform_denoise_mask=True, allow_inference_cache=True
+        )
+        assert c_zero == 16 and m_zero is not None and bool(m_zero.all().item())
+
+    # 6. accelerations.fbcache honors fbcache_max_tokens and rejects conflicting runtime fbcache option;
+    #    PISA tile_3d schedule honors min_sequence_length and defaults to 1024.
+    def _ctx(opts: dict[str, Any]) -> ComponentBuildContext:
+        return ComponentBuildContext(
+            key=ComponentKey(kind=ComponentKind.DENOISER, name="transformer"),
+            model_id="test-ltx",
+            checkpoints={},
+            policy=RuntimePolicy(device=torch.device("cpu"), dtype=torch.float32, options=opts),
+            component_options={},
+        )
+
+    wrap_fb = _as_av_wrapper(
+        _build_small_av_model(num_layers=4, video_heads=2, video_dim_head=128, audio_heads=2, audio_dim_head=64)
+    )
+    _apply_ltx_post_load_accelerations(
+        wrap_fb,
+        _ctx({"accelerations": {"fbcache": {"residual_diff_threshold": 0.16}}, "fbcache_max_tokens": 2048}),
+    )
+    den_fb = LTXJointDenoiser(wrap_fb, compute_dtype=torch.float32, enable_cuda_graph="off")
+    assert den_fb._fbcache_config.max_tokens == 2048
+    with pytest.raises(ValueError, match="both runtime options and accelerations"):
+        _apply_ltx_post_load_accelerations(
+            wrap_fb,
+            _ctx({"accelerations": {"fbcache": {"residual_diff_threshold": 0.12}}, "fbcache": 0.16}),
+        )
+
+    m_pisa_ms = _build_small_av_model(num_layers=4, video_heads=2, video_dim_head=128, audio_heads=2, audio_dim_head=64)
+    _apply_ltx_post_load_accelerations(
+        _as_av_wrapper(m_pisa_ms),
+        _ctx(
+            {
+                "accelerations": {
+                    "attention_policy": {
+                        "self": {"backend": "pisa", "density": 0.15, "min_sequence_length": 4096, "tile_3d": (1, 4, 4)}
+                    }
+                }
+            }
+        ),
+    )
+    assert m_pisa_ms.__dict__["_worldfoundry_sol_schedule"]["min_tokens"] == 4096
+
+    m_pisa_def = _build_small_av_model(
+        num_layers=4, video_heads=2, video_dim_head=128, audio_heads=2, audio_dim_head=64
+    )
+    _apply_ltx_post_load_accelerations(
+        _as_av_wrapper(m_pisa_def),
+        _ctx(
+            {
+                "accelerations": {
+                    "attention_policy": {"self": {"backend": "pisa", "density": 0.15, "tile_3d": (1, 4, 4)}}
+                }
+            }
+        ),
+    )
+    assert m_pisa_def.__dict__["_worldfoundry_sol_schedule"]["min_tokens"] == 1024
+
+    # 7. Invalid WORLDFOUNDRY_PISA_MIN_SEQUENCE fails closed with descriptive ValueError.
+    attn = Attention(query_dim=256, context_dim=None, heads=2, dim_head=128).eval()
+    attn.set_attention_backend("pisa", {"density": 0.25, "block_size": 64})
+    monkeypatch.setenv("WORLDFOUNDRY_PISA_MIN_SEQUENCE", "not-an-int")
+    with pytest.raises(ValueError, match="WORLDFOUNDRY_PISA_MIN_SEQUENCE"):
+        with torch.inference_mode():
+            attn(torch.randn((1, 16, 256)))
+    monkeypatch.delenv("WORLDFOUNDRY_PISA_MIN_SEQUENCE", raising=False)
+
+    # 8. Direct LTXModel.forward skips derive_ltx_protected_token_mask when pruning is bypassed by distilled guard.
+    m_guard = _build_small_av_model(num_layers=4, video_heads=2, video_dim_head=128, audio_heads=2, audio_dim_head=64)
+    m_guard.configure_token_pruning(
+        LTXTokenPruningConfig(
+            keep_ratio=0.75, start_block=1, end_block=-1, min_tokens=16, allow_distilled_pruning=False
+        )
+    )
+    derive_calls = [0]
+    orig_derive = acc_mod.derive_ltx_protected_token_mask
+
+    def _spy_derive(*args: Any, **kwargs: Any) -> Any:
+        derive_calls[0] += 1
+        return orig_derive(*args, **kwargs)
+
+    monkeypatch.setattr(acc_mod, "derive_ltx_protected_token_mask", _spy_derive)
+    v_mod = Modality(
+        enabled=True,
+        latent=torch.randn((1, 32, 32)),
+        sigma=torch.tensor([0.5]),
+        timesteps=torch.full((1, 32, 1), 0.5),
+        positions=torch.zeros((1, 3, 32, 2)),
+        context=torch.randn((1, 8, 256)),
+    )
+    with pytest.warns(UserWarning, match="distilled short-step safety guard"):
+        with torch.inference_mode():
+            m_guard(video=v_mod, audio=None, feature_cache_step=0, feature_cache_total_steps=3)
+    assert derive_calls[0] == 0
+
+
+@pytest.mark.gpu
+@pytest.mark.skipif(not _PISA_USABLE, reason="requires Hopper/DC-Blackwell CUDA GPU with Triton TMA PISA support")
+def test_gpu_wave3_pisa_fbcache_teacache_pruning_cfg_and_resolution_switches() -> None:
+    """Verify strict PISA length gates, 2-stage FBCache telemetry, piecewise skip counts, CFG, and resolution switches."""
+    from worldfoundry.base_models.diffusion_model.models.networks.ltx.acceleration import (
+        LTXFirstBlockCacheConfig,
+        LTXTokenPruningConfig,
+    )
+
+    device = torch.device("cuda")
+    dtype = torch.bfloat16
+
+    # 1. Strict PISA honors min_sequence_length and short K (< min_tokens) as clean dense fallbacks.
+    attn = Attention(query_dim=256, context_dim=None, heads=2, dim_head=128).to(device=device, dtype=dtype).eval()
+    x128 = torch.randn((1, 128, 256), device=device, dtype=dtype)
+    ctx32 = torch.randn((1, 32, 256), device=device, dtype=dtype)
+    with torch.inference_mode():
+        y_ref = attn(x128)
+    attn.set_attention_backend("pisa", {"density": 0.25, "block_size": 64, "min_sequence_length": 4096, "strict": True})
+    with torch.inference_mode():
+        torch.testing.assert_close(attn(x128), y_ref, rtol=1e-2, atol=1e-2)
+    attn.set_attention_backend("pisa", {"density": 0.25, "block_size": 64, "min_tokens": 64, "strict": True})
+    with torch.inference_mode():
+        assert torch.isfinite(attn(x128, context=ctx32)).all()
+
+    def _grid_pos(f: int, h: int, w: int) -> torch.Tensor:
+        g3 = torch.stack(
+            torch.meshgrid(
+                torch.arange(f, dtype=torch.float32),
+                torch.arange(h, dtype=torch.float32),
+                torch.arange(w, dtype=torch.float32),
+                indexing="ij",
+            ),
+            dim=0,
+        ).reshape(3, -1)
+        return torch.stack((g3, g3 + 1.0), dim=-1).unsqueeze(0).to(device=device)
+
+    def _av_inp(
+        f: int,
+        h: int,
+        w: int,
+        *,
+        sigma: float,
+        step: int,
+        total_steps: int,
+        req_id: str,
+        branch: str = "positive",
+    ) -> MultiModalDenoiserInput:
+        t_v = f * h * w
+        gen = torch.Generator(device="cpu").manual_seed(77 + step)
+        v_lat = torch.randn((1, t_v, 32), generator=gen).to(device=device, dtype=dtype)
+        v_mask = torch.ones((1, t_v, 1), device=device, dtype=dtype)
+        v_ctx = torch.randn((1, 8, 256), generator=gen).to(device=device, dtype=dtype)
+        a_lat = torch.randn((1, 16, 32), generator=gen).to(device=device, dtype=dtype)
+        a_mask = torch.ones((1, 16, 1), device=device, dtype=dtype)
+        a_grid = torch.arange(16, dtype=torch.float32).reshape(1, -1)
+        a_pos = torch.stack((a_grid, a_grid + 1.0), dim=-1).unsqueeze(0).to(device=device)
+        a_ctx = torch.randn((1, 8, 128), generator=gen).to(device=device, dtype=dtype)
+        return MultiModalDenoiserInput(
+            modalities={
+                "video": ModalityState(
+                    latent=v_lat, clean_latent=v_lat, denoise_mask=v_mask, positions=_grid_pos(f, h, w)
+                ),
+                "audio": ModalityState(latent=a_lat, clean_latent=a_lat, denoise_mask=a_mask, positions=a_pos),
+            },
+            timestep=torch.tensor([sigma], device=device, dtype=dtype),
+            conditioning={"video_context": v_ctx, "audio_context": a_ctx, "request_id": req_id},
+            step_index=step,
+            total_steps=total_steps,
+            branch=branch,
+        )
+
+    # 2. Two-stage FBCache under same request_id preserves Stage-1 telemetry + interleaved CFG dual-branch + resolution switches
+    #    including non-multiple-of-64 (T=130) with PISA + tile_3d (no spurious _sink segment).
+    m = (
+        _build_small_av_model(num_layers=6, video_heads=2, video_dim_head=128, audio_heads=2, audio_dim_head=64)
+        .to(device=device, dtype=dtype)
+        .eval()
+    )
+    m.configure_attention_backend(
+        "pisa",
+        self_only=True,
+        dense_blocks=(0, 1, -1),
+        dense_backend="torch",
+        backend_options={"density": 0.25, "block_size": 64, "min_tokens": 96},
+    )
+    m.__dict__["_worldfoundry_sol_schedule"] = {
+        "dense_steps": 0,
+        "dense_blocks": (0, 1, -1),
+        "tile_3d": (1, 4, 4),
+        "min_tokens": 96,
+    }
+    fb_cfg = LTXFirstBlockCacheConfig(
+        residual_diff_threshold=10.0,
+        dense_first=1,
+        dense_last=1,
+        max_consecutive_skips=2,
+        min_steps_to_enable=4,
+        max_tokens=4096,
+    )
+    den = LTXJointDenoiser(_as_av_wrapper(m), compute_dtype=dtype, enable_cuda_graph="piecewise", fbcache_config=fb_cfg)
+    reset_attention_provider_runtime()
+    with torch.inference_mode():
+        # Stage 1 (6 steps, T=64) -> Stage 2 (3 steps, T=130 non-mult-64 <= max_tokens) on same request_id
+        for s in range(6):
+            out = den(_av_inp(1, 8, 8, sigma=0.5 - 0.001 * s, step=s, total_steps=6, req_id="req-2stage"))
+            assert torch.isfinite(out.samples["video"]).all()
+        s1_hits = den.runtime_optimization_report("req-2stage")["feature_cache"]["hits"]
+        assert s1_hits > 0
+        for s in range(3):
+            out = den(_av_inp(2, 5, 13, sigma=0.8 - 0.2 * s, step=s, total_steps=3, req_id="req-2stage"))
+            assert torch.isfinite(out.samples["video"]).all()
+        rep_2s = den.runtime_optimization_report("req-2stage")
+        assert rep_2s["feature_cache"]["hits"] == s1_hits
+        assert rep_2s["feature_cache"]["events"] == 9
+        assert all("_sink" not in seg for seg in rep_2s["cuda_graph"]["segments"])
+
+        # Interleaved dual-branch CFG + sequential resolution switch (256 -> 64)
+        for s in range(5):
+            for req in ("cfg-A", "cfg-B"):
+                for br in ("positive", "negative"):
+                    out = den(_av_inp(4, 8, 8, sigma=0.5 - 0.001 * s, step=s, total_steps=5, req_id=req, branch=br))
+                    assert torch.isfinite(out.samples["video"]).all()
+        for s in range(5):
+            out = den(_av_inp(1, 8, 8, sigma=0.5 - 0.001 * s, step=s, total_steps=5, req_id="res-back"))
+            assert torch.isfinite(out.samples["video"]).all()
+
+    rep_cfg_a = den.runtime_optimization_report("cfg-A")["feature_cache"]
+    assert set(rep_cfg_a["branches"]) == {"positive", "negative"} and rep_cfg_a["hits"] > 0
+    assert den.runtime_optimization_report("res-back")["cuda_graph"]["capture_failed"] == 0
+    pisa_rep = attention_provider_runtime_report().get("pisa", {})
+    assert pisa_rep.get("successes", 0) > 0 and pisa_rep.get("fallbacks", 0) == 0 and pisa_rep.get("errors", 0) == 0
+    _release_denoiser(den)
+
+    # 3. FBCache + token_pruning + piecewise AND TeaCache + token_pruning + piecewise preserve cache_skips parity.
+    for use_fb in (True, False):
+        m_tp = (
+            _build_small_av_model(num_layers=6, video_heads=2, video_dim_head=128, audio_heads=2, audio_dim_head=64)
+            .to(device=device, dtype=dtype)
+            .eval()
+        )
+        m_tp.configure_token_pruning(
+            LTXTokenPruningConfig(
+                keep_ratio=0.75, start_block=2, end_block=-2, min_tokens=64, allow_distilled_pruning=True
+            )
+        )
+        if use_fb:
+            den_tp = LTXJointDenoiser(
+                _as_av_wrapper(m_tp),
+                compute_dtype=dtype,
+                enable_cuda_graph="piecewise",
+                fbcache_config=fb_cfg,
+            )
+        else:
+            den_tp = LTXJointDenoiser(
+                _as_av_wrapper(m_tp),
+                compute_dtype=dtype,
+                enable_cuda_graph="piecewise",
+                teacache_threshold=10.0,
+                teacache_max_tokens=4096,
+            )
+        req_name = "fb-tp" if use_fb else "tc-tp"
+        with torch.inference_mode():
+            for s in range(6):
+                out = den_tp(_av_inp(2, 8, 8, sigma=0.5 - 0.001 * s, step=s, total_steps=6, req_id=req_name))
+                assert torch.isfinite(out.samples["video"]).all()
+        rep_tp = den_tp.runtime_optimization_report(req_name)
+        assert rep_tp["feature_cache"]["hits"] > 0
+        assert rep_tp["cuda_graph"]["cache_skips"] == rep_tp["feature_cache"]["hits"]
+        assert rep_tp["cuda_graph"]["capture_failed"] == 0
+        _release_denoiser(den_tp)
+
+    # 4. LTXVideoDenoiser (video-only) end-to-end with PISA + FBCache + token_pruning + piecewise graph.
+    m_v = _build_small_video_model(num_layers=6, heads=2, dim_head=128, device=device, dtype=dtype).eval()
+    m_v.configure_attention_backend(
+        "pisa",
+        self_only=True,
+        dense_blocks=(0, 1, -1),
+        dense_backend="torch",
+        backend_options={"density": 0.25, "block_size": 64, "min_tokens": 128},
+    )
+    m_v.configure_token_pruning(
+        LTXTokenPruningConfig(
+            keep_ratio=0.75, start_block=2, end_block=-2, min_tokens=128, allow_distilled_pruning=True
+        )
+    )
+    fb_v = LTXFirstBlockCacheConfig(
+        residual_diff_threshold=10.0,
+        dense_first=1,
+        dense_last=1,
+        max_consecutive_skips=2,
+        min_steps_to_enable=4,
+        max_tokens=96,
+    )
+    den_v = LTXVideoDenoiser(
+        _as_video_wrapper(m_v), compute_dtype=dtype, enable_cuda_graph="piecewise", fbcache_config=fb_v
+    )
+    with torch.inference_mode():
+        for s in range(5):
+            v_lat = torch.randn((1, 64, 32), device=device, dtype=dtype)
+            inp_v1 = MultiModalDenoiserInput(
+                modalities={
+                    "video": ModalityState(
+                        latent=v_lat,
+                        clean_latent=v_lat,
+                        denoise_mask=torch.ones((1, 64, 1), device=device, dtype=dtype),
+                        positions=_grid_pos(1, 8, 8),
+                    )
+                },
+                timestep=torch.tensor([0.5 - 0.001 * s], device=device, dtype=dtype),
+                conditioning={
+                    "video_context": torch.randn((1, 8, 256), device=device, dtype=dtype),
+                    "request_id": "vonly",
+                },
+                step_index=s,
+                total_steps=5,
+            )
+            assert torch.isfinite(den_v(inp_v1).samples["video"]).all()
+        for s in range(3):
+            v_lat = torch.randn((1, 256, 32), device=device, dtype=dtype)
+            inp_v2 = MultiModalDenoiserInput(
+                modalities={
+                    "video": ModalityState(
+                        latent=v_lat,
+                        clean_latent=v_lat,
+                        denoise_mask=torch.ones((1, 256, 1), device=device, dtype=dtype),
+                        positions=_grid_pos(4, 8, 8),
+                    )
+                },
+                timestep=torch.tensor([0.8 - 0.2 * s], device=device, dtype=dtype),
+                conditioning={
+                    "video_context": torch.randn((1, 8, 256), device=device, dtype=dtype),
+                    "request_id": "vonly",
+                },
+                step_index=s,
+                total_steps=3,
+            )
+            assert torch.isfinite(den_v(inp_v2).samples["video"]).all()
+    rep_v = den_v.runtime_optimization_report("vonly")
+    assert rep_v["feature_cache"]["hits"] > 0
+    assert rep_v["token_pruning"]["pruned_calls"] == 3
+    assert rep_v["cuda_graph"]["capture_failed"] == 0
+    _release_denoiser(den_v)
