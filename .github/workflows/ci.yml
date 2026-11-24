@@ -170,12 +170,12 @@ jobs:
             av imageio imageio-ffmpeg easydict loguru matplotlib dm-tree "timm>=0.9,<2" "aiortc>=1.9,<2" "diffusers>=0.39,<0.40" \
             beautifulsoup4 decord "einops-exts==0.0.4" gdown hydra-core kornia lightning-utilities msgspec \
             open-clip-torch "pytorch-lightning==2.6.1" trimesh
-      - name: Run inference tensors and streaming contracts without model weights
-        run: make test-infer-tensors
       - name: Set up Node for realtime client contracts
         uses: actions/setup-node@v6
         with:
           node-version: "22"
+      - name: Run inference tensors and streaming contracts without model weights
+        run: make test-infer-tensors
       - name: Validate browser presentation correlation and WebRTC stats
         run: make test-realtime-client
       - name: Publish inference contract results

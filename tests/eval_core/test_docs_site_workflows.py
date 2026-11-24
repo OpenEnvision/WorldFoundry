@@ -101,6 +101,8 @@ def test_docs_workflows_use_the_checked_in_node_version() -> None:
 
 def test_codeowners_covers_docs_workflows_and_generated_data() -> None:
     text = (REPO_ROOT / ".github" / "CODEOWNERS").read_text(encoding="utf-8")
-
+    lines = {line.strip() for line in text.splitlines() if line.strip() and not line.lstrip().startswith("#")}
+    if "* @dhsaikhgdius" in lines:
+        return
     for pattern in (".github/workflows/", "docs/", "scripts/docs/", "worldfoundry/data/"):
-        assert f"{pattern} @dhsaikhgdius" in text
+        assert f"{pattern} @dhsaikhgdius" in lines
