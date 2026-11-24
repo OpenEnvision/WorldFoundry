@@ -32,6 +32,7 @@ Public surface
 
 from __future__ import annotations
 
+import gc
 import hashlib
 import json
 from collections import OrderedDict
@@ -344,6 +345,9 @@ class InferenceCUDAGraphRunner:
             self._pool = graph_pool_handle()
         graph = torch.cuda.CUDAGraph()
         inference_mode = torch.is_inference_mode_enabled()
+        gc_was_enabled = gc.isenabled()
+        if gc_was_enabled:
+            gc.disable()
         try:
             # CUDA Graph control updates process-owned generator tensors, which
             # compilation may have created in inference mode. Keep those updates
@@ -364,6 +368,9 @@ class InferenceCUDAGraphRunner:
             self.stats["capture_failed"] += 1
             self._disabled_keys.add(key)
             return None
+        finally:
+            if gc_was_enabled:
+                gc.enable()
 
         captured = _CapturedGraph(graph, static_inputs, static_outputs, input_indices)
         self._graphs[key] = captured
