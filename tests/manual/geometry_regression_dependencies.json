@@ -289,6 +289,11 @@
       "worldfoundry/runtime/inference_specs/pi4.py",
       "worldfoundry/base_models/three_dimensions/point_clouds/pi4_inference/**"
     ],
+    "h3-world": [
+      "worldfoundry/pipelines/h3_world/**",
+      "worldfoundry/runtime/inference_specs/h3_world.py",
+      "worldfoundry/base_models/diffusion_model/models/networks/minimax_h3/variants/h3_world.py"
+    ],
     "self-forcing": [
       "worldfoundry/pipelines/forcing/__init__.py",
       "worldfoundry/pipelines/forcing/pipeline_native_forcing.py",
@@ -951,6 +956,7 @@
     "hy-nomas-low-memory-short": ["hy-nomas"],
     "pika-h3-flex-t2va-short": ["pika-h3-flex"],
     "pi4-kart-tracking-short": ["pi4"],
+    "h3-world-forward-checkpoint-replay": ["h3-world"],
     "inspatio-world-1p5-image-short": [
       "inspatio-world-1p5"
     ],
@@ -1895,6 +1901,7 @@
     }
   ],
   "environment_variants": {
+    "worldfoundry/data/models/runtime/environments/world/h3-world.yaml": ["h3-world@h3-world"],
     "worldfoundry/data/models/runtime/environments/three_d/pi4.yaml": ["pi4@pi4"],
     "worldfoundry/data/models/runtime/environments/video/fastframes.yaml": [
       "fastframes@fastframes"
