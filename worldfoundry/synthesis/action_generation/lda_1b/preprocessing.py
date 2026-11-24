@@ -100,11 +100,32 @@ def pack_parts(value: Any, parts: Sequence[Mapping[str, Any]], *, label: str) ->
     return array
 
 
-def state_sincos(raw_state: np.ndarray, *, steps: int, expected_dim: int) -> np.ndarray:
+def state_sincos(
+    raw_state: np.ndarray,
+    *,
+    steps: int,
+    expected_dim: int,
+    part_widths: Sequence[int] | None = None,
+) -> np.ndarray:
     selected = raw_state[-steps:]
     while selected.shape[0] < steps:
         selected = np.concatenate((selected[:1], selected), axis=0)
-    encoded = np.concatenate((np.sin(selected), np.cos(selected)), axis=-1).astype(np.float32)
+    if part_widths is not None:
+        widths = [int(width) for width in part_widths]
+        if sum(widths) != selected.shape[-1]:
+            raise ValueError(
+                f"LDA-1B state part widths sum {sum(widths)} does not match raw state width {selected.shape[-1]}"
+            )
+        offset = 0
+        chunks: list[np.ndarray] = []
+        for width in widths:
+            part = selected[..., offset : offset + width]
+            chunks.append(np.sin(part))
+            chunks.append(np.cos(part))
+            offset += width
+        encoded = np.concatenate(chunks, axis=-1).astype(np.float32)
+    else:
+        encoded = np.concatenate((np.sin(selected), np.cos(selected)), axis=-1).astype(np.float32)
     if encoded.shape[-1] != expected_dim:
         raise ValueError(f"LDA-1B sin/cos state width {encoded.shape[-1]} does not match model width {expected_dim}")
     return encoded

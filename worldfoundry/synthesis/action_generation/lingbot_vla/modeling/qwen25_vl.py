@@ -66,17 +66,26 @@ from transformers.utils import (
     replace_return_docstrings,
 )
 
+_flash_attention_forward: Any = None
+apply_rotary_emb: Any = None
+flash_attn_varlen_func: Any = None
 if is_flash_attn_available():
-    from transformers.modeling_flash_attention_utils import _flash_attention_forward
-
+    try:
+        from transformers.modeling_flash_attention_utils import _flash_attention_forward
+    except ImportError:
+        _flash_attention_forward = None
     try:
         from transformers.modeling_flash_attention_utils import (
             apply_rotary_emb,
             flash_attn_varlen_func,
         )
     except ImportError:
-        from flash_attn import flash_attn_varlen_func
-        from flash_attn.layers.rotary import apply_rotary_emb
+        try:
+            from flash_attn import flash_attn_varlen_func
+            from flash_attn.layers.rotary import apply_rotary_emb
+        except ImportError:
+            apply_rotary_emb = None
+            flash_attn_varlen_func = None
 
 
 logger = logging.get_logger(__name__)

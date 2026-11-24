@@ -40,10 +40,10 @@ logger = logging.getLogger(__name__)
 
 
 # === Utility Functions for Monkey-Patching ===
-def unpack_tuple(fn: Callable[[Any], tuple[Any]]) -> Callable[[Any], Any]:
+def unpack_tuple(fn: Callable[[Any], Any]) -> Callable[[Any], Any]:
     def wrapper(*args: Any, **kwargs: Any) -> Any:
         result = fn(*args, **kwargs)
-        return result[0] if isinstance(result, tuple) else result
+        return result[0] if isinstance(result, (tuple, list)) else result
 
     return wrapper
 

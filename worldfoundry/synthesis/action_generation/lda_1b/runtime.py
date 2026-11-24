@@ -381,15 +381,17 @@ class LDA1BRuntime:
         frames = select_history(temporal_images(self._image_value(observation, image)), steps)
         image_size = tuple(int(item) for item in self.variant["image_size"])
         frames = [frame.resize(image_size) for frame in frames]
+        state_parts = self.variant["state_parts"]
         raw_state = pack_parts(
             self._state_value(observation),
-            self.variant["state_parts"],
+            state_parts,
             label="state",
         )
         encoded_state = state_sincos(
             raw_state,
             steps=steps,
             expected_dim=int(self.variant["model_state_dim"]),
+            part_widths=[int(part["dim"]) for part in state_parts] if state_parts else None,
         )
         qwen_inputs = self._move_batch(
             self._qwen_inputs(frames, instruction),
