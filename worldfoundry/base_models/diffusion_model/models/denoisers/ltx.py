@@ -7,6 +7,7 @@ safetensors metadata via :func:`~...loaders.metadata.safetensors_json_metadata`.
 
 from __future__ import annotations
 
+import weakref
 from collections.abc import Mapping
 from dataclasses import replace
 from functools import partial
@@ -203,6 +204,141 @@ def _parse_tile_3d(raw: object) -> tuple[int, int, int] | None:
     return (int(vals[0]), int(vals[1]), int(vals[2]))
 
 
+_TensorCacheEntry = tuple[
+    weakref.ref[torch.Tensor],
+    int,
+    int,
+    int,
+    tuple[int, ...],
+    tuple[int, ...],
+    torch.dtype,
+    bool,
+]
+
+
+def _evict_inference_cache_entries(cache: dict[int, _TensorCacheEntry]) -> None:
+    """Drop inference-mode entries (which lack ``_version``) at request/stage boundaries."""
+    stale = [key for key, entry in cache.items() if entry[0]() is None or entry[3] < 0]
+    for key in stale:
+        cache.pop(key, None)
+
+
+def _tensor_cache_lookup(
+    cache: dict[int, _TensorCacheEntry],
+    tensor: torch.Tensor,
+    *,
+    allow_inference_cache: bool = False,
+) -> bool | None:
+    is_inf = tensor.is_inference()
+    if is_inf and not allow_inference_cache:
+        return None
+    entry = cache.get(id(tensor))
+    if entry is None:
+        return None
+    ref, cached_ptr, cached_off, cached_ver, cached_shape, cached_stride, cached_dtype, cached_val = entry
+    ptr = int(tensor.data_ptr())
+    offset = int(tensor.storage_offset())
+    version = -1 if is_inf else int(tensor._version)
+    shape = tuple(int(dim) for dim in tensor.shape)
+    stride = tuple(int(step) for step in tensor.stride())
+    if (
+        ref() is tensor
+        and cached_ptr == ptr
+        and cached_off == offset
+        and cached_ver == version
+        and cached_shape == shape
+        and cached_stride == stride
+        and cached_dtype == tensor.dtype
+    ):
+        return cached_val
+    return None
+
+
+def _tensor_cache_store(
+    cache: dict[int, _TensorCacheEntry],
+    tensor: torch.Tensor,
+    value: bool,
+    *,
+    allow_inference_cache: bool = False,
+) -> bool:
+    is_inf = tensor.is_inference()
+    if is_inf and not allow_inference_cache:
+        return value
+    if len(cache) >= 32:
+        dead = [k for k, v in cache.items() if v[0]() is None]
+        for k in dead:
+            cache.pop(k, None)
+        if len(cache) >= 32:
+            cache.pop(next(iter(cache)))
+    ptr = int(tensor.data_ptr())
+    offset = int(tensor.storage_offset())
+    version = -1 if is_inf else int(tensor._version)
+    shape = tuple(int(dim) for dim in tensor.shape)
+    stride = tuple(int(step) for step in tensor.stride())
+    cache[id(tensor)] = (weakref.ref(tensor), ptr, offset, version, shape, stride, tensor.dtype, value)
+    return value
+
+
+def _is_uniform_denoise_mask(
+    cache: dict[int, _TensorCacheEntry],
+    mask: torch.Tensor,
+    *,
+    allow_inference_cache: bool = False,
+) -> bool:
+    """Return True when ``mask`` is constant along the token axis (``dim=1``), cached outside graph capture.
+
+    When uniform (all T2V steps and full-video refinement steps), collapsing ``(B, T, 1)``
+    to ``(B, 1, 1)`` avoids materializing ``T`` identical copies of AdaLN tables across all
+    48 transformer blocks (saving ~60 GB/step of HBM traffic in Stage 2) while preserving
+    exact per-token timesteps whenever ``denoise_mask`` varies across tokens (e.g. I2V).
+    """
+    if mask.ndim < 2 or mask.shape[1] <= 1 or mask.numel() == 0:
+        return False
+    if torch.is_grad_enabled() or (mask.device.type == "cuda" and torch.cuda.is_current_stream_capturing()):
+        return False
+    cached = _tensor_cache_lookup(cache, mask, allow_inference_cache=allow_inference_cache)
+    if cached is not None:
+        return cached
+    uniform = bool((mask == mask[:, :1]).all().item())
+    return _tensor_cache_store(cache, mask, uniform, allow_inference_cache=allow_inference_cache)
+
+
+def _is_trivial_context_mask(
+    cache: dict[int, _TensorCacheEntry],
+    mask: torch.Tensor | None,
+    *,
+    allow_inference_cache: bool = False,
+) -> bool:
+    """Return True when ``mask`` leaves every key token unmasked (all-1s int/bool or all-0s float bias).
+
+    Dropping a mathematically no-op mask unlocks unmasked Hopper FlashAttention-3 / Flash
+    SDPA on text cross-attention instead of falling back to SM80 memory-efficient attention.
+    """
+    if mask is None or mask.numel() == 0:
+        return False
+    if torch.is_grad_enabled() or (mask.device.type == "cuda" and torch.cuda.is_current_stream_capturing()):
+        return False
+    cached = _tensor_cache_lookup(cache, mask, allow_inference_cache=allow_inference_cache)
+    if cached is not None:
+        return cached
+    if mask.dtype == torch.bool:
+        trivial = bool(mask.all().item())
+    elif torch.is_floating_point(mask):
+        trivial = bool((mask == 0).all().item())
+    else:
+        trivial = bool((mask == 1).all().item())
+    return _tensor_cache_store(cache, mask, trivial, allow_inference_cache=allow_inference_cache)
+
+
+def _resolve_teacache_max_tokens(context: ComponentBuildContext) -> int | None:
+    raw = context.component_options.get("teacache_max_tokens", context.policy.options.get("teacache_max_tokens"))
+    if raw is None:
+        return None
+    if isinstance(raw, bool) or not isinstance(raw, int) or raw <= 0:
+        raise ValueError(f"teacache_max_tokens must be a positive integer, got {raw!r}")
+    return int(raw)
+
+
 def _sol_schedule_kwargs(
     velocity_model: LTXModel,
     positions: torch.Tensor,
@@ -283,7 +419,15 @@ def _apply_ltx_post_load_accelerations(
         resolved = resolve_attention_backend(requested, context.policy.device)
 
         dense_blocks: tuple[int, ...] = ()
+        dense_backend: str | None = None
         schedule_report: dict[str, Any] | None = None
+        if resolved in {"sol_attn", "cudnn_fp8"} and "dense_backend" in values:
+            raw_dense_backend = values.pop("dense_backend")
+            if raw_dense_backend is not None:
+                dense_backend = resolve_attention_backend(
+                    normalize_attention_backend(str(raw_dense_backend)),
+                    context.policy.device,
+                )
         if resolved == "sol_attn":
             if scope != "self":
                 raise ValueError("Sol-Attn is supported only for unmasked self-attention")
@@ -298,7 +442,13 @@ def _apply_ltx_post_load_accelerations(
             raw_min_tokens = values.get("min_tokens", 0)
             if isinstance(raw_min_tokens, bool) or not isinstance(raw_min_tokens, int) or raw_min_tokens < 0:
                 raise ValueError("Sol-Attn min_tokens must be a non-negative integer")
-            if raw_dense_steps > 0 or parsed_tile_3d is not None or dense_blocks or raw_min_tokens > 0:
+            if (
+                raw_dense_steps > 0
+                or parsed_tile_3d is not None
+                or dense_blocks
+                or raw_min_tokens > 0
+                or dense_backend is not None
+            ):
                 sol_schedule: dict[str, Any] = {
                     "dense_steps": int(raw_dense_steps),
                     "dense_blocks": dense_blocks,
@@ -316,13 +466,18 @@ def _apply_ltx_post_load_accelerations(
                     "tile_3d": parsed_tile_3d,
                     "min_tokens": int(raw_min_tokens),
                 }
-        elif resolved == "cudnn_fp8" and "dense_blocks" in values:
-            dense_blocks = _parse_dense_blocks(values.pop("dense_blocks"))
+                if dense_backend is not None:
+                    schedule_report["dense_backend"] = dense_backend
+        elif resolved == "cudnn_fp8" and ("dense_blocks" in values or dense_backend is not None):
+            if "dense_blocks" in values:
+                dense_blocks = _parse_dense_blocks(values.pop("dense_blocks"))
             num_blocks = len(model.velocity_model.transformer_blocks)
             norm_dense = sorted(
                 {idx + num_blocks if idx < 0 else idx for idx in dense_blocks if -num_blocks <= idx < num_blocks}
             )
             schedule_report = {"dense_blocks": norm_dense}
+            if dense_backend is not None:
+                schedule_report["dense_backend"] = dense_backend
 
         configured = model.velocity_model.configure_attention_backend(
             resolved,
@@ -330,6 +485,7 @@ def _apply_ltx_post_load_accelerations(
             cross_only=(scope == "cross"),
             backend_options=values or None,
             dense_blocks=dense_blocks,
+            dense_backend=dense_backend,
         )
         scope_entry: dict[str, Any] = {
             "requested": requested,
@@ -377,6 +533,7 @@ class LTXJointDenoiser(FeatureCacheDenoiserMixin, GraphWrappedDenoiserMixin):
         precision: str = "autocast",
         enable_cuda_graph: bool | str = False,
         teacache_threshold: float | None = None,
+        teacache_max_tokens: int | None = None,
     ) -> None:
         if precision not in {"autocast", "weights"}:
             raise ValueError(f"unsupported LTX denoiser precision: {precision!r}")
@@ -386,7 +543,10 @@ class LTXJointDenoiser(FeatureCacheDenoiserMixin, GraphWrappedDenoiserMixin):
         self.compute_dtype = compute_dtype
         self.precision = precision
         self._teacache_threshold = teacache_threshold
+        self._teacache_max_tokens = teacache_max_tokens
         self._video_grid_cache: dict[int, Any] = {}
+        self._uniform_mask_cache: dict[int, Any] = {}
+        self._trivial_context_mask_cache: dict[int, Any] = {}
         self._init_graph_runner(
             model,
             enabled=graph_mode,
@@ -402,6 +562,7 @@ class LTXJointDenoiser(FeatureCacheDenoiserMixin, GraphWrappedDenoiserMixin):
         context_mask: torch.Tensor | None,
         video_control: object | None = None,
         attention_cache=None,
+        uniform_denoise_mask: bool = False,
     ) -> Modality:
         batch = state.latent.shape[0]
         sigma = sigma.reshape(-1)
@@ -409,11 +570,12 @@ class LTXJointDenoiser(FeatureCacheDenoiserMixin, GraphWrappedDenoiserMixin):
             sigma = sigma.expand(batch)
         if sigma.numel() != batch:
             raise ValueError("LTX sigma must be scalar or contain one value per sample")
-        mask_sigma = sigma.view(batch, *([1] * (state.denoise_mask.ndim - 1)))
+        effective_mask = state.denoise_mask[:, :1] if uniform_denoise_mask else state.denoise_mask
+        mask_sigma = sigma.view(batch, *([1] * (effective_mask.ndim - 1)))
         return Modality(
             latent=state.latent,
             sigma=sigma,
-            timesteps=state.denoise_mask * mask_sigma,
+            timesteps=effective_mask * mask_sigma,
             positions=state.positions,
             context=context,
             context_mask=context_mask,
@@ -443,6 +605,14 @@ class LTXJointDenoiser(FeatureCacheDenoiserMixin, GraphWrappedDenoiserMixin):
             "audio_context_mask",
             token_count=audio_state.latent.shape[1],
         )
+        if int(model_input.step_index) == 0:
+            self._begin_graph_request_window()
+            _evict_inference_cache_entries(self._uniform_mask_cache)
+            _evict_inference_cache_entries(self._trivial_context_mask_cache)
+        if _is_trivial_context_mask(self._trivial_context_mask_cache, video_context_mask, allow_inference_cache=True):
+            video_context_mask = None
+        if _is_trivial_context_mask(self._trivial_context_mask_cache, audio_context_mask, allow_inference_cache=True):
+            audio_context_mask = None
 
         video = self._modality(
             video_state,
@@ -451,6 +621,11 @@ class LTXJointDenoiser(FeatureCacheDenoiserMixin, GraphWrappedDenoiserMixin):
             context_mask=video_context_mask,
             video_control=model_input.conditioning.get("video_control"),
             attention_cache=model_input.conditioning.get("attention_cache"),
+            uniform_denoise_mask=_is_uniform_denoise_mask(
+                self._uniform_mask_cache,
+                video_state.denoise_mask,
+                allow_inference_cache=True,
+            ),
         )
         audio = self._modality(
             audio_state,
@@ -458,13 +633,18 @@ class LTXJointDenoiser(FeatureCacheDenoiserMixin, GraphWrappedDenoiserMixin):
             context=audio_context,
             context_mask=audio_context_mask,
             attention_cache=model_input.conditioning.get("attention_cache"),
+            uniform_denoise_mask=_is_uniform_denoise_mask(
+                self._uniform_mask_cache,
+                audio_state.denoise_mask,
+                allow_inference_cache=True,
+            ),
         )
-        if int(model_input.step_index) == 0:
-            self._begin_graph_request_window()
         extra_kwargs: dict[str, Any] = {}
-        cache_kwargs = self.feature_cache_kwargs(_feature_cache_input_view(model_input))
-        if cache_kwargs:
-            extra_kwargs.update(cache_kwargs)
+        allow_cache = self._teacache_max_tokens is None or int(video_state.latent.shape[1]) <= self._teacache_max_tokens
+        if allow_cache:
+            cache_kwargs = self.feature_cache_kwargs(_feature_cache_input_view(model_input))
+            if cache_kwargs:
+                extra_kwargs.update(cache_kwargs)
         if getattr(self, "_piecewise_graph", None) is not None:
             extra_kwargs["_worldfoundry_piecewise_graph"] = self._piecewise_graph
         sol_kwargs = _sol_schedule_kwargs(
@@ -537,13 +717,17 @@ class LTXVideoDenoiser(FeatureCacheDenoiserMixin, GraphWrappedDenoiserMixin):
         compute_dtype: torch.dtype,
         enable_cuda_graph: bool | str = False,
         teacache_threshold: float | None = None,
+        teacache_max_tokens: int | None = None,
     ) -> None:
         graph_mode = _normalize_ltx_cuda_graph_mode(enable_cuda_graph)
         _validate_ltx_graph_attention_compatibility(model, graph_mode)
         self.model = model
         self.compute_dtype = compute_dtype
         self._teacache_threshold = teacache_threshold
+        self._teacache_max_tokens = teacache_max_tokens
         self._video_grid_cache: dict[int, Any] = {}
+        self._uniform_mask_cache: dict[int, Any] = {}
+        self._trivial_context_mask_cache: dict[int, Any] = {}
         self._init_graph_runner(
             model,
             enabled=graph_mode,
@@ -563,18 +747,29 @@ class LTXVideoDenoiser(FeatureCacheDenoiserMixin, GraphWrappedDenoiserMixin):
             "video_context_mask",
             token_count=state.latent.shape[1],
         )
+        if int(model_input.step_index) == 0:
+            self._begin_graph_request_window()
+            _evict_inference_cache_entries(self._uniform_mask_cache)
+            _evict_inference_cache_entries(self._trivial_context_mask_cache)
+        if _is_trivial_context_mask(self._trivial_context_mask_cache, context_mask, allow_inference_cache=True):
+            context_mask = None
         video = LTXJointDenoiser._modality(
             state,
             sigma=model_input.timestep,
             context=context,
             context_mask=context_mask,
+            uniform_denoise_mask=_is_uniform_denoise_mask(
+                self._uniform_mask_cache,
+                state.denoise_mask,
+                allow_inference_cache=True,
+            ),
         )
-        if int(model_input.step_index) == 0:
-            self._begin_graph_request_window()
         extra_kwargs: dict[str, Any] = {}
-        cache_kwargs = self.feature_cache_kwargs(_feature_cache_input_view(model_input))
-        if cache_kwargs:
-            extra_kwargs.update(cache_kwargs)
+        allow_cache = self._teacache_max_tokens is None or int(state.latent.shape[1]) <= self._teacache_max_tokens
+        if allow_cache:
+            cache_kwargs = self.feature_cache_kwargs(_feature_cache_input_view(model_input))
+            if cache_kwargs:
+                extra_kwargs.update(cache_kwargs)
         if getattr(self, "_piecewise_graph", None) is not None:
             extra_kwargs["_worldfoundry_piecewise_graph"] = self._piecewise_graph
         sol_kwargs = _sol_schedule_kwargs(
@@ -688,6 +883,7 @@ def build_ltx_joint_denoiser(
     validate_cuda_graph_options(context)
     cuda_graph_mode = resolve_cuda_graph_mode(context)
     teacache_threshold = resolve_teacache_threshold(context)
+    teacache_max_tokens = _resolve_teacache_max_tokens(context)
 
     fuse_qkv = bool(context.component_options.get("fuse_qkv", context.policy.options.get("fuse_qkv", False)))
     fuse_cross_kv = bool(
@@ -754,6 +950,7 @@ def build_ltx_joint_denoiser(
         compute_dtype=context.policy.dtype,
         enable_cuda_graph=cuda_graph_mode,
         teacache_threshold=teacache_threshold,
+        **({"teacache_max_tokens": teacache_max_tokens} if teacache_max_tokens is not None else {}),
         **({"precision": context.component_options["precision"]} if "precision" in context.component_options else {}),
     )
 
@@ -770,6 +967,7 @@ def build_ltx_video_denoiser(context: ComponentBuildContext) -> LTXVideoDenoiser
     validate_cuda_graph_options(context)
     cuda_graph_mode = resolve_cuda_graph_mode(context)
     teacache_threshold = resolve_teacache_threshold(context)
+    teacache_max_tokens = _resolve_teacache_max_tokens(context)
 
     fuse_qkv = bool(context.component_options.get("fuse_qkv", context.policy.options.get("fuse_qkv", False)))
     fuse_cross_kv = bool(
@@ -822,6 +1020,7 @@ def build_ltx_video_denoiser(context: ComponentBuildContext) -> LTXVideoDenoiser
         compute_dtype=context.policy.dtype,
         enable_cuda_graph=cuda_graph_mode,
         teacache_threshold=teacache_threshold,
+        teacache_max_tokens=teacache_max_tokens,
     )
 
 

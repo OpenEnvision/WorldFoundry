@@ -19,6 +19,9 @@ from .rope import LTXRopeType, apply_rotary_emb
 
 _CUDNN_FP8_ALLOWED_OPTIONS = frozenset({"descale_q", "descale_k", "descale_v", "scale_o", "dynamic_scale"})
 _CUDNN_FP8_SCALE_KEYS = ("descale_q", "descale_k", "descale_v", "scale_o")
+_APPROXIMATE_ATTENTION_BACKENDS = frozenset(
+    {"sol_attn", "cudnn_fp8", "sage_attention", "sage_attention_3", "scaled_int8_fp8"}
+)
 _FP8_E4M3_MAX = 448.0
 
 
@@ -83,8 +86,10 @@ class Attention(torch.nn.Module):
         self.attention_backend: str | None = None
         self._attention_backend_options: dict[str, Any] | None = None
         self._attention_min_tokens: int = 0
+        self._dense_attention_backend: str | None = None
         self._worldfoundry_force_dense: bool = False
         self._worldfoundry_sol_sink_tokens: int | None = None
+        self._use_fused_gated_out: bool = False
 
         self.is_self_attention = context_dim is None
         inner_dim = dim_head * heads
@@ -128,6 +133,7 @@ class Attention(torch.nn.Module):
             self.attention_backend = None
             self._attention_backend_options = None
             self._attention_min_tokens = 0
+            self._dense_attention_backend = None
             return
 
         from worldfoundry.core.attention.backends.probe import normalize_attention_backend
@@ -135,10 +141,20 @@ class Attention(torch.nn.Module):
         normalized = normalize_attention_backend(str(backend))
         options: dict[str, Any] = dict(backend_options) if backend_options else {}
         min_tokens = 0
+        dense_backend_specified = "dense_backend" in options
+        dense_backend: str | None = None
         if "min_tokens" in options:
             if normalized not in {"sol_attn", "cudnn_fp8"}:
                 raise ValueError(f"min_tokens is only supported for sol_attn and cudnn_fp8, got {normalized!r}")
             min_tokens = _validate_min_tokens(options.pop("min_tokens"))
+        if dense_backend_specified:
+            if normalized not in {"sol_attn", "cudnn_fp8"}:
+                raise ValueError(f"dense_backend is only supported for sol_attn and cudnn_fp8, got {normalized!r}")
+            raw_dense = options.pop("dense_backend")
+            if raw_dense is not None:
+                dense_backend = normalize_attention_backend(str(raw_dense))
+                if dense_backend in _APPROXIMATE_ATTENTION_BACKENDS:
+                    raise ValueError(f"dense_backend must be an exact attention backend, got {dense_backend!r}")
         if normalized == "sol_attn":
             if not self.is_self_attention:
                 raise ValueError("Sol-Attn is supported only on LTX self-attention modules")
@@ -153,6 +169,21 @@ class Attention(torch.nn.Module):
             options = _validate_cudnn_fp8_options(options)
         elif options and normalized != "scaled_int8_fp8":
             raise ValueError(f"backend_options are not supported for attention backend {normalized!r}")
+
+        if normalized in {"sol_attn", "cudnn_fp8"}:
+            if dense_backend_specified:
+                self._dense_attention_backend = dense_backend
+            elif self.attention_backend in {"sol_attn", "cudnn_fp8"}:
+                # Re-configuring approximate backend options keeps any previously bound exact dense fallback.
+                pass
+            elif self.attention_backend not in {None, "torch", "auto", *_APPROXIMATE_ATTENTION_BACKENDS}:
+                # Preserve an already-bound exact dense backend (e.g. flash_attention_3)
+                # for short sequences (Stage 1) and dense warmup steps.
+                self._dense_attention_backend = self.attention_backend
+            else:
+                self._dense_attention_backend = None
+        else:
+            self._dense_attention_backend = None
 
         self.attention_backend = normalized
         self._attention_backend_options = options or None
@@ -383,12 +414,16 @@ class Attention(torch.nn.Module):
     ) -> torch.Tensor:
         """Dispatch attention to the configured backend or default ``TransformerAttentionOps``."""
         backend = self.attention_backend
-        if (
-            backend is None
-            or backend in {"torch", "auto"}
-            or self._worldfoundry_force_dense
+        use_dense_fallback = backend in _APPROXIMATE_ATTENTION_BACKENDS and (
+            self._worldfoundry_force_dense
             or (self._attention_min_tokens > 0 and q.shape[1] < self._attention_min_tokens)
-        ):
+        )
+        backend_options = self._attention_backend_options
+        if use_dense_fallback:
+            backend = self._dense_attention_backend
+            backend_options = None
+
+        if backend is None or backend in {"torch", "auto"}:
             if mask is None:
                 if (q.device.type != "cuda" or v.dtype not in {torch.float16, torch.bfloat16}) and getattr(
                     self.attention_function, "label", ""
@@ -425,7 +460,6 @@ class Attention(torch.nn.Module):
         q4 = q.view(batch, q_tokens, self.heads, self.dim_head)
         k4 = k.view(batch, k_tokens, self.heads, self.dim_head)
         v4 = v.view(batch, k_tokens, self.heads, self.dim_head)
-        backend_options = self._attention_backend_options
         if backend == "sol_attn" and self._worldfoundry_sol_sink_tokens is not None:
             backend_options = {**(backend_options or {}), "sink_tokens": int(self._worldfoundry_sol_sink_tokens)}
         out = attention_forward(
@@ -440,6 +474,54 @@ class Attention(torch.nn.Module):
             backend_options=backend_options,
         )
         return out.reshape(batch, q_tokens, width)
+
+    def _apply_gated_out(self, x: torch.Tensor, out: torch.Tensor) -> torch.Tensor:
+        """Fuse per-head sigmoid gating with output projection (and rowwise FP8 quant when eligible)."""
+        assert self.to_gate_logits is not None
+        from worldfoundry.core.nn import PytorchGatedAttention
+
+        if not self._use_fused_gated_out or type(self.gated_attention_function) is not PytorchGatedAttention:
+            return self.to_out(self.gated_attention_function(x, out, self))
+
+        from .fused_ops import fused_ltx_gated_attention, fused_ltx_gated_attention_fp8
+
+        gate_logits = self.to_gate_logits(x)
+        if isinstance(self.to_out, torch.nn.Sequential) and len(self.to_out) == 2:
+            out_proj = self.to_out[0]
+            tail = self.to_out[1]
+            if isinstance(tail, torch.nn.Identity):
+                from worldfoundry.core.acceleration.quantization.linear import Float8Linear, _fp8_linear_eligible
+
+                if (
+                    isinstance(out_proj, Float8Linear)
+                    and out_proj.low_precision_enabled
+                    and out_proj.scaling == "rowwise"
+                    and out_proj.input_scale is None
+                ):
+                    proj_dtype = out.dtype
+                    if proj_dtype == torch.float32 and out.device.type == "cuda" and torch.is_autocast_enabled("cuda"):
+                        ac_dtype = torch.get_autocast_dtype("cuda")
+                        if ac_dtype in (torch.float16, torch.bfloat16):
+                            out = out.to(dtype=ac_dtype)
+                            proj_dtype = ac_dtype
+                    if _fp8_linear_eligible(
+                        out,
+                        out_proj.out_features,
+                        out_proj._hardware_eligible,
+                        min_gemm_work=0.0 if out_proj.weight is None else None,
+                    ):
+                        quant = fused_ltx_gated_attention_fp8(
+                            out,
+                            gate_logits,
+                            heads=self.heads,
+                            dim_head=self.dim_head,
+                            fp8_dtype=out_proj.fp8_dtype,
+                        )
+                        if quant is not None:
+                            codes, scales = quant
+                            return out_proj._forward_quantized(codes, scales, out.shape, proj_dtype)
+        gated = fused_ltx_gated_attention(out, gate_logits, heads=self.heads, dim_head=self.dim_head)
+        return self.to_out(gated)
 
     def forward(
         self,
@@ -517,11 +599,8 @@ class Attention(torch.nn.Module):
             if perturbation_mask is not None:
                 out = out * perturbation_mask + current_value * (1 - perturbation_mask)
 
-        # Apply per-head gating if enabled
-        if self.to_gate_logits is not None:
-            out = self.gated_attention_function(x, out, self)
-
-        out = self.to_out(out)
+        # Apply per-head gating and output projection (fused when enabled)
+        out = self._apply_gated_out(x, out) if self.to_gate_logits is not None else self.to_out(out)
         return out if camera_out is None else out + camera_out
 
     def _camera_attention(self, q, k, v, x, control, mask, perturbation_mask, cache):

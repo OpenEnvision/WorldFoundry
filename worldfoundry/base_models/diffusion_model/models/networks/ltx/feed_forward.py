@@ -45,23 +45,20 @@ class FeedForward(torch.nn.Module):
         self._fuse_fp8_ffn = False
         return False
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Map ``[..., dim]`` tokens to ``[..., dim_out]``."""
-        if not self._fuse_fp8_ffn:
-            return self.net(x)
-
+    def _forward_from_hidden(self, hidden: torch.Tensor) -> torch.Tensor:
+        """Apply GELU-tanh (+ fused rowwise FP8 quant when enabled) and down-projection."""
         from worldfoundry.core.acceleration.quantization.linear import (
             Float8Linear,
             _fp8_linear_eligible,
             _is_compiling,
         )
 
-        up = cast(GELUApprox, self.net[0])
         down = cast(Float8Linear, self.net[2])
-        hidden = up.proj(x)
         eligible = (
-            down.low_precision_enabled
+            hidden.numel() > 0
+            and down.low_precision_enabled
             and down.scaling == "rowwise"
+            and down.input_scale is None
             and _fp8_linear_eligible(
                 hidden,
                 down.out_features,
@@ -74,18 +71,86 @@ class FeedForward(torch.nn.Module):
                 self.fallback_fp8_calls += 1
             return down(F.gelu(hidden, approximate="tanh"))
         try:
-            from worldfoundry.core.acceleration.quantization.triton_fp8 import quantize_rowwise_fp8_triton
+            from .fused_ops import fused_ltx_gelu_tanh_rowwise_fp8
         except ImportError:
             if not _is_compiling():
                 self.fallback_fp8_calls += 1
             return down(F.gelu(hidden, approximate="tanh"))
 
-        codes, scales = quantize_rowwise_fp8_triton(
+        codes, scales = fused_ltx_gelu_tanh_rowwise_fp8(
             hidden.reshape(-1, down.in_features),
             down.fp8_dtype,
-            activation="gelu_tanh",
         )
         result = cast(Any, down)._forward_quantized(codes, scales, hidden.shape, hidden.dtype)
         if not _is_compiling():
             self.fused_fp8_calls += 1
         return result
+
+    def forward_from_adaln(
+        self,
+        x: torch.Tensor,
+        eps: float,
+        scale: torch.Tensor,
+        shift: torch.Tensor,
+    ) -> torch.Tensor:
+        """Fuse AdaLN-zero ``rms_norm(x)*(1+scale)+shift`` with up-proj FP8 quantization when eligible."""
+        up = self.net[0]
+        if isinstance(up, GELUApprox) and isinstance(self.net[1], torch.nn.Identity):
+            from worldfoundry.core.acceleration.quantization.linear import Float8Linear, _fp8_linear_eligible
+
+            up_proj = up.proj
+            if (
+                isinstance(up_proj, Float8Linear)
+                and up_proj.low_precision_enabled
+                and up_proj.scaling == "rowwise"
+                and up_proj.input_scale is None
+            ):
+                src = x
+                scale_in = scale
+                shift_in = shift
+                if src.device.type == "cuda" and torch.is_autocast_enabled("cuda"):
+                    ac_dtype = torch.get_autocast_dtype("cuda")
+                    if ac_dtype in (torch.float16, torch.bfloat16):
+                        if src.dtype == torch.float32:
+                            src = src.to(dtype=ac_dtype)
+                        if scale_in.dtype == torch.float32:
+                            scale_in = scale_in.to(dtype=ac_dtype)
+                        if shift_in.dtype == torch.float32:
+                            shift_in = shift_in.to(dtype=ac_dtype)
+                if (
+                    scale_in.dtype == src.dtype
+                    and shift_in.dtype == src.dtype
+                    and _fp8_linear_eligible(
+                        src,
+                        up_proj.out_features,
+                        up_proj._hardware_eligible,
+                        min_gemm_work=0.0 if up_proj.weight is None else None,
+                    )
+                ):
+                    from .fused_ops import fused_ltx_rmsnorm_scale_shift_fp8
+
+                    quant = fused_ltx_rmsnorm_scale_shift_fp8(
+                        src,
+                        scale_in,
+                        shift_in,
+                        eps=eps,
+                        fp8_dtype=up_proj.fp8_dtype,
+                    )
+                    if quant is not None:
+                        codes, scales = quant
+                        hidden = cast(Any, up_proj)._forward_quantized(codes, scales, src.shape, src.dtype)
+                        if self._fuse_fp8_ffn:
+                            return self._forward_from_hidden(hidden)
+                        return self.net[2](F.gelu(hidden, approximate="tanh"))
+        from worldfoundry.core.kernels import rms_norm_scale_shift
+
+        return self.forward(rms_norm_scale_shift(x, scale, shift, eps=eps))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Map ``[..., dim]`` tokens to ``[..., dim_out]``."""
+        if not self._fuse_fp8_ffn:
+            return self.net(x)
+
+        up = cast(GELUApprox, self.net[0])
+        hidden = up.proj(x)
+        return self._forward_from_hidden(hidden)

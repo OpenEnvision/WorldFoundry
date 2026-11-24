@@ -341,12 +341,423 @@ def _load_triton_kernels() -> dict[str, Any]:
         tl.store(out_ptr + b * out_stride_b + t * out_stride_t + cols, out_val, mask=mask)
         tl.store(norm_ptr + b * norm_stride_b + t * norm_stride_t + cols, norm_val, mask=mask)
 
+    @triton.jit
+    def _post_sa_residual_rmsnorm_adaln_kernel(
+        res_ptr,
+        val_ptr,
+        gate_ptr,
+        scale_ptr,
+        shift_ptr,
+        out_ptr,
+        mod_ptr,
+        res_stride_b,
+        res_stride_t,
+        val_stride_b,
+        val_stride_t,
+        gate_stride_b,
+        gate_stride_t,
+        scale_stride_b,
+        scale_stride_t,
+        shift_stride_b,
+        shift_stride_t,
+        out_stride_b,
+        out_stride_t,
+        mod_stride_b,
+        mod_stride_t,
+        seq_len,
+        eps,
+        features: tl.constexpr,
+        round_bf16: tl.constexpr,
+        BLOCK_SIZE: tl.constexpr,
+    ):
+        """Fuse ``out = res + val * gate`` and ``mod = rms_norm(out, eps) * (1 + scale) + shift``."""
+        row = tl.program_id(0).to(tl.int64)
+        b = row // seq_len
+        t = row % seq_len
+        cols = tl.arange(0, BLOCK_SIZE)
+        mask = cols < features
+
+        res_in = tl.load(res_ptr + b * res_stride_b + t * res_stride_t + cols, mask=mask, other=0.0)
+        val_in = tl.load(val_ptr + b * val_stride_b + t * val_stride_t + cols, mask=mask, other=0.0)
+        gate_in = tl.load(gate_ptr + b * gate_stride_b + t * gate_stride_t + cols, mask=mask, other=0.0)
+
+        prod = val_in.to(tl.float32) * gate_in.to(tl.float32)
+        if round_bf16:
+            prod = _round_bf16(prod)
+        out_val = (res_in.to(tl.float32) + prod).to(res_in.dtype)
+        out_f = out_val.to(tl.float32)
+        variance = tl.sum(out_f * out_f, axis=0) / features
+        norm_f = (out_f * tl.rsqrt(variance + eps)).to(res_in.dtype).to(tl.float32)
+
+        scale_f = tl.load(scale_ptr + b * scale_stride_b + t * scale_stride_t + cols, mask=mask, other=0.0).to(
+            tl.float32
+        )
+        shift_f = tl.load(shift_ptr + b * shift_stride_b + t * shift_stride_t + cols, mask=mask, other=0.0).to(
+            tl.float32
+        )
+        mod_val = (norm_f * (1.0 + scale_f) + shift_f).to(res_in.dtype)
+
+        tl.store(out_ptr + b * out_stride_b + t * out_stride_t + cols, out_val, mask=mask)
+        tl.store(mod_ptr + b * mod_stride_b + t * mod_stride_t + cols, mod_val, mask=mask)
+
+    @triton.jit
+    def _gated_attn_kernel(
+        x_ptr,
+        gate_ptr,
+        out_ptr,
+        x_stride_b,
+        x_stride_t,
+        g_stride_b,
+        g_stride_t,
+        out_stride_b,
+        out_stride_t,
+        seq_len,
+        inner_dim: tl.constexpr,
+        dim_head: tl.constexpr,
+        BLOCK_SIZE: tl.constexpr,
+    ):
+        """Fuse per-head ``x * (2 * sigmoid(gate_logits))`` in one pass."""
+        row = tl.program_id(0).to(tl.int64)
+        b = row // seq_len
+        t = row % seq_len
+        cols = tl.arange(0, BLOCK_SIZE)
+        mask = cols < inner_dim
+        head = cols // dim_head
+
+        x_in = tl.load(x_ptr + b * x_stride_b + t * x_stride_t + cols, mask=mask, other=0.0)
+        g_in = tl.load(gate_ptr + b * g_stride_b + t * g_stride_t + head, mask=mask, other=0.0)
+        g_val = (2.0 * tl.sigmoid(g_in.to(tl.float32))).to(g_in.dtype).to(tl.float32)
+        y = (x_in.to(tl.float32) * g_val).to(x_in.dtype)
+        tl.store(out_ptr + b * out_stride_b + t * out_stride_t + cols, y, mask=mask)
+
+    @triton.jit
+    def _gated_attn_rowwise_fp8_kernel(
+        x_ptr,
+        gate_ptr,
+        codes_ptr,
+        scale_ptr,
+        x_stride_b,
+        x_stride_t,
+        g_stride_b,
+        g_stride_t,
+        codes_stride_r,
+        seq_len,
+        fp8_max,
+        tiny,
+        inner_dim: tl.constexpr,
+        dim_head: tl.constexpr,
+        BLOCK_SIZE: tl.constexpr,
+        FP8_E5M2: tl.constexpr,
+    ):
+        """Fuse per-head ``2 * sigmoid(gate) * x`` and rowwise FP8 quantization in one pass."""
+        row = tl.program_id(0).to(tl.int64)
+        b = row // seq_len
+        t = row % seq_len
+        cols = tl.arange(0, BLOCK_SIZE)
+        mask = cols < inner_dim
+        head = cols // dim_head
+
+        x_in = tl.load(x_ptr + b * x_stride_b + t * x_stride_t + cols, mask=mask, other=0.0)
+        g_in = tl.load(gate_ptr + b * g_stride_b + t * g_stride_t + head, mask=mask, other=0.0)
+        g_val = (2.0 * tl.sigmoid(g_in.to(tl.float32))).to(g_in.dtype).to(tl.float32)
+        y = (x_in.to(tl.float32) * g_val).to(x_in.dtype).to(tl.float32)
+        y = tl.where(mask, y, 0.0)
+
+        amax = tl.max(tl.abs(y), axis=0)
+        fp8_max_f = tl.cast(fp8_max, tl.float32)
+        tiny_f = tl.cast(tiny, tl.float32)
+        scale = tl.maximum(amax / fp8_max_f, tiny_f)
+        q = tl.minimum(tl.maximum(y / scale, -fp8_max_f), fp8_max_f)
+        out_dtype = tl.float8e5 if FP8_E5M2 else tl.float8e4nv
+        tl.store(codes_ptr + row * codes_stride_r + cols, q.to(out_dtype), mask=mask)
+        tl.store(scale_ptr + row, scale)
+
+    @triton.jit
+    def _rmsnorm_scale_shift_fp8_kernel(
+        x_ptr,
+        scale_ptr,
+        shift_ptr,
+        codes_ptr,
+        row_scale_ptr,
+        x_stride_b,
+        x_stride_t,
+        s_stride_b,
+        s_stride_t,
+        sh_stride_b,
+        sh_stride_t,
+        codes_stride_r,
+        seq_len,
+        eps,
+        fp8_max,
+        tiny,
+        features: tl.constexpr,
+        BLOCK_SIZE: tl.constexpr,
+        FP8_E5M2: tl.constexpr,
+    ):
+        """Fuse unweighted RMSNorm + AdaLN scale/shift + rowwise FP8 quantization."""
+        row = tl.program_id(0).to(tl.int64)
+        b = row // seq_len
+        t = row % seq_len
+        cols = tl.arange(0, BLOCK_SIZE)
+        mask = cols < features
+
+        x_in = tl.load(x_ptr + b * x_stride_b + t * x_stride_t + cols, mask=mask, other=0.0)
+        x_f = x_in.to(tl.float32)
+        variance = tl.sum(x_f * x_f, axis=0) / features
+        norm_f = (x_f * tl.rsqrt(variance + eps)).to(x_in.dtype).to(tl.float32)
+
+        s_f = tl.load(scale_ptr + b * s_stride_b + t * s_stride_t + cols, mask=mask, other=0.0).to(tl.float32)
+        sh_f = tl.load(shift_ptr + b * sh_stride_b + t * sh_stride_t + cols, mask=mask, other=0.0).to(tl.float32)
+        y = (norm_f * (1.0 + s_f) + sh_f).to(x_in.dtype).to(tl.float32)
+        y = tl.where(mask, y, 0.0)
+
+        amax = tl.max(tl.abs(y), axis=0)
+        fp8_max_f = tl.cast(fp8_max, tl.float32)
+        tiny_f = tl.cast(tiny, tl.float32)
+        row_scale = tl.maximum(amax / fp8_max_f, tiny_f)
+        q = tl.minimum(tl.maximum(y / row_scale, -fp8_max_f), fp8_max_f)
+        out_dtype = tl.float8e5 if FP8_E5M2 else tl.float8e4nv
+        tl.store(codes_ptr + row * codes_stride_r + cols, q.to(out_dtype), mask=mask)
+        tl.store(row_scale_ptr + row, row_scale)
+
+    @triton.jit
+    def _dual_rmsnorm_scale_shift_kernel(
+        x_ptr,
+        s1_ptr,
+        sh1_ptr,
+        s2_ptr,
+        sh2_ptr,
+        o1_ptr,
+        o2_ptr,
+        x_stride_b,
+        x_stride_t,
+        s1_stride_b,
+        s1_stride_t,
+        sh1_stride_b,
+        sh1_stride_t,
+        s2_stride_b,
+        s2_stride_t,
+        sh2_stride_b,
+        sh2_stride_t,
+        o1_stride_b,
+        o1_stride_t,
+        o2_stride_b,
+        o2_stride_t,
+        seq_len,
+        eps,
+        features: tl.constexpr,
+        BLOCK_SIZE: tl.constexpr,
+    ):
+        """Read ``x`` and compute RMSNorm once to produce two AdaLN-modulated outputs."""
+        row = tl.program_id(0).to(tl.int64)
+        b = row // seq_len
+        t = row % seq_len
+        cols = tl.arange(0, BLOCK_SIZE)
+        mask = cols < features
+
+        x_in = tl.load(x_ptr + b * x_stride_b + t * x_stride_t + cols, mask=mask, other=0.0)
+        x_f = x_in.to(tl.float32)
+        variance = tl.sum(x_f * x_f, axis=0) / features
+        norm_f = (x_f * tl.rsqrt(variance + eps)).to(x_in.dtype).to(tl.float32)
+
+        s1 = tl.load(s1_ptr + b * s1_stride_b + t * s1_stride_t + cols, mask=mask, other=0.0).to(tl.float32)
+        sh1 = tl.load(sh1_ptr + b * sh1_stride_b + t * sh1_stride_t + cols, mask=mask, other=0.0).to(tl.float32)
+        s2 = tl.load(s2_ptr + b * s2_stride_b + t * s2_stride_t + cols, mask=mask, other=0.0).to(tl.float32)
+        sh2 = tl.load(sh2_ptr + b * sh2_stride_b + t * sh2_stride_t + cols, mask=mask, other=0.0).to(tl.float32)
+
+        y1 = (norm_f * (1.0 + s1) + sh1).to(x_in.dtype)
+        y2 = (norm_f * (1.0 + s2) + sh2).to(x_in.dtype)
+        tl.store(o1_ptr + b * o1_stride_b + t * o1_stride_t + cols, y1, mask=mask)
+        tl.store(o2_ptr + b * o2_stride_b + t * o2_stride_t + cols, y2, mask=mask)
+
+    @triton.jit
+    def _scale_shift_kernel(
+        x_ptr,
+        s_ptr,
+        sh_ptr,
+        out_ptr,
+        x_stride_b,
+        x_stride_t,
+        s_stride_b,
+        s_stride_t,
+        sh_stride_b,
+        sh_stride_t,
+        out_stride_b,
+        out_stride_t,
+        seq_len,
+        features: tl.constexpr,
+        BLOCK_SIZE: tl.constexpr,
+    ):
+        """Fuse ``x * (1 + scale) + shift`` in one pass."""
+        row = tl.program_id(0).to(tl.int64)
+        b = row // seq_len
+        t = row % seq_len
+        cols = tl.arange(0, BLOCK_SIZE)
+        mask = cols < features
+
+        x_in = tl.load(x_ptr + b * x_stride_b + t * x_stride_t + cols, mask=mask, other=0.0)
+        s_f = tl.load(s_ptr + b * s_stride_b + t * s_stride_t + cols, mask=mask, other=0.0).to(tl.float32)
+        sh_f = tl.load(sh_ptr + b * sh_stride_b + t * sh_stride_t + cols, mask=mask, other=0.0).to(tl.float32)
+        y = (x_in.to(tl.float32) * (1.0 + s_f) + sh_f).to(x_in.dtype)
+        tl.store(out_ptr + b * out_stride_b + t * out_stride_t + cols, y, mask=mask)
+
+    @triton.jit
+    def _qk_rmsnorm_paired_kernel(
+        q_ptr,
+        k_ptr,
+        qw_ptr,
+        kw_ptr,
+        q_out_ptr,
+        k_out_ptr,
+        q_stride_b,
+        q_stride_t,
+        k_stride_b,
+        k_stride_t,
+        qo_stride_b,
+        qo_stride_t,
+        ko_stride_b,
+        ko_stride_t,
+        q_rows,
+        q_seq,
+        k_seq,
+        eps,
+        features: tl.constexpr,
+        BLOCK_SIZE: tl.constexpr,
+    ):
+        """Fuse Q and K full-hidden RMSNorm (without RoPE) into a single launch."""
+        pid = tl.program_id(0).to(tl.int64)
+        is_k = pid >= q_rows
+        cols = tl.arange(0, BLOCK_SIZE)
+        mask = cols < features
+
+        if is_k:
+            row = pid - q_rows
+            b = row // k_seq
+            t = row % k_seq
+            x_in = tl.load(k_ptr + b * k_stride_b + t * k_stride_t + cols, mask=mask, other=0.0)
+            w_f = tl.load(kw_ptr + cols, mask=mask, other=0.0).to(tl.float32)
+        else:
+            row = pid
+            b = row // q_seq
+            t = row % q_seq
+            x_in = tl.load(q_ptr + b * q_stride_b + t * q_stride_t + cols, mask=mask, other=0.0)
+            w_f = tl.load(qw_ptr + cols, mask=mask, other=0.0).to(tl.float32)
+
+        x_f = x_in.to(tl.float32)
+        rstd = tl.rsqrt(tl.sum(x_f * x_f, axis=0) / features + eps)
+        y = (x_f * rstd * w_f).to(x_in.dtype)
+
+        if is_k:
+            tl.store(k_out_ptr + b * ko_stride_b + t * ko_stride_t + cols, y, mask=mask)
+        else:
+            tl.store(q_out_ptr + b * qo_stride_b + t * qo_stride_t + cols, y, mask=mask)
+
+    @triton.jit
+    def _gelu_tanh_fp8_1pass_kernel(
+        in_ptr,
+        out_ptr,
+        scale_ptr,
+        n_cols,
+        fp8_max,
+        tiny,
+        in_stride,
+        out_stride,
+        BLOCK_SIZE: tl.constexpr,
+        FP8_E5M2: tl.constexpr,
+    ):
+        """Single-pass GELU-tanh + rowwise FP8 quantization for ``n_cols <= 4096``."""
+        row = tl.program_id(0).to(tl.int64)
+        cols = tl.arange(0, BLOCK_SIZE)
+        mask = cols < n_cols
+        x = tl.load(in_ptr + row * in_stride + cols, mask=mask, other=0.0).to(tl.float32)
+        inner = 0.7978845608028654 * (x + 0.044715 * x * x * x)
+        g = (x * tl.sigmoid(2.0 * inner)).to(in_ptr.dtype.element_ty).to(tl.float32)
+        g = tl.where(mask, g, 0.0)
+        amax = tl.max(tl.abs(g), axis=0)
+        fp8_max_f = tl.cast(fp8_max, tl.float32)
+        tiny_f = tl.cast(tiny, tl.float32)
+        scale = tl.maximum(amax / fp8_max_f, tiny_f)
+        q = tl.minimum(tl.maximum(g / scale, -fp8_max_f), fp8_max_f)
+        out_dtype = tl.float8e5 if FP8_E5M2 else tl.float8e4nv
+        tl.store(out_ptr + row * out_stride + cols, q.to(out_dtype), mask=mask)
+        tl.store(scale_ptr + row, scale)
+
+    @triton.jit
+    def _gelu_tanh_fp8_monotone_kernel(
+        in_ptr,
+        out_ptr,
+        scale_ptr,
+        n_cols,
+        fp8_max,
+        tiny,
+        in_stride,
+        out_stride,
+        BLOCK_N: tl.constexpr,
+        FP8_E5M2: tl.constexpr,
+    ):
+        """Tiled GELU-tanh + rowwise FP8 avoiding redundant tanh in pass 1 via monotonicity.
+
+        ``GELU_tanh(x)`` is strictly increasing on ``[0, +inf)`` and bounded in magnitude
+        by ``0.17005`` on ``(-inf, 0]``. Whenever a row's finite maximum ``max_x >= 0.4``
+        (``GELU_tanh(0.4) > 0.262``), ``max_i |GELU_tanh(x_i)| == GELU_tanh(max_x)``
+        exactly, cutting transcendental math in half for wide FFN layers.
+        """
+        row = tl.program_id(0).to(tl.int64)
+        row_in = in_ptr + row * in_stride
+        row_out = out_ptr + row * out_stride
+        max_x = tl.full((), -1e30, tl.float32)
+        for start in tl.range(0, n_cols, BLOCK_N):
+            cols = start + tl.arange(0, BLOCK_N)
+            mask = cols < n_cols
+            x = tl.load(row_in + cols, mask=mask, other=-1e30).to(tl.float32)
+            max_x = tl.maximum(max_x, tl.max(x, axis=0))
+
+        if (max_x >= 0.4) & (max_x < 1e30):
+            inner_m = 0.7978845608028654 * (max_x + 0.044715 * max_x * max_x * max_x)
+            g_m = (max_x * tl.sigmoid(2.0 * inner_m)).to(in_ptr.dtype.element_ty).to(tl.float32)
+            amax = tl.abs(g_m)
+        else:
+            amax = tl.full((), 0.0, tl.float32)
+            for start in tl.range(0, n_cols, BLOCK_N):
+                cols = start + tl.arange(0, BLOCK_N)
+                mask = cols < n_cols
+                x = tl.load(row_in + cols, mask=mask, other=0.0).to(tl.float32)
+                inner = 0.7978845608028654 * (x + 0.044715 * x * x * x)
+                g = (x * tl.sigmoid(2.0 * inner)).to(in_ptr.dtype.element_ty).to(tl.float32)
+                g = tl.where(mask, g, 0.0)
+                amax = tl.maximum(amax, tl.max(tl.abs(g), axis=0))
+
+        fp8_max_f = tl.cast(fp8_max, tl.float32)
+        tiny_f = tl.cast(tiny, tl.float32)
+        scale = tl.maximum(amax / fp8_max_f, tiny_f)
+        inv_scale = 1.0 / scale
+        tl.store(scale_ptr + row, scale)
+
+        out_dtype = tl.float8e5 if FP8_E5M2 else tl.float8e4nv
+        for start in tl.range(0, n_cols, BLOCK_N):
+            cols = start + tl.arange(0, BLOCK_N)
+            mask = cols < n_cols
+            x = tl.load(row_in + cols, mask=mask, other=0.0).to(tl.float32)
+            inner = 0.7978845608028654 * (x + 0.044715 * x * x * x)
+            g = (x * tl.sigmoid(2.0 * inner)).to(in_ptr.dtype.element_ty).to(tl.float32)
+            q = tl.minimum(tl.maximum(g * inv_scale, -fp8_max_f), fp8_max_f)
+            tl.store(row_out + cols, q.to(out_dtype), mask=mask)
+
     return {
         "triton": triton,
         "split_single": _rmsnorm_split_rope_single_kernel,
         "split_paired": _qk_rmsnorm_split_rope_paired_kernel,
         "interleaved_single": _rmsnorm_interleaved_rope_single_kernel,
         "post_sa": _post_sa_residual_rmsnorm_kernel,
+        "post_sa_adaln": _post_sa_residual_rmsnorm_adaln_kernel,
+        "gated_attn": _gated_attn_kernel,
+        "gated_attn_fp8": _gated_attn_rowwise_fp8_kernel,
+        "rmsnorm_adaln_fp8": _rmsnorm_scale_shift_fp8_kernel,
+        "dual_rmsnorm_adaln": _dual_rmsnorm_scale_shift_kernel,
+        "scale_shift": _scale_shift_kernel,
+        "qk_rmsnorm_paired": _qk_rmsnorm_paired_kernel,
+        "gelu_fp8_1pass": _gelu_tanh_fp8_1pass_kernel,
+        "gelu_fp8_monotone": _gelu_tanh_fp8_monotone_kernel,
     }
 
 
@@ -645,6 +1056,509 @@ def _ltx_post_sa_residual_rmsnorm_fake(
     return torch.empty_like(residual), torch.empty_like(residual)
 
 
+@torch.library.custom_op(
+    "worldfoundry::ltx_post_sa_residual_rmsnorm_adaln",
+    mutates_args=(),
+    device_types="cuda",
+)
+def _ltx_post_sa_residual_rmsnorm_adaln_op(
+    residual: torch.Tensor,
+    value: torch.Tensor,
+    gate: torch.Tensor,
+    scale_q: torch.Tensor,
+    shift_q: torch.Tensor,
+    eps: float,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    kernels = _load_triton_kernels()
+    triton = kernels["triton"]
+    batch_size, seq_len, features = residual.shape
+    block_size = triton.next_power_of_2(features)
+    num_warps = 4 if block_size <= 2048 else 8
+
+    gate_exp = gate.expand_as(residual)
+    scale_exp = scale_q.expand_as(residual)
+    shift_exp = shift_q.expand_as(residual)
+    out = torch.empty_like(residual)
+    modulated = torch.empty_like(residual)
+
+    with torch.cuda.device(residual.device):
+        kernels["post_sa_adaln"][(batch_size * seq_len,)](
+            residual,
+            value,
+            gate_exp,
+            scale_exp,
+            shift_exp,
+            out,
+            modulated,
+            residual.stride(0),
+            residual.stride(1),
+            value.stride(0),
+            value.stride(1),
+            gate_exp.stride(0),
+            gate_exp.stride(1),
+            scale_exp.stride(0),
+            scale_exp.stride(1),
+            shift_exp.stride(0),
+            shift_exp.stride(1),
+            out.stride(0),
+            out.stride(1),
+            modulated.stride(0),
+            modulated.stride(1),
+            seq_len,
+            eps,
+            features=features,
+            round_bf16=torch.promote_types(value.dtype, gate.dtype) == torch.bfloat16,
+            BLOCK_SIZE=block_size,
+            num_warps=num_warps,
+        )
+    return out, modulated
+
+
+@_ltx_post_sa_residual_rmsnorm_adaln_op.register_fake
+def _ltx_post_sa_residual_rmsnorm_adaln_fake(
+    residual: torch.Tensor,
+    value: torch.Tensor,
+    gate: torch.Tensor,
+    scale_q: torch.Tensor,
+    shift_q: torch.Tensor,
+    eps: float,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    del value, gate, scale_q, shift_q, eps
+    return torch.empty_like(residual), torch.empty_like(residual)
+
+
+@torch.library.custom_op(
+    "worldfoundry::ltx_gated_attention",
+    mutates_args=(),
+    device_types="cuda",
+)
+def _ltx_gated_attention_op(
+    x: torch.Tensor,
+    gate_logits: torch.Tensor,
+    heads: int,
+    dim_head: int,
+) -> torch.Tensor:
+    kernels = _load_triton_kernels()
+    triton = kernels["triton"]
+    batch_size, seq_len, inner_dim = x.shape
+    block_size = triton.next_power_of_2(inner_dim)
+    num_warps = 4 if block_size <= 2048 else 8
+    out = torch.empty_like(x)
+    with torch.cuda.device(x.device):
+        kernels["gated_attn"][(batch_size * seq_len,)](
+            x,
+            gate_logits,
+            out,
+            x.stride(0),
+            x.stride(1),
+            gate_logits.stride(0),
+            gate_logits.stride(1),
+            out.stride(0),
+            out.stride(1),
+            seq_len,
+            inner_dim=inner_dim,
+            dim_head=dim_head,
+            BLOCK_SIZE=block_size,
+            num_warps=num_warps,
+        )
+    del heads
+    return out
+
+
+@_ltx_gated_attention_op.register_fake
+def _ltx_gated_attention_fake(
+    x: torch.Tensor,
+    gate_logits: torch.Tensor,
+    heads: int,
+    dim_head: int,
+) -> torch.Tensor:
+    del gate_logits, heads, dim_head
+    return torch.empty_like(x)
+
+
+@torch.library.custom_op(
+    "worldfoundry::ltx_gated_attention_rowwise_fp8",
+    mutates_args=(),
+    device_types="cuda",
+)
+def _ltx_gated_attention_rowwise_fp8_op(
+    x: torch.Tensor,
+    gate_logits: torch.Tensor,
+    heads: int,
+    dim_head: int,
+    fp8_is_e5m2: bool,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    kernels = _load_triton_kernels()
+    triton = kernels["triton"]
+    batch_size, seq_len, inner_dim = x.shape
+    rows = batch_size * seq_len
+    fp8_dtype = torch.float8_e5m2 if fp8_is_e5m2 else torch.float8_e4m3fn
+    fp8_max = float(torch.finfo(fp8_dtype).max)
+    tiny = float(torch.finfo(torch.float32).tiny)
+    block_size = triton.next_power_of_2(inner_dim)
+    num_warps = 4 if block_size <= 2048 else 8
+
+    codes = torch.empty((rows, inner_dim), dtype=fp8_dtype, device=x.device)
+    scales = torch.empty((rows, 1), dtype=torch.float32, device=x.device)
+    with torch.cuda.device(x.device):
+        kernels["gated_attn_fp8"][(rows,)](
+            x,
+            gate_logits,
+            codes,
+            scales,
+            x.stride(0),
+            x.stride(1),
+            gate_logits.stride(0),
+            gate_logits.stride(1),
+            codes.stride(0),
+            seq_len,
+            fp8_max,
+            tiny,
+            inner_dim=inner_dim,
+            dim_head=dim_head,
+            BLOCK_SIZE=block_size,
+            FP8_E5M2=fp8_is_e5m2,
+            num_warps=num_warps,
+        )
+    del heads
+    return codes, scales
+
+
+@_ltx_gated_attention_rowwise_fp8_op.register_fake
+def _ltx_gated_attention_rowwise_fp8_fake(
+    x: torch.Tensor,
+    gate_logits: torch.Tensor,
+    heads: int,
+    dim_head: int,
+    fp8_is_e5m2: bool,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    del gate_logits, heads, dim_head
+    rows = x.shape[0] * x.shape[1]
+    fp8_dtype = torch.float8_e5m2 if fp8_is_e5m2 else torch.float8_e4m3fn
+    return (
+        torch.empty((rows, x.shape[2]), dtype=fp8_dtype, device=x.device),
+        torch.empty((rows, 1), dtype=torch.float32, device=x.device),
+    )
+
+
+@torch.library.custom_op(
+    "worldfoundry::ltx_rmsnorm_scale_shift_fp8",
+    mutates_args=(),
+    device_types="cuda",
+)
+def _ltx_rmsnorm_scale_shift_fp8_op(
+    x: torch.Tensor,
+    scale: torch.Tensor,
+    shift: torch.Tensor,
+    eps: float,
+    fp8_is_e5m2: bool,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    kernels = _load_triton_kernels()
+    triton = kernels["triton"]
+    batch_size, seq_len, features = x.shape
+    rows = batch_size * seq_len
+    fp8_dtype = torch.float8_e5m2 if fp8_is_e5m2 else torch.float8_e4m3fn
+    fp8_max = float(torch.finfo(fp8_dtype).max)
+    tiny = float(torch.finfo(torch.float32).tiny)
+    block_size = triton.next_power_of_2(features)
+    num_warps = 4 if block_size <= 2048 else 8
+
+    scale_exp = scale.expand_as(x)
+    shift_exp = shift.expand_as(x)
+    codes = torch.empty((rows, features), dtype=fp8_dtype, device=x.device)
+    row_scales = torch.empty((rows, 1), dtype=torch.float32, device=x.device)
+    with torch.cuda.device(x.device):
+        kernels["rmsnorm_adaln_fp8"][(rows,)](
+            x,
+            scale_exp,
+            shift_exp,
+            codes,
+            row_scales,
+            x.stride(0),
+            x.stride(1),
+            scale_exp.stride(0),
+            scale_exp.stride(1),
+            shift_exp.stride(0),
+            shift_exp.stride(1),
+            codes.stride(0),
+            seq_len,
+            eps,
+            fp8_max,
+            tiny,
+            features=features,
+            BLOCK_SIZE=block_size,
+            FP8_E5M2=fp8_is_e5m2,
+            num_warps=num_warps,
+        )
+    return codes, row_scales
+
+
+@_ltx_rmsnorm_scale_shift_fp8_op.register_fake
+def _ltx_rmsnorm_scale_shift_fp8_fake(
+    x: torch.Tensor,
+    scale: torch.Tensor,
+    shift: torch.Tensor,
+    eps: float,
+    fp8_is_e5m2: bool,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    del scale, shift, eps
+    rows = x.shape[0] * x.shape[1]
+    fp8_dtype = torch.float8_e5m2 if fp8_is_e5m2 else torch.float8_e4m3fn
+    return (
+        torch.empty((rows, x.shape[2]), dtype=fp8_dtype, device=x.device),
+        torch.empty((rows, 1), dtype=torch.float32, device=x.device),
+    )
+
+
+@torch.library.custom_op(
+    "worldfoundry::ltx_dual_rmsnorm_scale_shift",
+    mutates_args=(),
+    device_types="cuda",
+)
+def _ltx_dual_rmsnorm_scale_shift_op(
+    x: torch.Tensor,
+    scale1: torch.Tensor,
+    shift1: torch.Tensor,
+    scale2: torch.Tensor,
+    shift2: torch.Tensor,
+    eps: float,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    kernels = _load_triton_kernels()
+    triton = kernels["triton"]
+    batch_size, seq_len, features = x.shape
+    block_size = triton.next_power_of_2(features)
+    num_warps = 4 if block_size <= 2048 else 8
+
+    s1_exp = scale1.expand_as(x)
+    sh1_exp = shift1.expand_as(x)
+    s2_exp = scale2.expand_as(x)
+    sh2_exp = shift2.expand_as(x)
+    o1 = torch.empty_like(x)
+    o2 = torch.empty_like(x)
+    with torch.cuda.device(x.device):
+        kernels["dual_rmsnorm_adaln"][(batch_size * seq_len,)](
+            x,
+            s1_exp,
+            sh1_exp,
+            s2_exp,
+            sh2_exp,
+            o1,
+            o2,
+            x.stride(0),
+            x.stride(1),
+            s1_exp.stride(0),
+            s1_exp.stride(1),
+            sh1_exp.stride(0),
+            sh1_exp.stride(1),
+            s2_exp.stride(0),
+            s2_exp.stride(1),
+            sh2_exp.stride(0),
+            sh2_exp.stride(1),
+            o1.stride(0),
+            o1.stride(1),
+            o2.stride(0),
+            o2.stride(1),
+            seq_len,
+            eps,
+            features=features,
+            BLOCK_SIZE=block_size,
+            num_warps=num_warps,
+        )
+    return o1, o2
+
+
+@_ltx_dual_rmsnorm_scale_shift_op.register_fake
+def _ltx_dual_rmsnorm_scale_shift_fake(
+    x: torch.Tensor,
+    scale1: torch.Tensor,
+    shift1: torch.Tensor,
+    scale2: torch.Tensor,
+    shift2: torch.Tensor,
+    eps: float,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    del scale1, shift1, scale2, shift2, eps
+    return torch.empty_like(x), torch.empty_like(x)
+
+
+@torch.library.custom_op(
+    "worldfoundry::ltx_scale_shift",
+    mutates_args=(),
+    device_types="cuda",
+)
+def _ltx_scale_shift_op(
+    x: torch.Tensor,
+    scale: torch.Tensor,
+    shift: torch.Tensor,
+) -> torch.Tensor:
+    kernels = _load_triton_kernels()
+    triton = kernels["triton"]
+    batch_size, seq_len, features = x.shape
+    block_size = triton.next_power_of_2(features)
+    num_warps = 4 if block_size <= 2048 else 8
+
+    s_exp = scale.expand_as(x)
+    sh_exp = shift.expand_as(x)
+    out = torch.empty_like(x)
+    with torch.cuda.device(x.device):
+        kernels["scale_shift"][(batch_size * seq_len,)](
+            x,
+            s_exp,
+            sh_exp,
+            out,
+            x.stride(0),
+            x.stride(1),
+            s_exp.stride(0),
+            s_exp.stride(1),
+            sh_exp.stride(0),
+            sh_exp.stride(1),
+            out.stride(0),
+            out.stride(1),
+            seq_len,
+            features=features,
+            BLOCK_SIZE=block_size,
+            num_warps=num_warps,
+        )
+    return out
+
+
+@_ltx_scale_shift_op.register_fake
+def _ltx_scale_shift_fake(
+    x: torch.Tensor,
+    scale: torch.Tensor,
+    shift: torch.Tensor,
+) -> torch.Tensor:
+    del scale, shift
+    return torch.empty_like(x)
+
+
+@torch.library.custom_op(
+    "worldfoundry::ltx_qk_rmsnorm_paired",
+    mutates_args=(),
+    device_types="cuda",
+)
+def _ltx_qk_rmsnorm_paired_op(
+    q: torch.Tensor,
+    k: torch.Tensor,
+    q_weight: torch.Tensor,
+    k_weight: torch.Tensor,
+    eps: float,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    kernels = _load_triton_kernels()
+    triton = kernels["triton"]
+    q_batch, q_seq, features = q.shape
+    k_batch, k_seq, _ = k.shape
+    q_rows = q_batch * q_seq
+    total_rows = q_rows + k_batch * k_seq
+    block_size = triton.next_power_of_2(features)
+    num_warps = 4 if block_size <= 2048 else 8
+
+    q_out = torch.empty_like(q)
+    k_out = torch.empty_like(k)
+    with torch.cuda.device(q.device):
+        kernels["qk_rmsnorm_paired"][(total_rows,)](
+            q,
+            k,
+            q_weight,
+            k_weight,
+            q_out,
+            k_out,
+            q.stride(0),
+            q.stride(1),
+            k.stride(0),
+            k.stride(1),
+            q_out.stride(0),
+            q_out.stride(1),
+            k_out.stride(0),
+            k_out.stride(1),
+            q_rows,
+            q_seq,
+            k_seq,
+            eps,
+            features=features,
+            BLOCK_SIZE=block_size,
+            num_warps=num_warps,
+        )
+    return q_out, k_out
+
+
+@_ltx_qk_rmsnorm_paired_op.register_fake
+def _ltx_qk_rmsnorm_paired_fake(
+    q: torch.Tensor,
+    k: torch.Tensor,
+    q_weight: torch.Tensor,
+    k_weight: torch.Tensor,
+    eps: float,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    del q_weight, k_weight, eps
+    return torch.empty_like(q), torch.empty_like(k)
+
+
+@torch.library.custom_op(
+    "worldfoundry::ltx_gelu_tanh_rowwise_fp8",
+    mutates_args=(),
+    device_types="cuda",
+)
+def _ltx_gelu_tanh_rowwise_fp8_op(
+    value: torch.Tensor,
+    fp8_is_e5m2: bool,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    kernels = _load_triton_kernels()
+    triton = kernels["triton"]
+    source = value if value.stride(1) == 1 else value.contiguous()
+    rows, cols = source.shape
+    fp8_dtype = torch.float8_e5m2 if fp8_is_e5m2 else torch.float8_e4m3fn
+    codes = torch.empty((rows, cols), dtype=fp8_dtype, device=source.device)
+    scales = torch.empty((rows, 1), dtype=torch.float32, device=source.device)
+    if rows == 0 or cols == 0:
+        return codes, scales
+    fp8_max = float(torch.finfo(fp8_dtype).max)
+    tiny = float(torch.finfo(torch.float32).tiny)
+    with torch.cuda.device(source.device):
+        if cols <= 4096:
+            block_size = triton.next_power_of_2(cols)
+            num_warps = 4 if block_size <= 2048 else 8
+            kernels["gelu_fp8_1pass"][(rows,)](
+                source,
+                codes,
+                scales,
+                cols,
+                fp8_max,
+                tiny,
+                source.stride(0),
+                codes.stride(0),
+                BLOCK_SIZE=block_size,
+                FP8_E5M2=fp8_is_e5m2,
+                num_warps=num_warps,
+            )
+        else:
+            kernels["gelu_fp8_monotone"][(rows,)](
+                source,
+                codes,
+                scales,
+                cols,
+                fp8_max,
+                tiny,
+                source.stride(0),
+                codes.stride(0),
+                BLOCK_N=4096,
+                FP8_E5M2=fp8_is_e5m2,
+                num_warps=8,
+            )
+    return codes, scales
+
+
+@_ltx_gelu_tanh_rowwise_fp8_op.register_fake
+def _ltx_gelu_tanh_rowwise_fp8_fake(
+    value: torch.Tensor,
+    fp8_is_e5m2: bool,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    fp8_dtype = torch.float8_e5m2 if fp8_is_e5m2 else torch.float8_e4m3fn
+    return (
+        torch.empty(value.shape, dtype=fp8_dtype, device=value.device),
+        torch.empty((value.shape[0], 1), dtype=torch.float32, device=value.device),
+    )
+
+
 def fused_ltx_qk_rmsnorm_rope(
     q: torch.Tensor,
     k: torch.Tensor,
@@ -669,6 +1583,8 @@ def fused_ltx_qk_rmsnorm_rope(
         and k.ndim == 3
         and q.shape[-1] == inner_dim
         and k.shape[-1] == inner_dim
+        and q_weight.shape == (inner_dim,)
+        and k_weight.shape == (inner_dim,)
         and dim_head % 2 == 0
         and 0 < inner_dim <= 8192
         and q_cos.ndim == 4
@@ -711,6 +1627,8 @@ def fused_ltx_qk_rmsnorm_rope(
         and k.ndim == 3
         and q.shape[-1] == inner_dim
         and k.shape[-1] == inner_dim
+        and q_weight.shape == (inner_dim,)
+        and k_weight.shape == (inner_dim,)
         and inner_dim % 2 == 0
         and 0 < inner_dim <= 8192
         and q_cos.ndim == 3
@@ -776,8 +1694,275 @@ def fused_ltx_post_sa_residual_rms_norm(
     return output, rms_norm(output, None, eps=eps)
 
 
+def fused_ltx_post_sa_residual_rmsnorm_adaln(
+    residual: torch.Tensor,
+    value: torch.Tensor,
+    gate: torch.Tensor,
+    scale_q: torch.Tensor,
+    shift_q: torch.Tensor,
+    eps: float,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Fuse ``out = residual + value * gate`` and ``rms_norm(out, eps) * (1 + scale_q) + shift_q``."""
+    eligible = (
+        residual.ndim == 3
+        and value.shape == residual.shape
+        and 0 < residual.shape[-1] <= 8192
+        and residual.dtype == value.dtype == gate.dtype == scale_q.dtype == shift_q.dtype
+        and gate.ndim == 3
+        and scale_q.ndim == 3
+        and shift_q.ndim == 3
+        and gate.shape[0] in (1, residual.shape[0])
+        and gate.shape[1] in (1, residual.shape[1])
+        and gate.shape[2] == residual.shape[2]
+        and scale_q.shape[0] in (1, residual.shape[0])
+        and scale_q.shape[1] in (1, residual.shape[1])
+        and scale_q.shape[2] == residual.shape[2]
+        and shift_q.shape[0] in (1, residual.shape[0])
+        and shift_q.shape[1] in (1, residual.shape[1])
+        and shift_q.shape[2] == residual.shape[2]
+        and _triton_cuda_eligible(residual, value, gate, scale_q, shift_q)
+    )
+    if eligible:
+        try:
+            return _ltx_post_sa_residual_rmsnorm_adaln_op(residual, value, gate, scale_q, shift_q, float(eps))
+        except (ImportError, OSError):
+            pass
+    output = residual + value * gate
+    normed = rms_norm(output, None, eps=eps)
+    return output, normed * (1 + scale_q) + shift_q
+
+
+def fused_ltx_gated_attention(
+    attention_output: torch.Tensor,
+    gate_logits: torch.Tensor,
+    *,
+    heads: int,
+    dim_head: int,
+) -> torch.Tensor:
+    """Apply ``2 * sigmoid(gate_logits)`` per head to ``attention_output`` in one pass."""
+    inner_dim = heads * dim_head
+    eligible = (
+        attention_output.ndim == 3
+        and gate_logits.ndim == 3
+        and attention_output.dtype == gate_logits.dtype
+        and attention_output.shape[0] == gate_logits.shape[0]
+        and attention_output.shape[1] == gate_logits.shape[1]
+        and attention_output.shape[2] == inner_dim
+        and gate_logits.shape[2] == heads
+        and 0 < inner_dim <= 8192
+        and _triton_cuda_eligible(attention_output, gate_logits)
+    )
+    if eligible:
+        try:
+            return _ltx_gated_attention_op(attention_output, gate_logits, int(heads), int(dim_head))
+        except (ImportError, OSError):
+            pass
+    batch, tokens, _ = attention_output.shape
+    gates = 2.0 * torch.sigmoid(gate_logits)
+    return (attention_output.reshape(batch, tokens, heads, dim_head) * gates.unsqueeze(-1)).reshape(
+        batch, tokens, inner_dim
+    )
+
+
+def fused_ltx_gated_attention_fp8(
+    attention_output: torch.Tensor,
+    gate_logits: torch.Tensor,
+    *,
+    heads: int,
+    dim_head: int,
+    fp8_dtype: torch.dtype = torch.float8_e4m3fn,
+) -> tuple[torch.Tensor, torch.Tensor] | None:
+    """Fuse per-head sigmoid gating and rowwise FP8 quantization when CUDA/Triton eligible."""
+    if fp8_dtype not in (torch.float8_e4m3fn, torch.float8_e5m2):
+        return None
+    inner_dim = heads * dim_head
+    eligible = (
+        attention_output.ndim == 3
+        and gate_logits.ndim == 3
+        and attention_output.dtype == gate_logits.dtype
+        and attention_output.shape[0] == gate_logits.shape[0]
+        and attention_output.shape[1] == gate_logits.shape[1]
+        and attention_output.shape[2] == inner_dim
+        and gate_logits.shape[2] == heads
+        and 0 < inner_dim <= 8192
+        and _triton_cuda_eligible(attention_output, gate_logits)
+    )
+    if not eligible:
+        return None
+    try:
+        return _ltx_gated_attention_rowwise_fp8_op(
+            attention_output,
+            gate_logits,
+            int(heads),
+            int(dim_head),
+            fp8_dtype == torch.float8_e5m2,
+        )
+    except (ImportError, OSError):
+        return None
+
+
+def fused_ltx_rmsnorm_scale_shift_fp8(
+    x: torch.Tensor,
+    scale: torch.Tensor,
+    shift: torch.Tensor,
+    *,
+    eps: float,
+    fp8_dtype: torch.dtype = torch.float8_e4m3fn,
+) -> tuple[torch.Tensor, torch.Tensor] | None:
+    """Fuse unweighted RMSNorm + AdaLN scale/shift + rowwise FP8 quantization when eligible."""
+    if fp8_dtype not in (torch.float8_e4m3fn, torch.float8_e5m2):
+        return None
+    eligible = (
+        x.ndim == 3
+        and scale.ndim == 3
+        and shift.ndim == 3
+        and 0 < x.shape[-1] <= 8192
+        and x.dtype == scale.dtype == shift.dtype
+        and scale.shape[0] in (1, x.shape[0])
+        and scale.shape[1] in (1, x.shape[1])
+        and scale.shape[2] == x.shape[2]
+        and shift.shape[0] in (1, x.shape[0])
+        and shift.shape[1] in (1, x.shape[1])
+        and shift.shape[2] == x.shape[2]
+        and _triton_cuda_eligible(x, scale, shift)
+    )
+    if not eligible:
+        return None
+    try:
+        return _ltx_rmsnorm_scale_shift_fp8_op(x, scale, shift, float(eps), fp8_dtype == torch.float8_e5m2)
+    except (ImportError, OSError):
+        return None
+
+
+def fused_ltx_dual_rmsnorm_scale_shift(
+    x: torch.Tensor,
+    scale1: torch.Tensor,
+    shift1: torch.Tensor,
+    scale2: torch.Tensor,
+    shift2: torch.Tensor,
+    *,
+    eps: float,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Compute two AdaLN-modulated views of ``rms_norm(x, eps)`` in one HBM read."""
+    eligible = (
+        x.ndim == 3
+        and scale1.ndim == 3
+        and shift1.ndim == 3
+        and scale2.ndim == 3
+        and shift2.ndim == 3
+        and 0 < x.shape[-1] <= 8192
+        and x.dtype == scale1.dtype == shift1.dtype == scale2.dtype == shift2.dtype
+        and all(
+            t.shape[0] in (1, x.shape[0]) and t.shape[1] in (1, x.shape[1]) and t.shape[2] == x.shape[2]
+            for t in (scale1, shift1, scale2, shift2)
+        )
+        and _triton_cuda_eligible(x, scale1, shift1, scale2, shift2)
+    )
+    if eligible:
+        try:
+            return _ltx_dual_rmsnorm_scale_shift_op(x, scale1, shift1, scale2, shift2, float(eps))
+        except (ImportError, OSError):
+            pass
+    normed = rms_norm(x, None, eps=eps)
+    return normed * (1 + scale1) + shift1, normed * (1 + scale2) + shift2
+
+
+def fused_ltx_scale_shift(
+    x: torch.Tensor,
+    scale: torch.Tensor,
+    shift: torch.Tensor,
+) -> torch.Tensor:
+    """Fuse ``x * (1 + scale) + shift`` in one pass when CUDA/Triton eligible."""
+    eligible = (
+        x.ndim == 3
+        and scale.ndim == 3
+        and shift.ndim == 3
+        and 0 < x.shape[-1] <= 8192
+        and x.dtype == scale.dtype == shift.dtype
+        and scale.shape[0] in (1, x.shape[0])
+        and scale.shape[1] in (1, x.shape[1])
+        and scale.shape[2] == x.shape[2]
+        and shift.shape[0] in (1, x.shape[0])
+        and shift.shape[1] in (1, x.shape[1])
+        and shift.shape[2] == x.shape[2]
+        and _triton_cuda_eligible(x, scale, shift)
+    )
+    if eligible:
+        try:
+            return _ltx_scale_shift_op(x, scale, shift)
+        except (ImportError, OSError):
+            pass
+    return x * (1 + scale) + shift
+
+
+def fused_ltx_qk_rmsnorm(
+    q: torch.Tensor,
+    k: torch.Tensor,
+    q_weight: torch.Tensor,
+    k_weight: torch.Tensor,
+    *,
+    eps: float,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Apply full-hidden Q and K RMSNorm (without RoPE) in a single Triton launch."""
+    features = int(q.shape[-1])
+    eligible = (
+        q.ndim == 3
+        and k.ndim == 3
+        and q.shape[-1] == k.shape[-1]
+        and q_weight.shape == (features,)
+        and k_weight.shape == (features,)
+        and 0 < features <= 8192
+        and q.dtype == k.dtype
+        and _triton_cuda_eligible(q, k, q_weight, k_weight)
+    )
+    if eligible:
+        try:
+            return _ltx_qk_rmsnorm_paired_op(q, k, q_weight, k_weight, float(eps))
+        except (ImportError, OSError):
+            pass
+    return (
+        F.rms_norm(q, (features,), weight=q_weight, eps=eps),
+        F.rms_norm(k, (features,), weight=k_weight, eps=eps),
+    )
+
+
+def fused_ltx_gelu_tanh_rowwise_fp8(
+    value: torch.Tensor,
+    fp8_dtype: torch.dtype = torch.float8_e4m3fn,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Fast GELU-tanh + rowwise FP8 quantization for wide LTX FFN hidden tensors."""
+    if fp8_dtype not in (torch.float8_e4m3fn, torch.float8_e5m2):
+        raise ValueError(f"unsupported FP8 dtype: {fp8_dtype}")
+    if value.ndim != 2:
+        raise ValueError("fused_ltx_gelu_tanh_rowwise_fp8 expects a 2D [rows, K] tensor")
+    rows, cols = value.shape
+    if rows == 0 or cols == 0:
+        return (
+            torch.empty((rows, cols), dtype=fp8_dtype, device=value.device),
+            torch.empty((rows, 1), dtype=torch.float32, device=value.device),
+        )
+    cuda_eligible = (
+        value.device.type == "cuda"
+        and not bool(getattr(torch.version, "hip", None))
+        and value.dtype in _FLOAT_DTYPES
+        and not (torch.is_grad_enabled() and value.requires_grad)
+    )
+    if cuda_eligible:
+        try:
+            return _ltx_gelu_tanh_rowwise_fp8_op(value, fp8_dtype == torch.float8_e5m2)
+        except (ImportError, OSError):
+            pass
+    activated = F.gelu(value, approximate="tanh")
+    fp8_max = float(torch.finfo(fp8_dtype).max)
+    scale = (activated.detach().float().abs().amax(dim=1, keepdim=True) / fp8_max).clamp_min(
+        torch.finfo(torch.float32).tiny
+    )
+    quantized = (activated.float() / scale).clamp(-fp8_max, fp8_max).to(fp8_dtype)
+    return quantized, scale.float()
+
+
 class FusedLTXPreAttention:
-    """Drop-in ``PreAttentionCallable`` fusing LTX QK-RMSNorm + RoPE."""
+    """Drop-in ``PreAttentionCallable`` fusing LTX QK-RMSNorm (+ optional RoPE)."""
 
     def __init__(self) -> None:
         self._fallback = PytorchPreAttention()
@@ -792,11 +1977,21 @@ class FusedLTXPreAttention:
         key_position: torch.Tensor | None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         del mask
-        if query_position is None:
-            return self._fallback(query, key, attention_module, None, None, None)
         module = cast(Any, attention_module)
         q_norm = getattr(module, "q_norm", None)
         k_norm = getattr(module, "k_norm", None)
+        if query_position is None:
+            if (
+                isinstance(q_norm, nn.RMSNorm)
+                and isinstance(k_norm, nn.RMSNorm)
+                and q_norm.weight is not None
+                and k_norm.weight is not None
+            ):
+                q_eps = float(q_norm.eps if q_norm.eps is not None else 1e-6)
+                k_eps = float(k_norm.eps if k_norm.eps is not None else 1e-6)
+                if q_eps == k_eps:
+                    return fused_ltx_qk_rmsnorm(query, key, q_norm.weight, k_norm.weight, eps=q_eps)
+            return self._fallback(query, key, attention_module, None, None, None)
         rope_type = getattr(module, "rope_type", None)
         if (
             isinstance(q_norm, nn.RMSNorm)
@@ -861,7 +2056,7 @@ def ltx_fused_transformer_ops(
 
 
 def enable_ltx_fused_ops(model: nn.Module) -> int:
-    """Install fused QK-RMSNorm+RoPE, post-SA residual+RMSNorm, and gated FFN add on ``model``."""
+    """Install fused QK-RMSNorm+RoPE, gated-attention+FP8, post-SA+AdaLN, and dual AV ops on ``model``."""
     from .attention import Attention
     from .transformer import BasicAVTransformerBlock
 
@@ -871,6 +2066,7 @@ def enable_ltx_fused_ops(model: nn.Module) -> int:
     for child in model.modules():
         if isinstance(child, Attention):
             child.preattention_function = pre_attn
+            child._use_fused_gated_out = True
         if isinstance(child, BasicAVTransformerBlock):
             child.post_sa_function = post_sa
             child._use_fused_residual_gate = True
@@ -949,7 +2145,15 @@ __all__ = [
     "enable_ltx_fused_fp8_ffn",
     "enable_ltx_fused_ops",
     "fuse_ltx_projections",
+    "fused_ltx_dual_rmsnorm_scale_shift",
+    "fused_ltx_gated_attention",
+    "fused_ltx_gated_attention_fp8",
+    "fused_ltx_gelu_tanh_rowwise_fp8",
     "fused_ltx_post_sa_residual_rms_norm",
+    "fused_ltx_post_sa_residual_rmsnorm_adaln",
+    "fused_ltx_qk_rmsnorm",
     "fused_ltx_qk_rmsnorm_rope",
+    "fused_ltx_rmsnorm_scale_shift_fp8",
+    "fused_ltx_scale_shift",
     "ltx_fused_transformer_ops",
 ]

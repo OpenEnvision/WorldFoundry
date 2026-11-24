@@ -17,7 +17,7 @@ component options.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import replace
 from functools import partial
 
@@ -38,7 +38,7 @@ from ....runners import MultiModalLatentDecoder
 from ...representations.ltx.patchifiers import AudioPatchifier, VideoLatentPatchifier
 from ...representations.ltx.types import AudioLatentShape, VideoLatentShape, VideoPixelShape
 from .audio import AudioDecoderConfigurator, VocoderConfigurator, decode_audio
-from .audio.vocoder import Snake, SnakeBeta
+from .audio.vocoder import Snake, SnakeBeta, VocoderWithBWE
 from .video import (
     SpatialTilingConfig,
     TemporalTilingConfig,
@@ -259,6 +259,10 @@ class LTXMediaDecoder(MultiModalLatentDecoder):
         spatial_divisor: int = 1,
         strip_reference_tokens: bool = False,
         continue_generator: bool = False,
+        skip_redundant_video_autocast: bool = False,
+        parallel_audio: bool = False,
+        audio_cuda_graph: bool = False,
+        compile_vocoder: bool = False,
     ) -> None:
         self.precision = precision
         self.spatial_divisor = spatial_divisor
@@ -269,6 +273,95 @@ class LTXMediaDecoder(MultiModalLatentDecoder):
         self.vocoder = vocoder
         self.compute_dtype = compute_dtype
         self.tiling = tiling
+        self.skip_redundant_video_autocast = bool(skip_redundant_video_autocast)
+        self.parallel_audio = bool(parallel_audio)
+        self._audio_streams: dict[int, torch.cuda.Stream] = {}
+        self._compiled_vocoder: Callable[[torch.Tensor], torch.Tensor] | None = None
+        if compile_vocoder and torch.cuda.is_available():
+            from worldfoundry.core.platform.compile_cache import configure_persistent_compile_cache
+
+            configure_persistent_compile_cache(namespace="ltx-vocoder")
+            self._compiled_vocoder = torch.compile(self.vocoder.vocoder, mode="default")
+        self._audio_graph_runner = None
+        if audio_cuda_graph:
+            from worldfoundry.core.execution.graphs.inference_graph import InferenceCUDAGraphRunner
+
+            self._audio_graph_runner = InferenceCUDAGraphRunner(
+                self._run_audio_pipeline,
+                enabled=True,
+                extra_key=(
+                    f"ltx_audio_decode:{id(self.audio)}:{id(self.vocoder)}:"
+                    f"{precision}:{self._compiled_vocoder is not None}"
+                ),
+            )
+
+    def _run_audio_pipeline(self, lat: torch.Tensor) -> torch.Tensor:
+        """Decode audio latents -> mel spectrogram -> waveform."""
+        use_autocast = self.precision == "autocast" and self.compute_dtype in {torch.float16, torch.bfloat16}
+        if self._compiled_vocoder is not None and lat.device.type == "cuda" and not torch.is_grad_enabled():
+            if isinstance(self.vocoder.vocoder, VocoderWithBWE):
+                with torch.autocast(
+                    device_type="cuda",
+                    dtype=self.compute_dtype,
+                    enabled=use_autocast,
+                ):
+                    decoded_mel = self.audio.decoder(lat)
+                # Run compiled VocoderWithBWE outside outer BF16 autocast so its internal
+                # FP32 autocast compiles cleanly without nested-autocast Inductor drift.
+                return self._compiled_vocoder(decoded_mel).squeeze(0).float()
+            with torch.autocast(
+                device_type="cuda",
+                dtype=self.compute_dtype,
+                enabled=use_autocast,
+            ):
+                decoded_mel = self.audio.decoder(lat)
+                return self._compiled_vocoder(decoded_mel).squeeze(0).float()
+        with torch.autocast(
+            device_type=lat.device.type,
+            dtype=self.compute_dtype,
+            enabled=use_autocast,
+        ):
+            return decode_audio(lat, self.audio.decoder, self.vocoder.vocoder).waveform
+
+    def _get_audio_stream(self, device: torch.device) -> torch.cuda.Stream:
+        idx = 0 if device.index is None else int(device.index)
+        stream = self._audio_streams.get(idx)
+        if stream is None:
+            stream = torch.cuda.Stream(device=device)
+            self._audio_streams[idx] = stream
+        return stream
+
+    def _decode_audio_waveform(self, audio_in: torch.Tensor) -> tuple[torch.Tensor, int]:
+        if self._audio_graph_runner is not None and audio_in.device.type == "cuda" and not torch.is_grad_enabled():
+            waveform = self._audio_graph_runner(audio_in)
+            return waveform, int(self.vocoder.vocoder.output_sampling_rate)
+        if self._compiled_vocoder is not None and audio_in.device.type == "cuda" and not torch.is_grad_enabled():
+            waveform = self._run_audio_pipeline(audio_in)
+            return waveform, int(self.vocoder.vocoder.output_sampling_rate)
+        with torch.autocast(
+            device_type=audio_in.device.type,
+            dtype=self.compute_dtype,
+            enabled=self.precision == "autocast" and self.compute_dtype in {torch.float16, torch.bfloat16},
+        ):
+            decoded_audio = decode_audio(audio_in, self.audio.decoder, self.vocoder.vocoder)
+        return decoded_audio.waveform, int(decoded_audio.sampling_rate)
+
+    def _use_video_autocast(self, device_type: str) -> bool:
+        if self.precision != "autocast" or self.compute_dtype not in {torch.float16, torch.bfloat16}:
+            return False
+        # Only skip redundant autocast for uniform-BF16 deterministic decoders.
+        # FP16 MUST retain autocast so PixelNorm's x**2 runs in FP32 and cannot
+        # overflow 65504 to +inf (silent all-zero collapse).
+        if (
+            self.skip_redundant_video_autocast
+            and device_type == "cuda"
+            and self.compute_dtype == torch.bfloat16
+            and not bool(getattr(self.video.decoder, "timestep_conditioning", False))
+        ):
+            params = tuple(self.video.decoder.parameters())
+            if params and all(p.dtype == torch.bfloat16 for p in params):
+                return False
+        return True
 
     @staticmethod
     def _shapes(request: DiffusionRequest) -> tuple[VideoLatentShape, AudioLatentShape]:
@@ -301,33 +394,50 @@ class LTXMediaDecoder(MultiModalLatentDecoder):
             latent = latent[:, : patchifier.get_token_count(video_shape)]
         video_latent = patchifier.unpatchify(latent, video_shape)
         audio_latent = AudioPatchifier(1).unpatchify(states["audio"].latent, audio_shape)
-        with torch.autocast(
-            device_type=video_latent.device.type,
-            dtype=self.compute_dtype,
-            enabled=self.precision == "autocast" and self.compute_dtype in {torch.float16, torch.bfloat16},
-        ):
-            chunks = list(
-                self.video.decoder.decode_video(
-                    video_latent.to(dtype=self.compute_dtype),
-                    self.tiling,
-                    generator=(
-                        generator
-                        if generator is not None
-                        else torch.Generator(device=video_latent.device).manual_seed(request.sampling.seed)
-                    ),
-                )
-            )
-            if not chunks:
-                raise RuntimeError("LTX video decoder returned no chunks")
-            decoded_audio = decode_audio(
-                audio_latent.to(dtype=self.compute_dtype),
-                self.audio.decoder,
-                self.vocoder.vocoder,
-            )
+
+        video_in = video_latent.to(dtype=self.compute_dtype)
+        audio_in = audio_latent.to(dtype=self.compute_dtype)
+        video_gen = (
+            generator
+            if generator is not None
+            else torch.Generator(device=video_latent.device).manual_seed(request.sampling.seed)
+        )
+        use_video_autocast = self._use_video_autocast(video_latent.device.type)
+
+        if self.parallel_audio and video_latent.device.type == "cuda" and not torch.is_grad_enabled():
+            main_stream = torch.cuda.current_stream(video_latent.device)
+            audio_stream = self._get_audio_stream(video_latent.device)
+            audio_stream.wait_stream(main_stream)
+            audio_in.record_stream(audio_stream)
+            audio_waveform: torch.Tensor | None = None
+            try:
+                with torch.cuda.stream(audio_stream):
+                    audio_waveform, audio_sampling_rate = self._decode_audio_waveform(audio_in)
+                with torch.autocast(
+                    device_type="cuda",
+                    dtype=self.compute_dtype,
+                    enabled=use_video_autocast,
+                ):
+                    chunks = list(self.video.decoder.decode_video(video_in, self.tiling, generator=video_gen))
+            finally:
+                main_stream.wait_stream(audio_stream)
+                if audio_waveform is not None:
+                    audio_waveform.record_stream(main_stream)
+        else:
+            with torch.autocast(
+                device_type=video_latent.device.type,
+                dtype=self.compute_dtype,
+                enabled=use_video_autocast,
+            ):
+                chunks = list(self.video.decoder.decode_video(video_in, self.tiling, generator=video_gen))
+            audio_waveform, audio_sampling_rate = self._decode_audio_waveform(audio_in)
+
+        if not chunks:
+            raise RuntimeError("LTX video decoder returned no chunks")
         return {
-            "video": torch.cat(chunks, dim=0),
-            "audio": decoded_audio.waveform,
-            "audio_sampling_rate": decoded_audio.sampling_rate,
+            "video": chunks[0] if len(chunks) == 1 else torch.cat(chunks, dim=0),
+            "audio": audio_waveform,
+            "audio_sampling_rate": audio_sampling_rate,
         }
 
 
@@ -409,7 +519,7 @@ class LTXVideoMediaDecoder(MultiModalLatentDecoder):
             chunks = list(self.video.decoder.decode_video(video_latent, self.tiling, generator=generator))
         if not chunks:
             raise RuntimeError("LTX-Video decoder returned no chunks")
-        video = torch.cat(chunks, dim=0)
+        video = chunks[0] if len(chunks) == 1 else torch.cat(chunks, dim=0)
         if (latent_height, latent_width) != (request.height, request.width):
             dtype = video.dtype
             video = (
@@ -511,7 +621,7 @@ class LTXTensorVideoCodec:
             )
         if not chunks:
             raise RuntimeError("LTX tensor decoder returned no chunks")
-        video = torch.cat(chunks, dim=2)
+        video = chunks[0] if len(chunks) == 1 else torch.cat(chunks, dim=2)
         if request is not None:
             decoded_height, decoded_width = video.shape[-2:]
             if decoded_height < request.height or decoded_width < request.width:
@@ -642,6 +752,53 @@ def _maybe_enable_vae_channels_last_3d(
         converter()
 
 
+def _resolve_vae_tiling(context: ComponentBuildContext) -> TilingConfig | None:
+    """Resolve VAE tiling, allowing policy ``vae_tiled=False`` to override recipe tiling."""
+    if "vae_tiled" in context.component_options:
+        if context.component_options["vae_tiled"] is False:
+            return None
+    elif "vae_tiled" in context.policy.options and context.policy.options["vae_tiled"] is False:
+        return None
+    return _tiling_from_options(context.component_options)
+
+
+def _resolve_vae_compile_mode(context: ComponentBuildContext) -> str | None:
+    raw = context.component_options.get("vae_compile", context.policy.options.get("vae_compile", False))
+    if raw is None or raw is False:
+        return None
+    if raw is True:
+        return str(
+            context.component_options.get(
+                "vae_compile_mode",
+                context.policy.options.get("vae_compile_mode", "default"),
+            )
+        )
+    normalized = str(raw).strip().casefold()
+    if normalized in {"", "false", "0", "off", "none", "disabled"}:
+        return None
+    return str(raw).strip()
+
+
+def _maybe_enable_vae_compile(
+    module: torch.nn.Module,
+    context: ComponentBuildContext,
+    *,
+    dynamic: bool | None = None,
+) -> bool:
+    """Enable ``channels_last_3d`` + ``torch.compile`` on deterministic LTX 3D VAE decoders."""
+    mode = _resolve_vae_compile_mode(context)
+    if mode is None or context.policy.offload.mode is not OffloadMode.NONE or context.policy.device.type != "cuda":
+        return False
+    if not bool(getattr(module, "_channels_last_3d", False)):
+        converter = getattr(module, "enable_channels_last_3d", None)
+        if callable(converter):
+            converter()
+    compiler = getattr(module, "enable_compile", None)
+    if callable(compiler):
+        return bool(compiler(mode=mode, dynamic=dynamic))
+    return False
+
+
 def _resolve_vae_decode_autocast(context: ComponentBuildContext) -> bool:
     return bool(
         context.component_options.get(
@@ -684,17 +841,48 @@ def build_ltx_media_decoder(context: ComponentBuildContext) -> LTXMediaDecoder:
         raise TypeError("LTX audio decoder construction returned an unexpected module")
     if not isinstance(vocoder, LTXVocoderModule):
         raise TypeError("LTX vocoder construction returned an unexpected module")
+    tiling = _resolve_vae_tiling(context)
     _maybe_enable_vae_channels_last_3d(video.decoder, context)
+    compiled = _maybe_enable_vae_compile(video.decoder, context, dynamic=(True if tiling is not None else None))
+    resident_cuda = context.policy.offload.mode is OffloadMode.NONE and context.policy.device.type == "cuda"
+    parallel_audio = bool(
+        context.component_options.get(
+            "vae_parallel_audio",
+            context.policy.options.get("vae_parallel_audio", compiled and resident_cuda),
+        )
+    )
+    audio_cuda_graph = bool(
+        context.component_options.get(
+            "vae_audio_cuda_graph",
+            context.policy.options.get("vae_audio_cuda_graph", compiled and resident_cuda),
+        )
+    )
+    skip_redundant_video_autocast = bool(
+        context.component_options.get(
+            "vae_skip_redundant_autocast",
+            context.policy.options.get("vae_skip_redundant_autocast", compiled),
+        )
+    )
+    compile_vocoder = bool(
+        context.component_options.get(
+            "vae_compile_vocoder",
+            context.policy.options.get("vae_compile_vocoder", compiled and resident_cuda),
+        )
+    )
     return LTXMediaDecoder(
         video,
         audio,
         vocoder,
         compute_dtype=context.policy.dtype,
-        tiling=_tiling_from_options(context.component_options),
+        tiling=tiling,
         precision=str(context.component_options.get("precision", "autocast")),
         spatial_divisor=int(context.component_options.get("spatial_divisor", 1)),
         strip_reference_tokens=bool(context.component_options.get("strip_reference_tokens", False)),
         continue_generator=bool(context.component_options.get("continue_generator", False)),
+        skip_redundant_video_autocast=skip_redundant_video_autocast,
+        parallel_audio=parallel_audio and resident_cuda,
+        audio_cuda_graph=audio_cuda_graph and resident_cuda,
+        compile_vocoder=compile_vocoder and resident_cuda,
     )
 
 
@@ -703,11 +891,13 @@ def build_ltx_video_media_decoder(context: ComponentBuildContext) -> LTXVideoMed
         context.require_checkpoint("weights"),
         context.policy,
     )
+    tiling = _resolve_vae_tiling(context)
     _maybe_enable_vae_channels_last_3d(video.decoder, context)
+    _maybe_enable_vae_compile(video.decoder, context, dynamic=(True if tiling is not None else None))
     raw_scale = context.component_options.get("first_stage_scale")
     return LTXVideoMediaDecoder(
         video,
-        tiling=_tiling_from_options(context.component_options),
+        tiling=tiling,
         first_stage_scale=None if raw_scale is None else float(raw_scale),
         latent_upsample_factor=int(context.component_options.get("latent_upsample_factor", 1)),
         tone_map_compression=float(context.component_options.get("tone_map_compression", 0.0)),
@@ -722,12 +912,14 @@ def build_ltx_tensor_video_codec(context: ComponentBuildContext) -> LTXTensorVid
     checkpoint = context.require_checkpoint("weights")
     encoder = load_ltx_video_encoder_checkpoint(checkpoint, context.policy)
     decoder = load_ltx_video_decoder_checkpoint(checkpoint, context.policy)
+    tiling = _resolve_vae_tiling(context)
     _maybe_enable_vae_channels_last_3d(encoder.encoder, context)
     _maybe_enable_vae_channels_last_3d(decoder.decoder, context)
+    _maybe_enable_vae_compile(decoder.decoder, context, dynamic=(True if tiling is not None else None))
     return LTXTensorVideoCodec(
         encoder,
         decoder,
-        tiling=_tiling_from_options(context.component_options),
+        tiling=tiling,
         compute_device=context.policy.device,
         compute_dtype=context.policy.dtype,
         decode_autocast=_resolve_vae_decode_autocast(context),

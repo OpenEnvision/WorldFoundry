@@ -319,24 +319,35 @@ class LTXModel(torch.nn.Module):
         cross_only: bool = False,
         backend_options: Mapping[str, object] | None = None,
         dense_blocks: Iterable[int] = (),
+        dense_backend: str | None = None,
     ) -> int:
         """Bind an attention backend to eligible LTX ``Attention`` modules.
 
         When ``self_only=True`` and ``backend="sol_attn"``, binds every self-attention
         module with ``dim_head == 128`` (e.g. LTX-2 video ``attn1``) while leaving
         cross-attention, 64-dim audio attention, and any ``dense_blocks`` indices on
-        exact SDPA.
+        their exact dense backend (preserving e.g. ``flash_attention_3`` or defaulting
+        to ``"torch"``).
         """
         if self_only and cross_only:
             raise ValueError("self_only and cross_only cannot both be True")
 
-        from .attention import Attention
+        from .attention import _APPROXIMATE_ATTENTION_BACKENDS, Attention
 
         normalized: str | None = None
         if backend is not None:
             from worldfoundry.core.attention.backends.probe import normalize_attention_backend
 
             normalized = normalize_attention_backend(str(backend))
+
+        resolved_dense_backend: str | None = dense_backend
+        if resolved_dense_backend is None and backend_options and "dense_backend" in backend_options:
+            raw_opt_dense = backend_options["dense_backend"]
+            resolved_dense_backend = None if raw_opt_dense is None else str(raw_opt_dense)
+        if resolved_dense_backend is not None:
+            from worldfoundry.core.attention.backends.probe import normalize_attention_backend
+
+            resolved_dense_backend = normalize_attention_backend(resolved_dense_backend)
 
         num_blocks = len(self.transformer_blocks)
         dense_indices: set[int] = set()
@@ -354,6 +365,14 @@ class LTXModel(torch.nn.Module):
                     if isinstance(child, Attention):
                         dense_modules.add(id(child))
 
+        effective_options: Mapping[str, object] | None = backend_options
+        if (
+            resolved_dense_backend is not None
+            and normalized in {"sol_attn", "cudnn_fp8"}
+            and (backend_options is None or "dense_backend" not in backend_options)
+        ):
+            effective_options = {**(backend_options or {}), "dense_backend": resolved_dense_backend}
+
         configured = 0
         for child in self.modules():
             if not isinstance(child, Attention):
@@ -365,9 +384,15 @@ class LTXModel(torch.nn.Module):
             if self_only and normalized == "sol_attn" and child.dim_head != 128:
                 continue
             if id(child) in dense_modules:
-                child.set_attention_backend("torch" if normalized is not None else None)
+                if resolved_dense_backend is not None:
+                    child.set_attention_backend(resolved_dense_backend)
+                elif normalized is None:
+                    child.set_attention_backend(None)
+                elif child.attention_backend in {None, "torch", "auto", *_APPROXIMATE_ATTENTION_BACKENDS}:
+                    child.set_attention_backend(child._dense_attention_backend or "torch")
+                # Otherwise preserve an existing exact dense backend (e.g. flash_attention_3).
                 continue
-            child.set_attention_backend(normalized, backend_options=backend_options)
+            child.set_attention_backend(normalized, backend_options=effective_options)
             configured += 1
         if backend is not None and configured == 0:
             raise ValueError(

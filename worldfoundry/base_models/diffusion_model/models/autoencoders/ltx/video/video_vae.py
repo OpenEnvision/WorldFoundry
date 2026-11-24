@@ -742,6 +742,9 @@ class VideoDecoder(nn.Module):
             )
             self.last_scale_shift_table = nn.Parameter(torch.empty(2, feature_channels))
         self._channels_last_3d: bool = False
+        self._compiled_forward: Callable[[torch.Tensor], torch.Tensor] | None = None
+        self._compiled_decode_rgb: Callable[[torch.Tensor], torch.Tensor] | None = None
+        self._compile_mode: str | None = None
 
     def enable_channels_last_3d(self) -> int:
         """Convert Conv3d weights to ``channels_last_3d`` (NDHWC) for Tensor Core acceleration."""
@@ -750,6 +753,81 @@ class VideoDecoder(nn.Module):
         report = convert_convolution_weight_layouts(self, conv3d=True)
         self._channels_last_3d = report.conv3d_converted > 0
         return report.conv3d_converted
+
+    def _has_stochastic_ops(self) -> bool:
+        """Return True when timestep conditioning or spatial noise injection consumes ``generator``."""
+        if self.timestep_conditioning:
+            return True
+        return any(bool(getattr(child, "inject_noise", False)) for child in self.modules())
+
+    def _has_vram_managed_submodules(self) -> bool:
+        """Return True when submodules use dynamic CPU-offload VRAM management wrappers."""
+        return any(getattr(child, "computation_device", None) is not None for child in self.modules())
+
+    def _call_compiled(
+        self,
+        fn: Callable[[torch.Tensor], torch.Tensor],
+        sample: torch.Tensor,
+    ) -> torch.Tensor:
+        """Invoke a compiled decoder callable safely across CUDAGraph and non-CUDAGraph modes."""
+        uses_cudagraphs = self._compile_mode in {"reduce-overhead", "max-autotune"}
+        if uses_cudagraphs:
+            mark_step = getattr(getattr(torch, "compiler", None), "cudagraph_mark_step_begin", None)
+            if callable(mark_step):
+                mark_step()
+        out = fn(sample)
+        return out.clone() if uses_cudagraphs else out
+
+    def _forward_deterministic(self, sample: torch.Tensor) -> torch.Tensor:
+        """Deterministic decode path (no timestep conditioning or noise injection) for compilation."""
+        output_dtype = sample.dtype
+        weights_dtype = next(self.parameters()).dtype
+        sample = sample.to(weights_dtype)
+        if self._channels_last_3d and sample.ndim == 5 and sample.device.type == "cuda":
+            sample = sample.contiguous(memory_format=torch.channels_last_3d)
+        sample = self.per_channel_statistics.un_normalize(sample)
+        sample = self.conv_in(sample, causal=self.causal)
+        for up_block in self.up_blocks:
+            if isinstance(up_block, UNetMidBlock3D):
+                sample = up_block(sample, causal=self.causal, timestep=None, generator=None)
+            elif isinstance(up_block, ResnetBlock3D):
+                sample = up_block(sample, causal=self.causal, generator=None)
+            else:
+                sample = up_block(sample, causal=self.causal)
+        sample = self.conv_norm_out(sample)
+        sample = self.conv_act(sample)
+        sample = self.conv_out(sample, causal=self.causal)
+        sample = unpatchify(sample, patch_size_hw=self.patch_size, patch_size_t=1)
+        return sample.to(output_dtype)
+
+    def _decode_rgb_deterministic(self, sample: torch.Tensor) -> torch.Tensor:
+        """Deterministic untiled decode fused with ``[c, f, h, w] -> [f, h, w, c]`` RGB scaling."""
+        frames = self._forward_deterministic(sample)
+        video = frames[0].permute(1, 2, 3, 0)
+        return (video * 0.5 + 0.5).clamp(0.0, 1.0)
+
+    def enable_compile(
+        self,
+        *,
+        mode: str = "default",
+        dynamic: bool | None = None,
+    ) -> bool:
+        """Compile deterministic ``VideoDecoder`` forward + RGB post-process with ``torch.compile``.
+
+        Returns ``False`` (leaving eager execution intact) when the decoder relies on
+        ``timestep_conditioning`` or stochastic ``inject_noise`` blocks.
+        """
+        if self._has_stochastic_ops() or self._has_vram_managed_submodules():
+            return False
+        if mode not in {"default", "reduce-overhead", "max-autotune", "max-autotune-no-cudagraphs"}:
+            raise ValueError(f"unsupported VideoDecoder compile mode: {mode!r}")
+        from worldfoundry.core.platform.compile_cache import configure_persistent_compile_cache
+
+        configure_persistent_compile_cache(namespace="ltx-video-vae")
+        self._compiled_forward = torch.compile(self._forward_deterministic, mode=mode, dynamic=dynamic)
+        self._compiled_decode_rgb = torch.compile(self._decode_rgb_deterministic, mode=mode, dynamic=dynamic)
+        self._compile_mode = mode
+        return True
 
     def forward(
         self,
@@ -769,10 +847,21 @@ class VideoDecoder(nn.Module):
             Note: First frame is removed after temporal upsampling regardless of causal mode.
             When causal=False, allows future frame dependencies in convolutions but maintains same output shape.
         """
+        if (
+            self._compiled_forward is not None
+            and timestep is None
+            and sample.device.type == "cuda"
+            and not torch.is_grad_enabled()
+            and not self.training
+        ):
+            return self._call_compiled(self._compiled_forward, sample)
+
         batch_size = sample.shape[0]
         output_dtype = sample.dtype
         weights_dtype = next(self.parameters()).dtype
         sample = sample.to(weights_dtype)
+        if self._channels_last_3d and sample.ndim == 5 and sample.device.type == "cuda":
+            sample = sample.contiguous(memory_format=torch.channels_last_3d)
 
         # Add noise if timestep conditioning is enabled
         if self.timestep_conditioning:
@@ -990,6 +1079,13 @@ class VideoDecoder(nn.Module):
         if tiling_config is not None:
             for frames in self.tiled_decode(latent, tiling_config, generator=generator):
                 yield to_rgb(frames)
+        elif (
+            self._compiled_decode_rgb is not None
+            and latent.device.type == "cuda"
+            and not torch.is_grad_enabled()
+            and not self.training
+        ):
+            yield self._call_compiled(self._compiled_decode_rgb, latent)
         else:
             decoded = self(latent, generator=generator)
             yield to_rgb(decoded)
@@ -1035,8 +1131,20 @@ class VideoDecoder(nn.Module):
 
         weights = torch.zeros_like(buffer)
 
+        use_compiled = (
+            self._compiled_forward is not None
+            and timestep is None
+            and latent.device.type == "cuda"
+            and not torch.is_grad_enabled()
+            and not self.training
+        )
         for tile in group_tiles:
-            decoded_tile = self.forward(latent[tile.in_coords], timestep, generator)
+            tile_in = latent[tile.in_coords]
+            decoded_tile = (
+                self._call_compiled(self._compiled_forward, tile_in)
+                if use_compiled and self._compiled_forward is not None
+                else self.forward(tile_in, timestep, generator)
+            )
             mask = tile.blend_mask.to(device=buffer.device, dtype=buffer.dtype)
             temporal_offset = tile.out_coords[2].start - temporal_slice.start
             # Use the tile's output coordinate length, not the decoded tile's length,
