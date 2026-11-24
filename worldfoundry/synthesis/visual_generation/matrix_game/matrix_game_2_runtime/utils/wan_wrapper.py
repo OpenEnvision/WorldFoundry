@@ -121,6 +121,9 @@ class WanDiffusionWrapper(torch.nn.Module):
         self._block_graph_warmup: int = 1
         self._block_graph_max_runners: int = 4
         self._block_graph_runners: OrderedDict[tuple, object] = OrderedDict()
+        self._attention_backend: str = "auto"
+        self._exact_norms: bool = True
+        self._sinusoid_freqs_cache: dict[torch.device, torch.Tensor] = {}
         self._master_t_freqs: torch.Tensor | None = None
         self._master_action_freqs: tuple[torch.Tensor, torch.Tensor] | None = None
         self._shared_action_freqs: tuple[torch.Tensor, torch.Tensor] | None = None
@@ -136,6 +139,76 @@ class WanDiffusionWrapper(torch.nn.Module):
         if getattr(self, "_block_graph_runners", None):
             self.invalidate_block_cuda_graphs()
         return super()._apply(fn)
+
+    def set_attention_backend(self, backend: str | None) -> None:
+        """Select self-attention backend for fast block execution (``auto``, ``flash_attention_3``, ``torch``)."""
+        resolved = "auto" if backend is None else str(backend).strip().casefold()
+        if resolved in {"fa3", "flash3", "flash_attn_3", "flash_attention_3"}:
+            resolved = "flash_attention_3"
+        elif resolved in {"sdpa", "torch"}:
+            resolved = "torch"
+        elif resolved != "auto":
+            raise ValueError(f"Unsupported Matrix-Game-2 attention backend: {backend!r}")
+        if resolved != self._attention_backend:
+            self._attention_backend = resolved
+            self._exact_norms = resolved != "flash_attention_3"
+            if getattr(self, "_block_graph_runners", None):
+                self.invalidate_block_cuda_graphs()
+
+    def _resolved_attention_backend(self, device: torch.device) -> str:
+        from .fast_kernels import hopper_fa3_usable
+
+        if self._attention_backend == "flash_attention_3":
+            return "flash_attention_3" if hopper_fa3_usable(device) else "torch"
+        # Default "auto" and "torch" preserve >60 dB / PSNR=inf lossless parity in BF16.
+        return "torch"
+
+    @staticmethod
+    def _canonical_contiguous(t: torch.Tensor) -> torch.Tensor:
+        expected = []
+        acc = 1
+        for dim in reversed(t.shape):
+            expected.append(acc)
+            acc *= dim
+        expected.reverse()
+        if tuple(t.stride()) == tuple(expected):
+            return t
+        return t.clone(memory_format=torch.contiguous_format)
+
+    def _get_sinusoid_freqs(self, device: torch.device) -> torch.Tensor:
+        cached = self._sinusoid_freqs_cache.get(device)
+        if cached is None:
+            half_dim = int(self.model.freq_dim) // 2
+            cached = torch.pow(
+                10000.0,
+                -torch.arange(half_dim, device=device, dtype=torch.float64).div(half_dim),
+            )
+            self._sinusoid_freqs_cache[device] = cached
+        return cached
+
+    def _ensure_crossattn_cache_initialized(
+        self,
+        visual_context: torch.Tensor,
+        crossattn_cache: list[dict],
+    ) -> None:
+        """Populate MG2 image cross-attention K/V cache once per session."""
+        if crossattn_cache and crossattn_cache[0].get("is_init", False):
+            return
+        context = self.model.img_emb(visual_context)
+        batch = int(context.shape[0])
+        for block, slot in zip(self.model.blocks, crossattn_cache, strict=False):
+            ca = block.cross_attn
+            n, d = int(ca.num_heads), int(ca.head_dim)
+            k = ca.norm_k(ca.k(context)).view(batch, -1, n, d)
+            v = ca.v(context).view(batch, -1, n, d)
+            with torch.inference_mode(False):
+                k_buf = torch.empty(k.shape, dtype=k.dtype, device=k.device)
+                v_buf = torch.empty(v.shape, dtype=v.dtype, device=v.device)
+                k_buf.copy_(k)
+                v_buf.copy_(v)
+            slot["k"] = k_buf
+            slot["v"] = v_buf
+            slot["is_init"] = True
 
     def enable_block_cuda_graph(self, *, warmup: int = 1) -> None:
         """Enable virtual-window steady-state CUDA Graph capture for causal block steps."""
@@ -171,6 +244,7 @@ class WanDiffusionWrapper(torch.nn.Module):
             failures += int(rep.get("capture_failed", 0))
         return {
             "enabled": self._block_graph_enabled,
+            "attention_backend": self._attention_backend,
             "runner_count": len(self._block_graph_runners),
             "capture": captures,
             "replay": replays,
@@ -185,18 +259,25 @@ class WanDiffusionWrapper(torch.nn.Module):
                 self.model.freqs = self.model.freqs.to(device)
             c = self.model.freqs.shape[1]
             t_dim = c - 2 * (c // 3)
-            if self._master_t_freqs is None or self._master_t_freqs.device != device:
+            if self._master_t_freqs is None:
                 self._master_t_freqs = self.model.freqs[:, :t_dim].clone()
+            elif self._master_t_freqs.device != device:
+                self._master_t_freqs = self._master_t_freqs.to(device)
         blocks = getattr(self.model, "blocks", ())
         for block in blocks:
             am = getattr(block, "action_model", None)
             if am is None or not hasattr(am, "freqs_cos"):
                 continue
-            if self._master_action_freqs is None or self._master_action_freqs[0].device != device:
+            if self._master_action_freqs is None:
                 cos_gpu = am.freqs_cos.to(device=device).contiguous()
                 sin_gpu = am.freqs_sin.to(device=device).contiguous()
                 self._master_action_freqs = (cos_gpu.clone(), sin_gpu.clone())
                 self._shared_action_freqs = (cos_gpu, sin_gpu)
+            elif self._master_action_freqs[0].device != device:
+                master_cos = self._master_action_freqs[0].to(device=device).contiguous()
+                master_sin = self._master_action_freqs[1].to(device=device).contiguous()
+                self._master_action_freqs = (master_cos, master_sin)
+                self._shared_action_freqs = (master_cos.clone(), master_sin.clone())
             am.freqs_cos, am.freqs_sin = self._shared_action_freqs
 
     def _restore_master_rope_tables(self) -> None:
@@ -256,10 +337,11 @@ class WanDiffusionWrapper(torch.nn.Module):
             scratch = self._kv_roll_scratch.get(scratch_key)
             if scratch is None:
                 k0 = kv_cache[0]["k"]
-                scratch = (
-                    torch.empty((k0.shape[0], rolled, k0.shape[2], k0.shape[3]), dtype=k0.dtype, device=k0.device),
-                    torch.empty((k0.shape[0], rolled, k0.shape[2], k0.shape[3]), dtype=k0.dtype, device=k0.device),
-                )
+                with torch.inference_mode(False):
+                    scratch = (
+                        torch.empty((k0.shape[0], rolled, k0.shape[2], k0.shape[3]), dtype=k0.dtype, device=k0.device),
+                        torch.empty((k0.shape[0], rolled, k0.shape[2], k0.shape[3]), dtype=k0.dtype, device=k0.device),
+                    )
                 self._kv_roll_scratch[scratch_key] = scratch
             k_tmp, v_tmp = scratch
             for slot in kv_cache:
@@ -276,14 +358,19 @@ class WanDiffusionWrapper(torch.nn.Module):
                 m_key = ("mouse", m0.shape[0], action_rolled, m0.dtype, m0.device)
                 m_scratch = self._kv_roll_scratch.get(m_key)
                 if m_scratch is None:
-                    m_scratch = (
-                        torch.empty(
-                            (m0.shape[0], action_rolled, m0.shape[2], m0.shape[3]), dtype=m0.dtype, device=m0.device
-                        ),
-                        torch.empty(
-                            (m0.shape[0], action_rolled, m0.shape[2], m0.shape[3]), dtype=m0.dtype, device=m0.device
-                        ),
-                    )
+                    with torch.inference_mode(False):
+                        m_scratch = (
+                            torch.empty(
+                                (m0.shape[0], action_rolled, m0.shape[2], m0.shape[3]),
+                                dtype=m0.dtype,
+                                device=m0.device,
+                            ),
+                            torch.empty(
+                                (m0.shape[0], action_rolled, m0.shape[2], m0.shape[3]),
+                                dtype=m0.dtype,
+                                device=m0.device,
+                            ),
+                        )
                     self._kv_roll_scratch[m_key] = m_scratch
                 mk_tmp, mv_tmp = m_scratch
                 for block, slot in zip(self.model.blocks, kv_cache_mouse, strict=False):
@@ -299,18 +386,19 @@ class WanDiffusionWrapper(torch.nn.Module):
                 kb_key = ("keyboard", kb0.shape[0], action_rolled, kb0.dtype, kb0.device)
                 kb_scratch = self._kv_roll_scratch.get(kb_key)
                 if kb_scratch is None:
-                    kb_scratch = (
-                        torch.empty(
-                            (kb0.shape[0], action_rolled, kb0.shape[2], kb0.shape[3]),
-                            dtype=kb0.dtype,
-                            device=kb0.device,
-                        ),
-                        torch.empty(
-                            (kb0.shape[0], action_rolled, kb0.shape[2], kb0.shape[3]),
-                            dtype=kb0.dtype,
-                            device=kb0.device,
-                        ),
-                    )
+                    with torch.inference_mode(False):
+                        kb_scratch = (
+                            torch.empty(
+                                (kb0.shape[0], action_rolled, kb0.shape[2], kb0.shape[3]),
+                                dtype=kb0.dtype,
+                                device=kb0.device,
+                            ),
+                            torch.empty(
+                                (kb0.shape[0], action_rolled, kb0.shape[2], kb0.shape[3]),
+                                dtype=kb0.dtype,
+                                device=kb0.device,
+                            ),
+                        )
                     self._kv_roll_scratch[kb_key] = kb_scratch
                 kk_tmp, kv_tmp = kb_scratch
                 for block, slot in zip(self.model.blocks, kv_cache_keyboard, strict=False):
@@ -336,26 +424,29 @@ class WanDiffusionWrapper(torch.nn.Module):
         sync_gpu_tensors: bool = False,
     ) -> None:
         for slot in kv_cache:
-            if "_host_global_end_index" in slot:
+            has_host = "_host_global_end_index" in slot
+            if has_host:
                 slot["_host_global_end_index"] = main_global
                 slot["_host_local_end_index"] = main_local
-            if sync_gpu_tensors:
+            if sync_gpu_tensors or not has_host:
                 slot["global_end_index"].fill_(main_global)
                 slot["local_end_index"].fill_(main_local)
         if kv_cache_mouse:
             for slot in kv_cache_mouse:
-                if "_host_global_end_index" in slot:
+                has_host = "_host_global_end_index" in slot
+                if has_host:
                     slot["_host_global_end_index"] = action_global
                     slot["_host_local_end_index"] = action_local
-                if sync_gpu_tensors:
+                if sync_gpu_tensors or not has_host:
                     slot["global_end_index"].fill_(action_global)
                     slot["local_end_index"].fill_(action_local)
         if kv_cache_keyboard:
             for slot in kv_cache_keyboard:
-                if "_host_global_end_index" in slot:
+                has_host = "_host_global_end_index" in slot
+                if has_host:
                     slot["_host_global_end_index"] = action_global
                     slot["_host_local_end_index"] = action_local
-                if sync_gpu_tensors:
+                if sync_gpu_tensors or not has_host:
                     slot["global_end_index"].fill_(action_global)
                     slot["local_end_index"].fill_(action_local)
 
@@ -451,6 +542,8 @@ class WanDiffusionWrapper(torch.nn.Module):
                 self._block_graph_enabled
                 and noisy_image_or_video.is_cuda
                 and not self.model.training
+                and not torch.is_grad_enabled()
+                and input_timestep.ndim == 2
                 and current_start is not None
                 and crossattn_cache is not None
                 and crossattn_cache[0].get("is_init", False)
@@ -469,13 +562,18 @@ class WanDiffusionWrapper(torch.nn.Module):
                         break
                 virtual_start_frame_cand = local_attn_size - block_frames
                 kv_cache_size = int(kv_cache[0]["k"].shape[1])
-                cached_local = int(kv_cache[0].get("_host_local_end_index", 0))
+                cached_local_host = kv_cache[0].get("_host_local_end_index")
+                cached_local = (
+                    int(cached_local_host)
+                    if cached_local_host is not None
+                    else int(kv_cache[0]["local_end_index"].item())
+                )
                 if (
                     local_attn_size > block_frames
                     and virtual_start_frame_cand >= action_windows_size
                     and kv_cache_size == local_attn_size * frame_seqlen
                     and start_frame >= virtual_start_frame_cand
-                    and cached_local == kv_cache_size
+                    and cached_local >= virtual_start_frame_cand * frame_seqlen
                     and "keyboard_cond" in conditional_dict
                     and conditional_dict["keyboard_cond"].shape[1] >= 4 * start_frame + 1 + 4 * (block_frames - 1)
                 ):
@@ -511,27 +609,21 @@ class WanDiffusionWrapper(torch.nn.Module):
                 self._sync_virtual_rope_window(start_frame, virtual_start_frame, block_frames)
 
                 # Extract the exact (4 * (local_attn_size - 1) + 1)-frame window consumed by
-                # ActionModule at virtual_start_frame. Clone into canonical contiguous layout so
-                # batch-dim=1 parent strides do not vary across blocks and trigger recaptures.
+                # ActionModule at virtual_start_frame in canonical contiguous layout so batch-dim=1
+                # parent strides do not vary across blocks and trigger recaptures.
                 win_start = 4 * (start_frame - virtual_start_frame)
                 win_end = 4 * start_frame + 1 + 4 * (block_frames - 1)
-                kb_win = conditional_dict["keyboard_cond"][:, win_start:win_end].clone(
-                    memory_format=torch.contiguous_format
-                )
+                kb_win = self._canonical_contiguous(conditional_dict["keyboard_cond"][:, win_start:win_end])
                 has_mouse = "mouse_cond" in conditional_dict and conditional_dict["mouse_cond"] is not None
                 mouse_win = (
-                    conditional_dict["mouse_cond"][:, win_start:win_end].clone(memory_format=torch.contiguous_format)
+                    self._canonical_contiguous(conditional_dict["mouse_cond"][:, win_start:win_end])
                     if has_mouse
                     else kb_win.new_empty(0)
                 )
-                cond_concat = conditional_dict["cond_concat"].clone(memory_format=torch.contiguous_format)
-                visual_context = conditional_dict["visual_context"].clone(memory_format=torch.contiguous_format)
+                cond_concat = self._canonical_contiguous(conditional_dict["cond_concat"])
 
                 # Copy cross-attention K/V into persistent static buffers so graph pointers
                 # remain stable even when a new session re-initializes crossattn_cache.
-                # Check tensor object identity AND mutation version (both first and last layer)
-                # plus explicit dirty flag so in-place reuse or Python id() recycling can never
-                # serve stale cross-attention features across sessions.
                 xkv_refs = (
                     crossattn_cache[0]["k"],
                     crossattn_cache[0]["v"],
@@ -552,9 +644,15 @@ class WanDiffusionWrapper(torch.nn.Module):
                     or self._static_crossattn_cache[0]["k"].dtype != crossattn_cache[0]["k"].dtype
                     or self._static_crossattn_cache[0]["k"].device != crossattn_cache[0]["k"].device
                 ):
-                    self._static_crossattn_cache = [
-                        {"k": slot["k"].clone(), "v": slot["v"].clone(), "is_init": True} for slot in crossattn_cache
-                    ]
+                    with torch.inference_mode(False):
+                        static_ca = []
+                        for slot in crossattn_cache:
+                            kb = torch.empty(slot["k"].shape, dtype=slot["k"].dtype, device=slot["k"].device)
+                            vb = torch.empty(slot["v"].shape, dtype=slot["v"].dtype, device=slot["v"].device)
+                            kb.copy_(slot["k"])
+                            vb.copy_(slot["v"])
+                            static_ca.append({"k": kb, "v": vb, "is_init": True})
+                    self._static_crossattn_cache = static_ca
                     self._last_xkv_refs = xkv_refs
                     self._last_xkv_versions = xkv_vers
                     self._static_crossattn_dirty = False
@@ -567,6 +665,8 @@ class WanDiffusionWrapper(torch.nn.Module):
                     self._static_crossattn_dirty = False
                 graph_crossattn_cache = self._static_crossattn_cache
 
+                resolved_attn = self._resolved_attention_backend(noisy_image_or_video.device)
+                exact_norms = self._exact_norms
                 runner_key = (
                     tuple((slot["k"].data_ptr(), slot["v"].data_ptr()) for slot in kv_cache),
                     tuple((slot["k"].data_ptr(), slot["v"].data_ptr()) for slot in graph_crossattn_cache),
@@ -579,6 +679,8 @@ class WanDiffusionWrapper(torch.nn.Module):
                     tuple(noisy_image_or_video.shape),
                     has_mouse,
                     virtual_current_start,
+                    resolved_attn,
+                    exact_norms,
                 )
                 runner = self._block_graph_runners.get(runner_key)
                 if runner is not None:
@@ -586,69 +688,41 @@ class WanDiffusionWrapper(torch.nn.Module):
                 else:
                     from worldfoundry.core.execution.graphs.inference_graph import InferenceCUDAGraphRunner
 
+                    from .fast_kernels import mg2_fast_steady_forward
+
                     model = self.model
                     device = noisy_image_or_video.device
-                    half_dim = int(model.freq_dim) // 2
-                    sinusoid_freqs = torch.pow(
-                        10000.0,
-                        -torch.arange(half_dim, device=device, dtype=torch.float64).div(half_dim),
-                    )
+                    sinusoid_freqs = self._get_sinusoid_freqs(device)
                     if model.freqs.device != device:
                         model.freqs = model.freqs.to(device)
-                    static_grid_sizes = torch.tensor(
-                        [
-                            block_frames,
-                            noisy_image_or_video.shape[-2] // ph,
-                            noisy_image_or_video.shape[-1] // pw,
-                        ],
-                        dtype=torch.long,
-                    )
-                    static_seq_lens = torch.tensor(
-                        [block_tokens] * int(noisy_image_or_video.shape[0]), dtype=torch.long
-                    )
+                    bound_attn = resolved_attn
+                    bound_exact = exact_norms
+                    bound_vstart = virtual_current_start
+                    bound_vend = virtual_end_tokens
+                    bound_astart = virtual_start_frame
+                    bound_aend = local_attn_size
 
-                    def _steady_block_forward(x_in, t_in, cc_in, vc_in, kb_in, m_in):
-                        x = torch.cat([x_in, cc_in], dim=1)
-                        x = model.patch_embedding(x)
-                        x = x.flatten(2).transpose(1, 2)
-
-                        pos = t_in.flatten().to(dtype=torch.float64)
-                        sinusoid = torch.outer(pos, sinusoid_freqs)
-                        t_emb = torch.cat([torch.cos(sinusoid), torch.sin(sinusoid)], dim=1).type_as(x)
-                        e = model.time_embedding(t_emb)
-                        e0 = model.time_projection(e).unflatten(1, (6, model.dim)).unflatten(dim=0, sizes=t_in.shape)
-                        context = model.img_emb(vc_in)
-
-                        block_kwargs = {
-                            "e": e0,
-                            "seq_lens": static_seq_lens,
-                            "grid_sizes": static_grid_sizes,
-                            "freqs": model.freqs,
-                            "context": context,
-                            "mouse_cond": m_in if has_mouse else None,
-                            "context_lens": None,
-                            "keyboard_cond": kb_in,
-                            "block_mask": model.block_mask,
-                            "block_mask_mouse": model.block_mask_mouse,
-                            "block_mask_keyboard": model.block_mask_keyboard,
-                            "use_rope_keyboard": model.use_rope_keyboard,
-                            "num_frame_per_block": model.num_frame_per_block,
-                            "current_start": virtual_current_start,
-                            "cache_start": virtual_current_start,
-                        }
-                        for block_index, block in enumerate(model.blocks):
-                            block_kwargs["kv_cache"] = kv_cache[block_index]
-                            block_kwargs["kv_cache_mouse"] = (
-                                None if kv_cache_mouse is None else kv_cache_mouse[block_index]
-                            )
-                            block_kwargs["kv_cache_keyboard"] = (
-                                None if kv_cache_keyboard is None else kv_cache_keyboard[block_index]
-                            )
-                            block_kwargs["crossattn_cache"] = graph_crossattn_cache[block_index]
-                            x = block(x, **block_kwargs)
-
-                        x = model.head(x, e.unflatten(dim=0, sizes=t_in.shape).unsqueeze(2))
-                        return model.unpatchify(x, static_grid_sizes)
+                    def _steady_block_forward(x_in, t_in, cc_in, kb_in, m_in):
+                        return mg2_fast_steady_forward(
+                            model,
+                            x_in,
+                            t_in,
+                            cc_in,
+                            kb_in,
+                            m_in if has_mouse else None,
+                            sinusoid_freqs=sinusoid_freqs,
+                            kv_cache=kv_cache,
+                            kv_cache_mouse=kv_cache_mouse,
+                            kv_cache_keyboard=kv_cache_keyboard,
+                            crossattn_cache=graph_crossattn_cache,
+                            local_start_index=bound_vstart,
+                            local_end_index=bound_vend,
+                            action_local_start=bound_astart,
+                            action_local_end=bound_aend,
+                            start_frame=bound_astart,
+                            attention_backend=bound_attn,
+                            exact_norms=bound_exact,
+                        )
 
                     runner = InferenceCUDAGraphRunner(
                         _steady_block_forward,
@@ -663,10 +737,9 @@ class WanDiffusionWrapper(torch.nn.Module):
                         evicted_runner.invalidate()
 
                 flow_pred = runner(
-                    noisy_image_or_video.to(model_dtype).clone(memory_format=torch.contiguous_format),
-                    input_timestep.to(dtype=torch.float32).clone(memory_format=torch.contiguous_format),
+                    self._canonical_contiguous(noisy_image_or_video.to(model_dtype)),
+                    self._canonical_contiguous(input_timestep.to(dtype=torch.float32)),
                     cond_concat,
-                    visual_context,
                     kb_win,
                     mouse_win,
                 )
@@ -685,18 +758,81 @@ class WanDiffusionWrapper(torch.nn.Module):
                     self._static_crossattn_dirty = True
                 if self._master_t_freqs is not None:
                     self._restore_master_rope_tables()
-                flow_pred = self.model(
-                    noisy_image_or_video.to(model_dtype),  # .permute(0, 2, 1, 3, 4),
-                    t=input_timestep,
-                    **conditional_dict,
-                    # seq_len=self.seq_len,
-                    kv_cache=kv_cache,
-                    kv_cache_mouse=kv_cache_mouse,
-                    kv_cache_keyboard=kv_cache_keyboard,
-                    crossattn_cache=crossattn_cache,
-                    current_start=current_start,
-                    cache_start=cache_start,
-                )  # .permute(0, 2, 1, 3, 4)
+                # Fast fused path for warmup chunks (e.g., Chunk 0) when CUDA acceleration is active,
+                # eliminating the 50 ms FA3-on-tiny-action-sequence bottleneck on initial chunks too.
+                use_fast_warmup = (
+                    self._block_graph_enabled
+                    and noisy_image_or_video.is_cuda
+                    and not self.model.training
+                    and not torch.is_grad_enabled()
+                    and input_timestep.ndim == 2
+                    and current_start is not None
+                    and crossattn_cache is not None
+                    and int(getattr(self.model, "sink_size", 0)) == 0
+                    and "keyboard_cond" in conditional_dict
+                    and "cond_concat" in conditional_dict
+                    and "visual_context" in conditional_dict
+                )
+                if use_fast_warmup:
+                    ph, pw = self.model.patch_size[1], self.model.patch_size[2]
+                    frame_seqlen = (noisy_image_or_video.shape[-2] // ph) * (noisy_image_or_video.shape[-1] // pw)
+                    block_frames = int(noisy_image_or_video.shape[2])
+                    block_tokens = block_frames * frame_seqlen
+                    start_frame = int(current_start) // frame_seqlen
+                    kv_cache_size = int(kv_cache[0]["k"].shape[1])
+                    if int(current_start) + block_tokens <= kv_cache_size:
+                        from .fast_kernels import mg2_fast_steady_forward
+
+                        self._ensure_crossattn_cache_initialized(conditional_dict["visual_context"], crossattn_cache)
+                        device = noisy_image_or_video.device
+                        if self.model.freqs.device != device:
+                            self.model.freqs = self.model.freqs.to(device)
+                        has_mouse = "mouse_cond" in conditional_dict and conditional_dict["mouse_cond"] is not None
+                        flow_pred = mg2_fast_steady_forward(
+                            self.model,
+                            noisy_image_or_video.to(model_dtype),
+                            input_timestep.to(dtype=torch.float32),
+                            conditional_dict["cond_concat"],
+                            conditional_dict["keyboard_cond"],
+                            conditional_dict["mouse_cond"] if has_mouse else None,
+                            sinusoid_freqs=self._get_sinusoid_freqs(device),
+                            kv_cache=kv_cache,
+                            kv_cache_mouse=kv_cache_mouse,
+                            kv_cache_keyboard=kv_cache_keyboard,
+                            crossattn_cache=crossattn_cache,
+                            local_start_index=int(current_start),
+                            local_end_index=int(current_start) + block_tokens,
+                            action_local_start=start_frame,
+                            action_local_end=start_frame + block_frames,
+                            start_frame=start_frame,
+                            attention_backend=self._resolved_attention_backend(device),
+                            exact_norms=self._exact_norms,
+                        )
+                        self._set_cache_positions(
+                            kv_cache,
+                            kv_cache_mouse,
+                            kv_cache_keyboard,
+                            main_global=int(current_start) + block_tokens,
+                            main_local=int(current_start) + block_tokens,
+                            action_global=start_frame + block_frames,
+                            action_local=start_frame + block_frames,
+                            sync_gpu_tensors=False,
+                        )
+                    else:
+                        use_fast_warmup = False
+                if not use_fast_warmup:
+                    flow_pred = self.model(
+                        noisy_image_or_video.to(model_dtype),  # .permute(0, 2, 1, 3, 4),
+                        t=input_timestep,
+                        **conditional_dict,
+                        # seq_len=self.seq_len,
+                        kv_cache=kv_cache,
+                        kv_cache_mouse=kv_cache_mouse,
+                        kv_cache_keyboard=kv_cache_keyboard,
+                        crossattn_cache=crossattn_cache,
+                        current_start=current_start,
+                        cache_start=cache_start,
+                    )  # .permute(0, 2, 1, 3, 4)
 
         else:
             flow_pred = self.model(

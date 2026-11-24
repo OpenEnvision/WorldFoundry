@@ -40,13 +40,23 @@ from worldfoundry.core.nn import activation_layer as get_activation_layer
 from worldfoundry.core.nn import normalization_layer as get_norm_layer
 
 from .camera_attention import (
+    hopper_fa3_usable,
     prepare_static_fp8_kv_arena,
     prepare_static_kv_arena,
+    prepare_static_kv_arena_bshd,
+    sequence_parallel_attention_bi_fa3,
     sequence_parallel_attention_bi_fp8,
     sequence_parallel_attention_txt,
     sequence_parallel_attention_vision,
 )
-from .camera_modulation import FinalLayer, apply_gate, modulate
+from .camera_modulation import (
+    FinalLayer,
+    apply_gate,
+    fused_layernorm_modulate,
+    fused_residual_dual_gate,
+    fused_residual_gate,
+    modulate,
+)
 from .hunyuanvideo_1_5_transformer import _fuse_three_linears, _run_hy15_mlp
 from .modules.embed_layers import ByT5Mapper, PatchEmbed, VisionProjection
 from .modules.token_refiner import SingleTokenRefiner
@@ -89,9 +99,8 @@ def _precompute_prope_mats(
         p = vm
         p_inv = vm_inv
 
-    target_dtype = viewmats.dtype
-    p = p.to(dtype=target_dtype).contiguous()
-    p_inv_t = p_inv.transpose(-1, -2).to(dtype=target_dtype).contiguous()
+    p = p.contiguous()
+    p_inv_t = p_inv.transpose(-1, -2).contiguous()
     p_t = p.transpose(-1, -2).contiguous()
     return p, p_inv_t, p_t
 
@@ -122,6 +131,191 @@ def _apply_fast_interleaved_rope(
 try:
     import triton
     import triton.language as tl
+    from triton.language.extra.cuda import libdevice as _libdevice
+
+    @triton.jit
+    def _hy_qkv_rmsnorm_rope_prope_kernel(
+        qkv_ptr,
+        q_w_ptr,
+        k_w_ptr,
+        cos_ptr,
+        sin_ptr,
+        p_ptr,
+        pinvt_ptr,
+        q_rope_ptr,
+        k_rope_ptr,
+        v_out_ptr,
+        q_prope_ptr,
+        k_prope_ptr,
+        v_prope_ptr,
+        seq_len,
+        tokens_per_cam,
+        num_cams,
+        qkv_row_stride,
+        cos_row_stride,
+        eps,
+        NUM_HEADS: tl.constexpr,
+        HEAD_DIM: tl.constexpr,
+        NUM_QUADS: tl.constexpr,
+    ):
+        """Fuse QKV split + per-head RMSNorm + interleaved FP32 RoPE + 4x4 SE(3) PRoPE in ONE pass.
+
+        Grid: ``(B * S, NUM_HEADS)``. Collapses 8 separate HBM-bound kernels
+        (``q_norm``, ``k_norm``, 3x ``_apply_prope_mat``, 2x RoPE, ``v.contiguous``)
+        into a single register-resident pass using 4-element PRoPE quads.
+        """
+        row = tl.program_id(0)
+        head = tl.program_id(1)
+        b_idx = row // seq_len
+        tok_idx = row % seq_len
+        cam_id = b_idx * num_cams + (tok_idx // tokens_per_cam)
+
+        quad = tl.arange(0, NUM_QUADS)
+        c0_col = quad * 4 + 0
+        c1_col = quad * 4 + 1
+        c2_col = quad * 4 + 2
+        c3_col = quad * 4 + 3
+
+        hidden = NUM_HEADS * HEAD_DIM
+        row_base = row.to(tl.int64) * qkv_row_stride
+        q_base = row_base + head.to(tl.int64) * HEAD_DIM
+        k_base = row_base + hidden + head.to(tl.int64) * HEAD_DIM
+        v_base = row_base + 2 * hidden + head.to(tl.int64) * HEAD_DIM
+
+        q0_raw = tl.load(qkv_ptr + q_base + c0_col)
+        q1_raw = tl.load(qkv_ptr + q_base + c1_col)
+        q2_raw = tl.load(qkv_ptr + q_base + c2_col)
+        q3_raw = tl.load(qkv_ptr + q_base + c3_col)
+
+        k0_raw = tl.load(qkv_ptr + k_base + c0_col)
+        k1_raw = tl.load(qkv_ptr + k_base + c1_col)
+        k2_raw = tl.load(qkv_ptr + k_base + c2_col)
+        k3_raw = tl.load(qkv_ptr + k_base + c3_col)
+
+        v0_raw = tl.load(qkv_ptr + v_base + c0_col)
+        v1_raw = tl.load(qkv_ptr + v_base + c1_col)
+        v2_raw = tl.load(qkv_ptr + v_base + c2_col)
+        v3_raw = tl.load(qkv_ptr + v_base + c3_col)
+
+        # Per-head FP32 RMSNorm + weight -> cast to v_dtype (exact HY15 RMSNorm semantics)
+        q0_f, q1_f, q2_f, q3_f = (
+            q0_raw.to(tl.float32),
+            q1_raw.to(tl.float32),
+            q2_raw.to(tl.float32),
+            q3_raw.to(tl.float32),
+        )
+        k0_f, k1_f, k2_f, k3_f = (
+            k0_raw.to(tl.float32),
+            k1_raw.to(tl.float32),
+            k2_raw.to(tl.float32),
+            k3_raw.to(tl.float32),
+        )
+
+        q_rstd = _libdevice.rsqrt(
+            tl.sum(q0_f * q0_f + q1_f * q1_f + q2_f * q2_f + q3_f * q3_f, axis=0) / HEAD_DIM + eps
+        )
+        k_rstd = _libdevice.rsqrt(
+            tl.sum(k0_f * k0_f + k1_f * k1_f + k2_f * k2_f + k3_f * k3_f, axis=0) / HEAD_DIM + eps
+        )
+
+        qw0 = tl.load(q_w_ptr + c0_col).to(tl.float32)
+        qw1 = tl.load(q_w_ptr + c1_col).to(tl.float32)
+        qw2 = tl.load(q_w_ptr + c2_col).to(tl.float32)
+        qw3 = tl.load(q_w_ptr + c3_col).to(tl.float32)
+        kw0 = tl.load(k_w_ptr + c0_col).to(tl.float32)
+        kw1 = tl.load(k_w_ptr + c1_col).to(tl.float32)
+        kw2 = tl.load(k_w_ptr + c2_col).to(tl.float32)
+        kw3 = tl.load(k_w_ptr + c3_col).to(tl.float32)
+
+        qn0 = (q0_f * q_rstd * qw0).to(v0_raw.dtype).to(tl.float32)
+        qn1 = (q1_f * q_rstd * qw1).to(v0_raw.dtype).to(tl.float32)
+        qn2 = (q2_f * q_rstd * qw2).to(v0_raw.dtype).to(tl.float32)
+        qn3 = (q3_f * q_rstd * qw3).to(v0_raw.dtype).to(tl.float32)
+        kn0 = (k0_f * k_rstd * kw0).to(v0_raw.dtype).to(tl.float32)
+        kn1 = (k1_f * k_rstd * kw1).to(v0_raw.dtype).to(tl.float32)
+        kn2 = (k2_f * k_rstd * kw2).to(v0_raw.dtype).to(tl.float32)
+        kn3 = (k3_f * k_rstd * kw3).to(v0_raw.dtype).to(tl.float32)
+
+        out_base = (row.to(tl.int64) * NUM_HEADS + head.to(tl.int64)) * HEAD_DIM
+
+        # 1. RoPE stream: interleaved pairs (0,1) and (2,3)
+        cs_base = tok_idx.to(tl.int64) * cos_row_stride
+        cos0 = tl.load(cos_ptr + cs_base + c0_col).to(tl.float32)
+        sin0 = tl.load(sin_ptr + cs_base + c0_col).to(tl.float32)
+        cos2 = tl.load(cos_ptr + cs_base + c2_col).to(tl.float32)
+        sin2 = tl.load(sin_ptr + cs_base + c2_col).to(tl.float32)
+
+        tl.store(q_rope_ptr + out_base + c0_col, (qn0 * cos0 - qn1 * sin0).to(v0_raw.dtype))
+        tl.store(q_rope_ptr + out_base + c1_col, (qn0 * sin0 + qn1 * cos0).to(v0_raw.dtype))
+        tl.store(q_rope_ptr + out_base + c2_col, (qn2 * cos2 - qn3 * sin2).to(v0_raw.dtype))
+        tl.store(q_rope_ptr + out_base + c3_col, (qn2 * sin2 + qn3 * cos2).to(v0_raw.dtype))
+
+        tl.store(k_rope_ptr + out_base + c0_col, (kn0 * cos0 - kn1 * sin0).to(v0_raw.dtype))
+        tl.store(k_rope_ptr + out_base + c1_col, (kn0 * sin0 + kn1 * cos0).to(v0_raw.dtype))
+        tl.store(k_rope_ptr + out_base + c2_col, (kn2 * cos2 - kn3 * sin2).to(v0_raw.dtype))
+        tl.store(k_rope_ptr + out_base + c3_col, (kn2 * sin2 + kn3 * cos2).to(v0_raw.dtype))
+
+        tl.store(v_out_ptr + out_base + c0_col, v0_raw)
+        tl.store(v_out_ptr + out_base + c1_col, v1_raw)
+        tl.store(v_out_ptr + out_base + c2_col, v2_raw)
+        tl.store(v_out_ptr + out_base + c3_col, v3_raw)
+
+        # 2. PRoPE stream: 4x4 SE(3) camera matrices p_mat (Q) and p_inv_t (K, V)
+        bm = cam_id.to(tl.int64) * 16
+        p00 = tl.load(p_ptr + bm + 0)
+        p01 = tl.load(p_ptr + bm + 1)
+        p02 = tl.load(p_ptr + bm + 2)
+        p03 = tl.load(p_ptr + bm + 3)
+        p10 = tl.load(p_ptr + bm + 4)
+        p11 = tl.load(p_ptr + bm + 5)
+        p12 = tl.load(p_ptr + bm + 6)
+        p13 = tl.load(p_ptr + bm + 7)
+        p20 = tl.load(p_ptr + bm + 8)
+        p21 = tl.load(p_ptr + bm + 9)
+        p22 = tl.load(p_ptr + bm + 10)
+        p23 = tl.load(p_ptr + bm + 11)
+        p30 = tl.load(p_ptr + bm + 12)
+        p31 = tl.load(p_ptr + bm + 13)
+        p32 = tl.load(p_ptr + bm + 14)
+        p33 = tl.load(p_ptr + bm + 15)
+
+        tl.store(q_prope_ptr + out_base + c0_col, (qn0 * p00 + qn1 * p10 + qn2 * p20 + qn3 * p30).to(v0_raw.dtype))
+        tl.store(q_prope_ptr + out_base + c1_col, (qn0 * p01 + qn1 * p11 + qn2 * p21 + qn3 * p31).to(v0_raw.dtype))
+        tl.store(q_prope_ptr + out_base + c2_col, (qn0 * p02 + qn1 * p12 + qn2 * p22 + qn3 * p32).to(v0_raw.dtype))
+        tl.store(q_prope_ptr + out_base + c3_col, (qn0 * p03 + qn1 * p13 + qn2 * p23 + qn3 * p33).to(v0_raw.dtype))
+
+        m00 = tl.load(pinvt_ptr + bm + 0)
+        m01 = tl.load(pinvt_ptr + bm + 1)
+        m02 = tl.load(pinvt_ptr + bm + 2)
+        m03 = tl.load(pinvt_ptr + bm + 3)
+        m10 = tl.load(pinvt_ptr + bm + 4)
+        m11 = tl.load(pinvt_ptr + bm + 5)
+        m12 = tl.load(pinvt_ptr + bm + 6)
+        m13 = tl.load(pinvt_ptr + bm + 7)
+        m20 = tl.load(pinvt_ptr + bm + 8)
+        m21 = tl.load(pinvt_ptr + bm + 9)
+        m22 = tl.load(pinvt_ptr + bm + 10)
+        m23 = tl.load(pinvt_ptr + bm + 11)
+        m30 = tl.load(pinvt_ptr + bm + 12)
+        m31 = tl.load(pinvt_ptr + bm + 13)
+        m32 = tl.load(pinvt_ptr + bm + 14)
+        m33 = tl.load(pinvt_ptr + bm + 15)
+
+        tl.store(k_prope_ptr + out_base + c0_col, (kn0 * m00 + kn1 * m10 + kn2 * m20 + kn3 * m30).to(v0_raw.dtype))
+        tl.store(k_prope_ptr + out_base + c1_col, (kn0 * m01 + kn1 * m11 + kn2 * m21 + kn3 * m31).to(v0_raw.dtype))
+        tl.store(k_prope_ptr + out_base + c2_col, (kn0 * m02 + kn1 * m12 + kn2 * m22 + kn3 * m32).to(v0_raw.dtype))
+        tl.store(k_prope_ptr + out_base + c3_col, (kn0 * m03 + kn1 * m13 + kn2 * m23 + kn3 * m33).to(v0_raw.dtype))
+
+        v0_f, v1_f, v2_f, v3_f = (
+            v0_raw.to(tl.float32),
+            v1_raw.to(tl.float32),
+            v2_raw.to(tl.float32),
+            v3_raw.to(tl.float32),
+        )
+        tl.store(v_prope_ptr + out_base + c0_col, (v0_f * m00 + v1_f * m10 + v2_f * m20 + v3_f * m30).to(v0_raw.dtype))
+        tl.store(v_prope_ptr + out_base + c1_col, (v0_f * m01 + v1_f * m11 + v2_f * m21 + v3_f * m31).to(v0_raw.dtype))
+        tl.store(v_prope_ptr + out_base + c2_col, (v0_f * m02 + v1_f * m12 + v2_f * m22 + v3_f * m32).to(v0_raw.dtype))
+        tl.store(v_prope_ptr + out_base + c3_col, (v0_f * m03 + v1_f * m13 + v2_f * m23 + v3_f * m33).to(v0_raw.dtype))
 
     @triton.jit
     def _prope_mat4_kernel(
@@ -135,13 +329,13 @@ try:
         pid_v = tl.program_id(1)
         vec_off = pid_v * BLOCK_VECS + tl.arange(0, BLOCK_VECS)
         mask = vec_off < vecs_per_cam
-        base = (cam_id * vecs_per_cam + vec_off) * 4
+        base = (cam_id.to(tl.int64) * vecs_per_cam + vec_off.to(tl.int64)) * 4
         x0 = tl.load(x_ptr + base + 0, mask=mask, other=0.0).to(tl.float32)
         x1 = tl.load(x_ptr + base + 1, mask=mask, other=0.0).to(tl.float32)
         x2 = tl.load(x_ptr + base + 2, mask=mask, other=0.0).to(tl.float32)
         x3 = tl.load(x_ptr + base + 3, mask=mask, other=0.0).to(tl.float32)
 
-        bm = cam_id * 16
+        bm = cam_id.to(tl.int64) * 16
         m00 = tl.load(m_ptr + bm + 0)
         m01 = tl.load(m_ptr + bm + 1)
         m02 = tl.load(m_ptr + bm + 2)
@@ -178,11 +372,24 @@ def _apply_prope_mat(tensor: torch.Tensor, mat_t: torch.Tensor) -> torch.Tensor:
     """Apply block-diagonal 4x4 camera transform ``mat_t`` to ``[B, L, ...]`` at full HBM bandwidth."""
     batch = tensor.shape[0]
     cams = mat_t.shape[1]
-    if _TRITON_PROPE_AVAILABLE and tensor.is_cuda and not torch.is_grad_enabled():
-        x_flat = tensor.contiguous()
-        m_f32 = mat_t.to(device=tensor.device, dtype=torch.float32).contiguous()
+    total_cams = batch * cams
+    if (
+        _TRITON_PROPE_AVAILABLE
+        and tensor.is_cuda
+        and not torch.is_grad_enabled()
+        and mat_t.ndim == 4
+        and mat_t.shape[0] == batch
+        and mat_t.shape[-2:] == (4, 4)
+        and total_cams > 0
+        and tensor.numel() % (total_cams * 4) == 0
+    ):
+        x_flat = tensor if tensor.is_contiguous() else tensor.contiguous()
+        m_f32 = (
+            mat_t
+            if (mat_t.dtype == torch.float32 and mat_t.device == tensor.device and mat_t.is_contiguous())
+            else mat_t.to(device=tensor.device, dtype=torch.float32).contiguous()
+        )
         out = torch.empty_like(x_flat)
-        total_cams = batch * cams
         vecs_per_cam = x_flat.numel() // (total_cams * 4)
         block_vecs = 256
         grid = (total_cams, triton.cdiv(vecs_per_cam, block_vecs))
@@ -191,6 +398,110 @@ def _apply_prope_mat(tensor: torch.Tensor, mat_t: torch.Tensor) -> torch.Tensor:
     reshaped = tensor.reshape(batch, cams, -1, 4)
     out = torch.matmul(reshaped, mat_t.to(dtype=tensor.dtype))
     return out.reshape(tensor.shape)
+
+
+def _fused_qkv_rmsnorm_rope_prope(
+    qkv: torch.Tensor,
+    q_weight: torch.Tensor,
+    k_weight: torch.Tensor,
+    freqs_cis: tuple[torch.Tensor, torch.Tensor],
+    p_mat: torch.Tensor,
+    p_inv_t: torch.Tensor,
+    *,
+    heads_num: int,
+    eps: float = 1e-6,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor] | None:
+    """Single-pass Triton QKV split + per-head RMSNorm + interleaved RoPE + 4x4 SE(3) PRoPE."""
+    if not (
+        _TRITON_PROPE_AVAILABLE
+        and qkv.is_cuda
+        and not torch.is_grad_enabled()
+        and qkv.ndim == 3
+        and qkv.is_contiguous()
+    ):
+        return None
+    batch, seq_len, total_dim = int(qkv.shape[0]), int(qkv.shape[1]), int(qkv.shape[2])
+    if total_dim % 3 != 0 or heads_num <= 0:
+        return None
+    hidden = total_dim // 3
+    if hidden % heads_num != 0:
+        return None
+    head_dim = hidden // heads_num
+    if p_mat.ndim != 4 or p_inv_t.ndim != 4 or p_mat.shape[0] != batch or p_inv_t.shape[0] != batch:
+        return None
+    num_cams = int(p_mat.shape[1])
+    cos, sin = freqs_cis
+    if (
+        head_dim not in {32, 64, 128}
+        or num_cams <= 0
+        or p_inv_t.shape[1] != num_cams
+        or p_mat.shape[-2:] != (4, 4)
+        or p_inv_t.shape[-2:] != (4, 4)
+        or seq_len <= 0
+        or seq_len % num_cams != 0
+        or not q_weight.is_cuda
+        or not k_weight.is_cuda
+        or q_weight.device != qkv.device
+        or k_weight.device != qkv.device
+        or q_weight.shape != (head_dim,)
+        or k_weight.shape != (head_dim,)
+        or cos.device != qkv.device
+        or sin.device != qkv.device
+        or cos.ndim != 2
+        or sin.shape != cos.shape
+        or cos.shape[0] != seq_len
+        or cos.shape[1] != head_dim
+    ):
+        return None
+    tokens_per_cam = seq_len // num_cams
+    out_shape = (batch, seq_len, heads_num, head_dim)
+    q_rope = torch.empty(out_shape, dtype=qkv.dtype, device=qkv.device)
+    k_rope = torch.empty(out_shape, dtype=qkv.dtype, device=qkv.device)
+    v_out = torch.empty(out_shape, dtype=qkv.dtype, device=qkv.device)
+    q_prope = torch.empty(out_shape, dtype=qkv.dtype, device=qkv.device)
+    k_prope = torch.empty(out_shape, dtype=qkv.dtype, device=qkv.device)
+    v_prope = torch.empty(out_shape, dtype=qkv.dtype, device=qkv.device)
+
+    p_f32 = (
+        p_mat
+        if (p_mat.dtype == torch.float32 and p_mat.device == qkv.device and p_mat.is_contiguous())
+        else p_mat.to(device=qkv.device, dtype=torch.float32).contiguous()
+    )
+    pinvt_f32 = (
+        p_inv_t
+        if (p_inv_t.dtype == torch.float32 and p_inv_t.device == qkv.device and p_inv_t.is_contiguous())
+        else p_inv_t.to(device=qkv.device, dtype=torch.float32).contiguous()
+    )
+    qw_c = q_weight if q_weight.is_contiguous() else q_weight.contiguous()
+    kw_c = k_weight if k_weight.is_contiguous() else k_weight.contiguous()
+    cos_c = cos if cos.is_contiguous() else cos.contiguous()
+    sin_c = sin if sin.is_contiguous() else sin.contiguous()
+    _hy_qkv_rmsnorm_rope_prope_kernel[(batch * seq_len, heads_num)](
+        qkv,
+        qw_c,
+        kw_c,
+        cos_c,
+        sin_c,
+        p_f32,
+        pinvt_f32,
+        q_rope,
+        k_rope,
+        v_out,
+        q_prope,
+        k_prope,
+        v_prope,
+        seq_len,
+        tokens_per_cam,
+        num_cams,
+        int(qkv.stride(1)),
+        int(cos_c.stride(0)),
+        float(eps),
+        NUM_HEADS=heads_num,
+        HEAD_DIM=head_dim,
+        NUM_QUADS=head_dim // 4,
+        num_warps=2 if head_dim <= 64 else 4,
+    )
+    return q_rope, k_rope, v_out, q_prope, k_prope, v_prope
 
 
 class MMDoubleStreamBlock(nn.Module):
@@ -286,8 +597,9 @@ class MMDoubleStreamBlock(nn.Module):
         (txt_mod1_shift, txt_mod1_scale, txt_mod1_gate, txt_mod2_shift, txt_mod2_scale, txt_mod2_gate) = self.txt_mod(
             vec_txt
         ).chunk(6, dim=-1)
-        txt_modulated = self.txt_norm1(txt)
-        txt_modulated = modulate(txt_modulated, shift=txt_mod1_shift, scale=txt_mod1_scale)
+        txt_modulated = fused_layernorm_modulate(
+            txt, shift=txt_mod1_shift, scale=txt_mod1_scale, eps=self.txt_norm1.eps
+        )
         if hasattr(self, "txt_attn_qkv"):
             txt_q, txt_k, txt_v = self.txt_attn_qkv(txt_modulated).chunk(3, dim=-1)
         else:
@@ -306,8 +618,9 @@ class MMDoubleStreamBlock(nn.Module):
         (img_mod1_shift, img_mod1_scale, img_mod1_gate, img_mod2_shift, img_mod2_scale, img_mod2_gate) = self.img_mod(
             vec
         ).chunk(6, dim=-1)
-        img_modulated = self.img_norm1(img)
-        img_modulated = modulate(img_modulated, shift=img_mod1_shift, scale=img_mod1_scale)
+        img_modulated = fused_layernorm_modulate(
+            img, shift=img_mod1_shift, scale=img_mod1_scale, eps=self.img_norm1.eps
+        )
         if hasattr(self, "img_attn_qkv"):
             img_q, img_k, img_v = self.img_attn_qkv(img_modulated).chunk(3, dim=-1)
         else:
@@ -321,6 +634,116 @@ class MMDoubleStreamBlock(nn.Module):
         img_q = self.img_attn_q_norm(img_q).to(img_v)
         img_k = self.img_attn_k_norm(img_k).to(img_v)
         return (img_q, img_k, img_v, img_mod1_gate, img_mod2_shift, img_mod2_scale, img_mod2_gate)
+
+    def _img_qkv_rope_prope(
+        self,
+        vec: torch.Tensor,
+        img: torch.Tensor,
+        freqs_cis: tuple | None,
+        prope_mats: tuple[torch.Tensor, torch.Tensor, torch.Tensor] | None,
+        viewmats: torch.Tensor | None,
+        Ks: torch.Tensor | None,
+    ):
+        (img_mod1_shift, img_mod1_scale, img_mod1_gate, img_mod2_shift, img_mod2_scale, img_mod2_gate) = self.img_mod(
+            vec
+        ).chunk(6, dim=-1)
+        img_modulated = fused_layernorm_modulate(
+            img, shift=img_mod1_shift, scale=img_mod1_scale, eps=self.img_norm1.eps
+        )
+        if hasattr(self, "img_attn_qkv"):
+            qkv = self.img_attn_qkv(img_modulated)
+            q_weight = getattr(self.img_attn_q_norm, "weight", None)
+            k_weight = getattr(self.img_attn_k_norm, "weight", None)
+            q_eps = float(getattr(self.img_attn_q_norm, "eps", 1e-6))
+            k_eps = float(getattr(self.img_attn_k_norm, "eps", 1e-6))
+            is_rms_qk = (
+                "rms" in type(self.img_attn_q_norm).__name__.casefold()
+                and "rms" in type(self.img_attn_k_norm).__name__.casefold()
+                and getattr(self.img_attn_q_norm, "bias", None) is None
+                and getattr(self.img_attn_k_norm, "bias", None) is None
+            )
+            if (
+                prope_mats is not None
+                and freqs_cis is not None
+                and is_rms_qk
+                and q_weight is not None
+                and k_weight is not None
+                and q_eps == k_eps
+                and getattr(self.img_attn_q_norm, "compute_mode", "fp32") == "fp32"
+                and getattr(self.img_attn_k_norm, "compute_mode", "fp32") == "fp32"
+            ):
+                p_mat, p_inv_t, p_t = prope_mats
+                fused = _fused_qkv_rmsnorm_rope_prope(
+                    qkv,
+                    q_weight,
+                    k_weight,
+                    freqs_cis,
+                    p_mat,
+                    p_inv_t,
+                    heads_num=self.heads_num,
+                    eps=q_eps,
+                )
+                if fused is not None:
+                    img_q, img_k, img_v, img_q_prope, img_k_prope, img_v_prope = fused
+                    return (
+                        img_q,
+                        img_k,
+                        img_v,
+                        img_q_prope,
+                        img_k_prope,
+                        img_v_prope,
+                        p_t,
+                        None,
+                        img_mod1_gate,
+                        img_mod2_shift,
+                        img_mod2_scale,
+                        img_mod2_gate,
+                    )
+            img_q, img_k, img_v = qkv.chunk(3, dim=-1)
+        else:
+            img_q = self.img_attn_q(img_modulated)
+            img_k = self.img_attn_k(img_modulated)
+            img_v = self.img_attn_v(img_modulated)
+        head_dim = img_q.shape[-1] // self.heads_num
+        img_q = img_q.view(img_q.shape[0], img_q.shape[1], self.heads_num, head_dim)
+        img_k = img_k.view(img_k.shape[0], img_k.shape[1], self.heads_num, head_dim)
+        img_v = img_v.view(img_v.shape[0], img_v.shape[1], self.heads_num, head_dim)
+        img_q = self.img_attn_q_norm(img_q).to(img_v)
+        img_k = self.img_attn_k_norm(img_k).to(img_v)
+        if prope_mats is not None:
+            p_mat, p_inv_t, p_t = prope_mats
+            img_q_prope = _apply_prope_mat(img_q, p_mat)
+            img_k_prope = _apply_prope_mat(img_k, p_inv_t)
+            img_v_prope = _apply_prope_mat(img_v, p_inv_t)
+            apply_fn_o = None
+        else:
+            (img_q_prope, img_k_prope, img_v_prope, apply_fn_o) = prope_qkv(
+                img_q.permute(0, 2, 1, 3),
+                img_k.permute(0, 2, 1, 3),
+                img_v.permute(0, 2, 1, 3),
+                viewmats=viewmats,
+                Ks=Ks,
+            )
+            img_q_prope = img_q_prope.permute(0, 2, 1, 3)
+            img_k_prope = img_k_prope.permute(0, 2, 1, 3)
+            img_v_prope = img_v_prope.permute(0, 2, 1, 3)
+            p_t = None
+        if freqs_cis is not None:
+            (img_q, img_k) = _apply_fast_interleaved_rope(img_q, img_k, freqs_cis)
+        return (
+            img_q,
+            img_k,
+            img_v,
+            img_q_prope,
+            img_k_prope,
+            img_v_prope,
+            p_t,
+            apply_fn_o,
+            img_mod1_gate,
+            img_mod2_shift,
+            img_mod2_scale,
+            img_mod2_gate,
+        )
 
     def forward_txt(
         self,
@@ -350,10 +773,14 @@ class MMDoubleStreamBlock(nn.Module):
             kv_cache=kv_cache,
             cache_txt=cache_txt,
         )
-        txt = txt + apply_gate(self.txt_attn_proj(txt_attn), gate=txt_mod1_gate)
-        txt = txt + apply_gate(
-            _run_hy15_mlp(self.txt_mlp, modulate(self.txt_norm2(txt), shift=txt_mod2_shift, scale=txt_mod2_scale)),
-            gate=txt_mod2_gate,
+        txt = fused_residual_gate(txt, self.txt_attn_proj(txt_attn), txt_mod1_gate)
+        txt = fused_residual_gate(
+            txt,
+            _run_hy15_mlp(
+                self.txt_mlp,
+                fused_layernorm_modulate(txt, shift=txt_mod2_shift, scale=txt_mod2_scale, eps=self.txt_norm2.eps),
+            ),
+            txt_mod2_gate,
         )
         return (txt, t_kv)
 
@@ -370,34 +797,26 @@ class MMDoubleStreamBlock(nn.Module):
         cache_vision: bool = False,
         prope_mats: tuple[torch.Tensor, torch.Tensor, torch.Tensor] | None = None,
         static_kv_buffer: tuple[torch.Tensor, torch.Tensor] | None = None,
+        static_bshd_kv_buffer: tuple[torch.Tensor, torch.Tensor] | None = None,
         static_prefix_len: int | None = None,
         static_fp8_rope_buffer: tuple[torch.Tensor, torch.Tensor] | None = None,
         static_fp8_prope_buffer: tuple[torch.Tensor, torch.Tensor] | None = None,
         num_blocks: int | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        (img_q, img_k, img_v, img_mod1_gate, img_mod2_shift, img_mod2_scale, img_mod2_gate) = self.modulate_img(
-            vec, img
-        )
-        if prope_mats is not None:
-            p_mat, p_inv_t, p_t = prope_mats
-            img_q_prope = _apply_prope_mat(img_q, p_mat)
-            img_k_prope = _apply_prope_mat(img_k, p_inv_t)
-            img_v_prope = _apply_prope_mat(img_v, p_inv_t)
-            apply_fn_o = None
-        else:
-            (img_q_prope, img_k_prope, img_v_prope, apply_fn_o) = prope_qkv(
-                img_q.permute(0, 2, 1, 3),
-                img_k.permute(0, 2, 1, 3),
-                img_v.permute(0, 2, 1, 3),
-                viewmats=viewmats,
-                Ks=Ks,
-            )
-            img_q_prope = img_q_prope.permute(0, 2, 1, 3)
-            img_k_prope = img_k_prope.permute(0, 2, 1, 3)
-            img_v_prope = img_v_prope.permute(0, 2, 1, 3)
-            p_t = None
-        if freqs_cis is not None:
-            (img_q, img_k) = _apply_fast_interleaved_rope(img_q, img_k, freqs_cis)
+        (
+            img_q,
+            img_k,
+            img_v,
+            img_q_prope,
+            img_k_prope,
+            img_v_prope,
+            p_t,
+            apply_fn_o,
+            img_mod1_gate,
+            img_mod2_shift,
+            img_mod2_scale,
+            img_mod2_gate,
+        ) = self._img_qkv_rope_prope(vec, img, freqs_cis, prope_mats, viewmats, Ks)
         attn_mode = self.attention_backend or self.attn_mode
         (img_attn, vision_kv) = sequence_parallel_attention_vision(
             img_q,
@@ -408,6 +827,7 @@ class MMDoubleStreamBlock(nn.Module):
             cache_vision=cache_vision,
             attn_mode=attn_mode,
             static_kv_buffer=static_kv_buffer,
+            static_bshd_kv_buffer=static_bshd_kv_buffer,
             static_prefix_len=static_prefix_len,
             static_fp8_kv_buffer=static_fp8_rope_buffer,
             stream_tag="rope",
@@ -422,6 +842,7 @@ class MMDoubleStreamBlock(nn.Module):
             cache_vision=False,
             attn_mode=attn_mode,
             static_kv_buffer=static_kv_buffer,
+            static_bshd_kv_buffer=static_bshd_kv_buffer,
             static_prefix_len=static_prefix_len,
             static_fp8_kv_buffer=static_fp8_prope_buffer,
             stream_tag="prope",
@@ -433,12 +854,16 @@ class MMDoubleStreamBlock(nn.Module):
             img_attn_prope = rearrange(img_attn_prope, "B L (H D) -> B H L D", H=self.heads_num)
             img_attn_prope = apply_fn_o(img_attn_prope)
             img_attn_prope = rearrange(img_attn_prope, "B H L D -> B L (H D)")
-        img = img + apply_gate(
-            self.img_attn_proj(img_attn) + self.img_attn_prope_proj(img_attn_prope), gate=img_mod1_gate
+        img = fused_residual_dual_gate(
+            img, self.img_attn_proj(img_attn), self.img_attn_prope_proj(img_attn_prope), img_mod1_gate
         )
-        img = img + apply_gate(
-            _run_hy15_mlp(self.img_mlp, modulate(self.img_norm2(img), shift=img_mod2_shift, scale=img_mod2_scale)),
-            gate=img_mod2_gate,
+        img = fused_residual_gate(
+            img,
+            _run_hy15_mlp(
+                self.img_mlp,
+                fused_layernorm_modulate(img, shift=img_mod2_shift, scale=img_mod2_scale, eps=self.img_norm2.eps),
+            ),
+            img_mod2_gate,
         )
         return (img, vision_kv)
 
@@ -461,29 +886,20 @@ class MMDoubleStreamBlock(nn.Module):
         (txt_q, txt_k, txt_v, txt_mod1_gate, txt_mod2_shift, txt_mod2_scale, txt_mod2_gate) = self.modulate_txt(
             vec_txt, txt
         )
-        (img_q, img_k, img_v, img_mod1_gate, img_mod2_shift, img_mod2_scale, img_mod2_gate) = self.modulate_img(
-            vec, img
-        )
-        if prope_mats is not None:
-            p_mat, p_inv_t, p_t = prope_mats
-            img_q_prope = _apply_prope_mat(img_q, p_mat)
-            img_k_prope = _apply_prope_mat(img_k, p_inv_t)
-            img_v_prope = _apply_prope_mat(img_v, p_inv_t)
-            apply_fn_o = None
-        else:
-            (img_q_prope, img_k_prope, img_v_prope, apply_fn_o) = prope_qkv(
-                img_q.permute(0, 2, 1, 3),
-                img_k.permute(0, 2, 1, 3),
-                img_v.permute(0, 2, 1, 3),
-                viewmats=viewmats,
-                Ks=Ks,
-            )
-            img_q_prope = img_q_prope.permute(0, 2, 1, 3)
-            img_k_prope = img_k_prope.permute(0, 2, 1, 3)
-            img_v_prope = img_v_prope.permute(0, 2, 1, 3)
-            p_t = None
-        if freqs_cis is not None:
-            (img_q, img_k) = _apply_fast_interleaved_rope(img_q, img_k, freqs_cis)
+        (
+            img_q,
+            img_k,
+            img_v,
+            img_q_prope,
+            img_k_prope,
+            img_v_prope,
+            p_t,
+            apply_fn_o,
+            img_mod1_gate,
+            img_mod2_shift,
+            img_mod2_scale,
+            img_mod2_gate,
+        ) = self._img_qkv_rope_prope(vec, img, freqs_cis, prope_mats, viewmats, Ks)
         attn_mode = "flash" if is_flash else (self.attention_backend or self.attn_mode)
         if attn_mode == "cudnn_fp8" and text_mask is None:
             attn = sequence_parallel_attention_bi_fp8(
@@ -502,6 +918,18 @@ class MMDoubleStreamBlock(nn.Module):
                 block_idx=block_idx,
                 num_blocks=num_blocks,
                 stream_tag="prope",
+            )
+        elif attn_mode == "flash_attention_3" and text_mask is None:
+            attn = sequence_parallel_attention_bi_fa3(
+                (img_q, txt_q),
+                (img_k, txt_k),
+                (img_v, txt_v),
+            )
+            (img_attn, txt_attn) = (attn[:, : img_q.shape[1]].contiguous(), attn[:, img_q.shape[1] :].contiguous())
+            attn_prope = sequence_parallel_attention_bi_fa3(
+                (img_q_prope, txt_q),
+                (img_k_prope, txt_k),
+                (img_v_prope, txt_v),
             )
         else:
             eff_attn_mode = "torch" if attn_mode == "cudnn_fp8" else attn_mode
@@ -535,17 +963,25 @@ class MMDoubleStreamBlock(nn.Module):
             img_attn_prope = rearrange(img_attn_prope, "B L (H D) -> B H L D", H=self.heads_num)
             img_attn_prope = apply_fn_o(img_attn_prope)
             img_attn_prope = rearrange(img_attn_prope, "B H L D -> B L (H D)")
-        img = img + apply_gate(
-            self.img_attn_proj(img_attn) + self.img_attn_prope_proj(img_attn_prope), gate=img_mod1_gate
+        img = fused_residual_dual_gate(
+            img, self.img_attn_proj(img_attn), self.img_attn_prope_proj(img_attn_prope), img_mod1_gate
         )
-        img = img + apply_gate(
-            _run_hy15_mlp(self.img_mlp, modulate(self.img_norm2(img), shift=img_mod2_shift, scale=img_mod2_scale)),
-            gate=img_mod2_gate,
+        img = fused_residual_gate(
+            img,
+            _run_hy15_mlp(
+                self.img_mlp,
+                fused_layernorm_modulate(img, shift=img_mod2_shift, scale=img_mod2_scale, eps=self.img_norm2.eps),
+            ),
+            img_mod2_gate,
         )
-        txt = txt + apply_gate(self.txt_attn_proj(txt_attn), gate=txt_mod1_gate)
-        txt = txt + apply_gate(
-            _run_hy15_mlp(self.txt_mlp, modulate(self.txt_norm2(txt), shift=txt_mod2_shift, scale=txt_mod2_scale)),
-            gate=txt_mod2_gate,
+        txt = fused_residual_gate(txt, self.txt_attn_proj(txt_attn), txt_mod1_gate)
+        txt = fused_residual_gate(
+            txt,
+            _run_hy15_mlp(
+                self.txt_mlp,
+                fused_layernorm_modulate(txt, shift=txt_mod2_shift, scale=txt_mod2_scale, eps=self.txt_norm2.eps),
+            ),
+            txt_mod2_gate,
         )
         return (img, txt)
 
@@ -1122,6 +1558,7 @@ class ARHunyuanVideo_1_5_DiffusionTransformer(ModelMixin, ConfigMixin):
         *,
         kv_cache: list[dict[str, Any]] | None,
         static_buffers: list[tuple[torch.Tensor, torch.Tensor]] | None,
+        static_bshd_buffers: list[tuple[torch.Tensor, torch.Tensor]] | None = None,
         static_prefix_len: int | None,
         static_fp8_buffers: dict[str, list[tuple[torch.Tensor, torch.Tensor] | None]] | None = None,
         cache_vision: bool,
@@ -1182,6 +1619,7 @@ class ARHunyuanVideo_1_5_DiffusionTransformer(ModelMixin, ConfigMixin):
         fp8_prope_list = None if static_fp8_buffers is None else static_fp8_buffers.get("prope")
         for index, block in enumerate(self.double_blocks):
             static_pair = None if static_buffers is None else static_buffers[index]
+            static_bshd_pair = None if static_bshd_buffers is None else static_bshd_buffers[index]
             fp8_rope_pair = None if fp8_rope_list is None else fp8_rope_list[index]
             fp8_prope_pair = None if fp8_prope_list is None else fp8_prope_list[index]
             (img, vision_kv) = block.forward_vision(
@@ -1196,6 +1634,7 @@ class ARHunyuanVideo_1_5_DiffusionTransformer(ModelMixin, ConfigMixin):
                 cache_vision=cache_vision,
                 prope_mats=prope_mats,
                 static_kv_buffer=static_pair,
+                static_bshd_kv_buffer=static_bshd_pair,
                 static_prefix_len=static_prefix_len,
                 static_fp8_rope_buffer=fp8_rope_pair,
                 static_fp8_prope_buffer=fp8_prope_pair,
@@ -1266,6 +1705,7 @@ class ARHunyuanVideo_1_5_DiffusionTransformer(ModelMixin, ConfigMixin):
             and not cache_vision
             and not sp_enabled
             and not self.training
+            and not torch.is_grad_enabled()
             and hidden_states.is_cuda
             and kv_cache is not None
         ):
@@ -1273,6 +1713,11 @@ class ARHunyuanVideo_1_5_DiffusionTransformer(ModelMixin, ConfigMixin):
             head_dim = self.hidden_size // self.heads_num
             want_fp8_arena = (
                 self.attention_backend == "cudnn_fp8" and len(self.double_blocks) > 2 and head_dim in {64, 128}
+            )
+            want_bshd_arena = (
+                self.attention_backend == "flash_attention_3"
+                and hidden_states.dtype in {torch.bfloat16, torch.float16}
+                and hopper_fa3_usable(hidden_states.device)
             )
             k_vis0 = kv_cache[0].get("k_vision")
             src_refs, src_vers = self._kv_cache_identity(kv_cache)
@@ -1282,6 +1727,7 @@ class ARHunyuanVideo_1_5_DiffusionTransformer(ModelMixin, ConfigMixin):
                 chunk_tokens,
                 hidden_states.dtype,
                 self.attention_backend,
+                want_bshd_arena,
             )
             same_sources = (
                 self._last_arena_source_key == source_key
@@ -1304,12 +1750,20 @@ class ARHunyuanVideo_1_5_DiffusionTransformer(ModelMixin, ConfigMixin):
                         if fp8_buffers is not None and fp8_key is not None:
                             self._last_fp8_arena_entry = (fp8_buffers, prefix_len, fp8_key)
             else:
-                buffers, prefix_len, arena_key = prepare_static_kv_arena(
-                    kv_cache,
-                    chunk_tokens,
-                    arena=self._static_kv_arena,
-                    dtype=hidden_states.dtype,
-                )
+                if want_bshd_arena:
+                    buffers, prefix_len, arena_key = prepare_static_kv_arena_bshd(
+                        kv_cache,
+                        chunk_tokens,
+                        arena=self._static_kv_arena,
+                        dtype=hidden_states.dtype,
+                    )
+                else:
+                    buffers, prefix_len, arena_key = prepare_static_kv_arena(
+                        kv_cache,
+                        chunk_tokens,
+                        arena=self._static_kv_arena,
+                        dtype=hidden_states.dtype,
+                    )
                 self._last_arena_source_key = source_key
                 self._last_arena_src_refs = src_refs
                 self._last_arena_src_vers = src_vers
@@ -1335,6 +1789,7 @@ class ARHunyuanVideo_1_5_DiffusionTransformer(ModelMixin, ConfigMixin):
                     freqs_sin,
                     kv_cache=None,
                     static_buffers=buffers,
+                    static_bshd_buffers=None,
                     static_prefix_len=prefix_len,
                     static_fp8_buffers=None,
                     cache_vision=False,
@@ -1357,7 +1812,8 @@ class ARHunyuanVideo_1_5_DiffusionTransformer(ModelMixin, ConfigMixin):
                 has_action = action is not None
                 has_vm = viewmats is not None
                 has_ks = Ks is not None
-                bound_buffers = buffers
+                bound_bhsd_buffers = None if want_bshd_arena else buffers
+                bound_bshd_buffers = buffers if want_bshd_arena else None
                 bound_prefix_len = prefix_len
                 bound_fp8_buffers = fp8_buffers
 
@@ -1371,7 +1827,8 @@ class ARHunyuanVideo_1_5_DiffusionTransformer(ModelMixin, ConfigMixin):
                         cos_in,
                         sin_in,
                         kv_cache=None,
-                        static_buffers=bound_buffers,
+                        static_buffers=bound_bhsd_buffers,
+                        static_bshd_buffers=bound_bshd_buffers,
                         static_prefix_len=bound_prefix_len,
                         static_fp8_buffers=bound_fp8_buffers,
                         cache_vision=False,
@@ -1502,7 +1959,8 @@ class ARHunyuanVideo_1_5_DiffusionTransformer(ModelMixin, ConfigMixin):
         resolved_bi_mode = self.attention_backend or self.attn_mode
         if (
             block_text_mask is not None
-            and resolved_bi_mode in {None, "torch", "flash", "sdpa", "cudnn", "sol_attn", "cudnn_fp8"}
+            and resolved_bi_mode
+            in {None, "torch", "flash", "sdpa", "cudnn", "flash_attention_3", "sol_attn", "cudnn_fp8"}
             and not torch.cuda.is_current_stream_capturing()
         ):
             if block_text_mask.dtype in {torch.int64, torch.int32}:

@@ -30,6 +30,28 @@ from worldfoundry.core.distributed.sequence_parallel.communication_op import (
 )
 
 _FP8_ATTN_SCALES: dict[tuple[Any, ...], tuple[float, float, float]] = {}
+_FA3_MODULE: Any = None
+_FA3_PROBED: bool = False
+
+
+def hopper_fa3_usable(device: torch.device | str | None = None) -> bool:
+    """Return True when ``flash_attn_interface`` is installed and device is SM90 Hopper."""
+    global _FA3_MODULE, _FA3_PROBED
+    if not torch.cuda.is_available():
+        return False
+    dev = torch.device("cuda" if device is None else device)
+    if dev.type != "cuda":
+        return False
+    if torch.cuda.get_device_capability(dev)[0] != 9:
+        return False
+    if not _FA3_PROBED:
+        try:
+            _FA3_MODULE = __import__("flash_attn_interface")
+        except Exception:
+            _FA3_MODULE = None
+        _FA3_PROBED = True
+    return _FA3_MODULE is not None and callable(getattr(_FA3_MODULE, "flash_attn_func", None))
+
 
 try:
     import triton
@@ -135,6 +157,23 @@ def _dispatch_cached_attention(
     """Execute B H S D attention via cuDNN/Flash SDPA, calibrated cuDNN FP8, or explicit backend."""
     if attn_mode in (None, "", "auto", "torch", "torch_causal", "flash", "sdpa", "cudnn"):
         return scaled_dot_product_attention(query, key, value, dropout_p=0.0, is_causal=False)
+    if (
+        attn_mode == "flash_attention_3"
+        and hopper_fa3_usable(query.device)
+        and _FA3_MODULE is not None
+        and query.dtype in {torch.bfloat16, torch.float16}
+        and key.dtype == query.dtype
+        and value.dtype == query.dtype
+        and query.shape[-1] <= 256
+        and query.shape[-1] % 8 == 0
+    ):
+        out = _FA3_MODULE.flash_attn_func(
+            query.transpose(1, 2).contiguous(),
+            key.transpose(1, 2).contiguous(),
+            value.transpose(1, 2).contiguous(),
+        )
+        out_t = out[0] if isinstance(out, tuple) else out
+        return out_t.transpose(1, 2)
     if attn_mode == "cudnn_fp8":
         if not (query.is_cuda and query.shape[-1] in {64, 128} and query.dtype in {torch.bfloat16, torch.float16}):
             return scaled_dot_product_attention(query, key, value, dropout_p=0.0, is_causal=False)
@@ -217,13 +256,14 @@ def prepare_static_kv_arena(
 
     buffers = None if arena is None else arena.get(arena_key)
     if buffers is None:
-        buffers = [
-            (
-                torch.empty((batch, heads, total_len, head_dim), dtype=buf_dtype, device=device),
-                torch.empty((batch, heads, total_len, head_dim), dtype=buf_dtype, device=device),
-            )
-            for _ in range(len(kv_cache))
-        ]
+        with torch.inference_mode(False):
+            buffers = [
+                (
+                    torch.empty((batch, heads, total_len, head_dim), dtype=buf_dtype, device=device),
+                    torch.empty((batch, heads, total_len, head_dim), dtype=buf_dtype, device=device),
+                )
+                for _ in range(len(kv_cache))
+            ]
         if arena is not None:
             arena[arena_key] = buffers
 
@@ -238,6 +278,58 @@ def prepare_static_kv_arena(
         if k_vis is not None and v_vis is not None:
             k_buf[:, :, txt_len:prefix_len].copy_(k_vis)
             v_buf[:, :, txt_len:prefix_len].copy_(v_vis)
+    return buffers, prefix_len, arena_key
+
+
+def prepare_static_kv_arena_bshd(
+    kv_cache: list[dict[str, Any]],
+    chunk_tokens: int,
+    *,
+    arena: dict[tuple[Any, ...], list[tuple[torch.Tensor, torch.Tensor]]] | None = None,
+    dtype: torch.dtype | None = None,
+) -> tuple[list[tuple[torch.Tensor, torch.Tensor]], int, tuple[Any, ...]]:
+    """Populate a static ``[B, prefix_len + chunk_tokens, H, D]`` BSHD KV buffer per layer for Hopper FA3.
+
+    Transposes cached ``[k_txt, k_vision]`` from BHSD -> BSHD *once* per chunk so every
+    denoising step writes only the tail chunk slice and invokes ``flash_attn_func``
+    with zero prefix transposes or ``einops.rearrange`` copies inside the CUDA Graph.
+    """
+    if not kv_cache:
+        raise ValueError("kv_cache must be non-empty")
+    first = kv_cache[0]
+    k_txt0 = first["k_txt"]
+    k_vis0 = first.get("k_vision")
+    batch, heads, txt_len, head_dim = k_txt0.shape
+    vis_len = 0 if k_vis0 is None else int(k_vis0.shape[2])
+    prefix_len = txt_len + vis_len
+    chunk_len = int(chunk_tokens)
+    total_len = prefix_len + chunk_len
+    buf_dtype = k_txt0.dtype if dtype is None else dtype
+    device = k_txt0.device
+    arena_key = ("bshd", len(kv_cache), batch, heads, prefix_len, chunk_len, head_dim, buf_dtype, device)
+
+    buffers = None if arena is None else arena.get(arena_key)
+    if buffers is None:
+        with torch.inference_mode(False):
+            buffers = [
+                (
+                    torch.empty((batch, total_len, heads, head_dim), dtype=buf_dtype, device=device),
+                    torch.empty((batch, total_len, heads, head_dim), dtype=buf_dtype, device=device),
+                )
+                for _ in range(len(kv_cache))
+            ]
+        if arena is not None:
+            arena[arena_key] = buffers
+
+    for idx, slot in enumerate(kv_cache):
+        k_buf, v_buf = buffers[idx]
+        k_buf[:, :txt_len].copy_(slot["k_txt"].transpose(1, 2))
+        v_buf[:, :txt_len].copy_(slot["v_txt"].transpose(1, 2))
+        k_vis = slot.get("k_vision")
+        v_vis = slot.get("v_vision")
+        if k_vis is not None and v_vis is not None:
+            k_buf[:, txt_len:prefix_len].copy_(k_vis.transpose(1, 2))
+            v_buf[:, txt_len:prefix_len].copy_(v_vis.transpose(1, 2))
     return buffers, prefix_len, arena_key
 
 
@@ -287,12 +379,13 @@ def prepare_static_fp8_kv_arena(
     stream_buffers = None if arena is None else arena.get(fp8_key)
     if stream_buffers is None:
         stream_buffers = {"rope": [None] * num_blocks, "prope": [None] * num_blocks}
-        for stream_tag in ("rope", "prope"):
-            for idx in interior_indices:
-                stream_buffers[stream_tag][idx] = (
-                    torch.empty((batch, heads, total_len, head_dim), dtype=torch.float8_e4m3fn, device=device),
-                    torch.empty((batch, heads, total_len, head_dim), dtype=torch.float8_e4m3fn, device=device),
-                )
+        with torch.inference_mode(False):
+            for stream_tag in ("rope", "prope"):
+                for idx in interior_indices:
+                    stream_buffers[stream_tag][idx] = (
+                        torch.empty((batch, heads, total_len, head_dim), dtype=torch.float8_e4m3fn, device=device),
+                        torch.empty((batch, heads, total_len, head_dim), dtype=torch.float8_e4m3fn, device=device),
+                    )
         if arena is not None:
             arena[fp8_key] = stream_buffers
 
@@ -550,6 +643,7 @@ def sequence_parallel_attention_vision(
     static_kv_buffer: tuple[torch.Tensor, torch.Tensor] | None = None,
     static_prefix_len: int | None = None,
     static_fp8_kv_buffer: tuple[torch.Tensor, torch.Tensor] | None = None,
+    static_bshd_kv_buffer: tuple[torch.Tensor, torch.Tensor] | None = None,
     stream_tag: str = "rope",
     num_blocks: int | None = None,
 ):
@@ -558,6 +652,29 @@ def sequence_parallel_attention_vision(
     value = v
     parallel_dims = get_parallel_state()
     enable_sp = parallel_dims.sp_enabled
+    # Direct zero-transpose BSHD Hopper FlashAttention-3 fast path for cached single-GPU AR steps.
+    if (
+        not enable_sp
+        and not cache_vision
+        and attn_mode == "flash_attention_3"
+        and static_bshd_kv_buffer is not None
+        and static_prefix_len is not None
+        and query.dtype in {torch.bfloat16, torch.float16}
+        and key.dtype == query.dtype
+        and value.dtype == query.dtype
+        and query.shape[-1] <= 256
+        and query.shape[-1] % 8 == 0
+        and hopper_fa3_usable(query.device)
+        and _FA3_MODULE is not None
+    ):
+        k_buf, v_buf = static_bshd_kv_buffer
+        end_len = static_prefix_len + key.shape[1]
+        k_buf[:, static_prefix_len:end_len].copy_(key)
+        v_buf[:, static_prefix_len:end_len].copy_(value)
+        q_c = query if query.is_contiguous() else query.contiguous()
+        out = _FA3_MODULE.flash_attn_func(q_c, k_buf[:, :end_len], v_buf[:, :end_len])
+        hidden_states = out[0] if isinstance(out, tuple) else out
+        return (hidden_states.reshape(hidden_states.shape[0], hidden_states.shape[1], -1), {})
     if enable_sp:
         query = sequence_model_parallel_all_to_all_4D(query, scatter_dim=2, gather_dim=1)
         key = sequence_model_parallel_all_to_all_4D(key, scatter_dim=2, gather_dim=1)
@@ -719,6 +836,74 @@ def sequence_parallel_attention_bi_fp8(
         scale_key=("bi", stream_tag, block_idx),
     )
     hidden_states = out_bhsd.transpose(1, 2)
+    if enable_sp:
+        hidden_states, encoder_hidden_states = hidden_states.split_with_sizes(
+            (sequence_length, encoder_sequence_length), dim=1
+        )
+        hidden_states = sequence_model_parallel_all_to_all_4D(hidden_states.contiguous(), scatter_dim=1, gather_dim=2)
+        encoder_hidden_states = sequence_model_parallel_all_gather(
+            encoder_hidden_states.contiguous(), dim=2
+        ).contiguous()
+        hidden_states = hidden_states.to(query.dtype)
+        encoder_hidden_states = encoder_hidden_states.to(query.dtype)
+        hidden_states = torch.cat([hidden_states, encoder_hidden_states], dim=1)
+    return hidden_states.reshape(hidden_states.shape[0], hidden_states.shape[1], -1)
+
+
+@torch.compiler.disable
+def sequence_parallel_attention_bi_fa3(
+    q: tuple[torch.Tensor, torch.Tensor],
+    k: tuple[torch.Tensor, torch.Tensor],
+    v: tuple[torch.Tensor, torch.Tensor],
+) -> torch.Tensor:
+    """Direct BSHD joint multimodal (img + txt) Hopper FlashAttention-3 with zero BHSD transposes."""
+    query, encoder_query = q
+    key, encoder_key = k
+    value, encoder_value = v
+
+    parallel_dims = get_parallel_state()
+    enable_sp = parallel_dims.sp_enabled
+    if enable_sp:
+        sp_size = parallel_dims.sp
+        sp_rank = parallel_dims.sp_rank
+        query = sequence_model_parallel_all_to_all_4D(query, scatter_dim=2, gather_dim=1)
+        key = sequence_model_parallel_all_to_all_4D(key, scatter_dim=2, gather_dim=1)
+        value = sequence_model_parallel_all_to_all_4D(value, scatter_dim=2, gather_dim=1)
+
+        def _shrink_head(tensor: torch.Tensor) -> torch.Tensor:
+            local_heads = tensor.shape[2] // sp_size
+            return tensor.narrow(2, sp_rank * local_heads, local_heads)
+
+        encoder_query = _shrink_head(encoder_query)
+        encoder_key = _shrink_head(encoder_key)
+        encoder_value = _shrink_head(encoder_value)
+
+    sequence_length = query.size(1)
+    encoder_sequence_length = encoder_query.size(1)
+    q_bshd = torch.cat([query, encoder_query], dim=1).contiguous()
+    k_bshd = torch.cat([key, encoder_key], dim=1).contiguous()
+    v_bshd = torch.cat([value, encoder_value], dim=1).contiguous()
+
+    if (
+        hopper_fa3_usable(q_bshd.device)
+        and _FA3_MODULE is not None
+        and q_bshd.dtype in {torch.bfloat16, torch.float16}
+        and k_bshd.dtype == q_bshd.dtype
+        and v_bshd.dtype == q_bshd.dtype
+        and q_bshd.shape[-1] <= 256
+        and q_bshd.shape[-1] % 8 == 0
+    ):
+        out = _FA3_MODULE.flash_attn_func(q_bshd, k_bshd, v_bshd)
+        hidden_states = out[0] if isinstance(out, tuple) else out
+    else:
+        hidden_states = scaled_dot_product_attention(
+            q_bshd.transpose(1, 2),
+            k_bshd.transpose(1, 2),
+            v_bshd.transpose(1, 2),
+            dropout_p=0.0,
+            is_causal=False,
+        ).transpose(1, 2)
+
     if enable_sp:
         hidden_states, encoder_hidden_states = hidden_states.split_with_sizes(
             (sequence_length, encoder_sequence_length), dim=1

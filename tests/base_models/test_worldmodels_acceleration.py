@@ -1252,3 +1252,1001 @@ def test_longlive_refresh_crossattn_dtype_truncation_and_compile_lora_guard() ->
             apply_lora=True,
             compile=True,
         )
+
+
+@requires_cuda
+def test_longlive_wave2_triton_kernels_and_o1_slot_canonicalization() -> None:
+    from worldfoundry.pipelines.longlive.fast_kernels import (
+        LongLiveFastDenoiserEngine,
+        wan_layernorm_adaln,
+        wan_qk_rmsnorm_rope_write_kv,
+        wan_residual_gate_add,
+        wan_rmsnorm,
+    )
+
+    device = torch.device("cuda")
+    dtype = torch.bfloat16
+    torch.manual_seed(101)
+    B, F_cur, H_sp, W_sp = 1, 3, 4, 4
+    S = F_cur * H_sp * W_sp
+    num_heads, head_dim = 4, 64
+    C = num_heads * head_dim
+
+    x = torch.randn(B, S, C, device=device, dtype=dtype)
+    y = torch.randn_like(x)
+    e = torch.randn(B, F_cur, 6, C, device=device, dtype=torch.float32)
+    mod = torch.randn(1, 6, C, device=device, dtype=torch.float32)
+
+    with torch.inference_mode():
+        # 1. Exact LayerNorm + AdaLN matches WanLayerNorm(x).float() * (1 + scale) + shift bit-for-bit
+        e_eff = mod.unsqueeze(1) + e
+        shift0 = e_eff[:, :, 0, :]
+        scale0 = e_eff[:, :, 1, :]
+        gate0 = e_eff[:, :, 2, :]
+        ref_ln = (
+            torch.nn.functional.layer_norm(x, (C,), eps=1e-6).float().view(B, F_cur, H_sp * W_sp, C)
+            * (1.0 + scale0.unsqueeze(2))
+            + shift0.unsqueeze(2)
+        ).view(B, S, C)
+        fast_ln = wan_layernorm_adaln(x, scale0, shift0, num_frames=F_cur, frame_seq=H_sp * W_sp, eps=1e-6, exact=True)
+        assert torch.allclose(fast_ln, ref_ln, atol=1e-6, rtol=1e-6)
+        assert torch.equal(fast_ln.to(dtype), ref_ln.to(dtype))
+
+        # 2. Exact Residual-Gate add matches PyTorch reference bit-for-bit
+        ref_rg = (
+            x.float().view(B, F_cur, H_sp * W_sp, C) + y.float().view(B, F_cur, H_sp * W_sp, C) * gate0.unsqueeze(2)
+        ).view(B, S, C)
+        fast_rg = wan_residual_gate_add(x, y, gate0, num_frames=F_cur, frame_seq=H_sp * W_sp)
+        assert torch.equal(fast_rg, ref_rg)
+
+        # 3. Exact WanRMSNorm matches PyTorch reference bit-for-bit
+        w = torch.randn(C, device=device, dtype=dtype)
+        ref_rms = (x.float() * torch.rsqrt(x.float().pow(2).mean(dim=-1, keepdim=True) + 1e-6)).type_as(x) * w
+        fast_rms = wan_rmsnorm(x, w, eps=1e-6, exact=True)
+        assert torch.equal(fast_rms, ref_rms)
+
+        # 4. Exact fused QK-RMSNorm + FP64 3D RoPE + KV write matches complex-FP64 reference bit-for-bit
+        q_proj = torch.randn(B, S, C, device=device, dtype=dtype)
+        k_proj = torch.randn(B, S, C, device=device, dtype=dtype)
+        qw = torch.randn(C, device=device, dtype=dtype)
+        kw = torch.randn(C, device=device, dtype=dtype)
+        theta = torch.randn(S, head_dim // 2, device=device, dtype=torch.float64)
+        cos = torch.cos(theta)
+        sin = torch.sin(theta)
+        k_rot_dst = torch.zeros(B, S + 16, num_heads, head_dim, device=device, dtype=dtype)
+        k_raw_dst = torch.zeros_like(k_rot_dst)
+        q_fast = wan_qk_rmsnorm_rope_write_kv(
+            q_proj,
+            k_proj,
+            qw,
+            kw,
+            cos,
+            sin,
+            k_rot_dst,
+            k_raw_dst,
+            dst_token_offset=16,
+            num_heads=num_heads,
+            head_dim=head_dim,
+            eps=1e-6,
+            exact=True,
+        )
+
+        def _ref_rope_fp64(t_bshd: torch.Tensor) -> torch.Tensor:
+            xc = torch.view_as_complex(t_bshd.to(torch.float64).reshape(B, S, num_heads, head_dim // 2, 2))
+            fc = torch.complex(cos, sin).view(1, S, 1, head_dim // 2)
+            return torch.view_as_real(xc * fc).flatten(3).to(torch.float32).to(dtype)
+
+        q_norm_ref = (
+            (q_proj.float() * torch.rsqrt(q_proj.float().pow(2).mean(dim=-1, keepdim=True) + 1e-6)).type_as(q_proj) * qw
+        ).view(B, S, num_heads, head_dim)
+        k_norm_ref = (
+            (k_proj.float() * torch.rsqrt(k_proj.float().pow(2).mean(dim=-1, keepdim=True) + 1e-6)).type_as(k_proj) * kw
+        ).view(B, S, num_heads, head_dim)
+        assert torch.equal(q_fast, _ref_rope_fp64(q_norm_ref))
+        assert torch.equal(k_raw_dst[:, 16 : 16 + S], k_norm_ref)
+        assert torch.equal(k_rot_dst[:, 16 : 16 + S], _ref_rope_fp64(k_norm_ref))
+
+    # 5. LongLiveFastDenoiserEngine default lossless policy & slot key boundedness
+    dummy_model = nn.Module()
+    dummy_model.register_parameter("p", nn.Parameter(torch.zeros(1, device=device, dtype=dtype)))
+    dummy_denoiser = SimpleNamespace(model=dummy_model, _piecewise_graph=None, enable_cuda_graph=False)
+    engine = LongLiveFastDenoiserEngine(dummy_denoiser, attention_backend="torch", enable_cuda_graph=False)
+    assert engine.attention_backend == "torch"
+    assert engine.exact_norms is True
+    assert engine.report()["fallbacks"] == []
+
+
+@requires_cuda
+def test_matrix_game2_wave2_triton_kernels_and_runtime_policy() -> None:
+    from worldfoundry.synthesis.visual_generation.matrix_game.matrix_game_2_runtime.utils.fast_kernels import (
+        mg2_layernorm_adaln,
+        mg2_main_self_attention,
+        mg2_qk_rmsnorm_rope_write_kv,
+        mg2_residual_gate_add,
+        mg2_rmsnorm,
+    )
+    from worldfoundry.synthesis.visual_generation.matrix_game.matrix_game_2_runtime.utils.vae_runtime.vae_block3 import (
+        VAEDecoderWrapper,
+    )
+    from worldfoundry.synthesis.visual_generation.matrix_game.matrix_game_2_runtime.worldfoundry_runtime import (
+        _matrix_game2_runtime_policy,
+    )
+
+    device = torch.device("cuda")
+    dtype = torch.bfloat16
+    torch.manual_seed(102)
+    B, F_cur, HW = 1, 3, 16
+    S = F_cur * HW
+    num_heads, head_dim = 4, 64
+    C = num_heads * head_dim
+
+    x = torch.randn(B, S, C, device=device, dtype=dtype)
+    y = torch.randn_like(x)
+    e = torch.randn(B, F_cur, 6, C, device=device, dtype=torch.float32)
+    mod = torch.randn(1, 6, C, device=device, dtype=torch.float32)
+
+    with torch.inference_mode():
+        e_eff = mod.unsqueeze(1) + e
+        shift0 = e_eff[:, :, 0, :]
+        scale0 = e_eff[:, :, 1, :]
+        gate0 = e_eff[:, :, 2, :]
+        ref_ln = (
+            torch.nn.functional.layer_norm(x, (C,), eps=1e-6).float().view(B, F_cur, HW, C)
+            * (1.0 + scale0.unsqueeze(2))
+            + shift0.unsqueeze(2)
+        ).view(B, S, C)
+        fast_ln = mg2_layernorm_adaln(x, scale0, shift0, num_frames=F_cur, frame_seq=HW, eps=1e-6)
+        assert torch.allclose(fast_ln, ref_ln, atol=1e-6, rtol=1e-6)
+        assert torch.equal(fast_ln.to(dtype), ref_ln.to(dtype))
+
+        ref_rg = (x.float().view(B, F_cur, HW, C) + y.float().view(B, F_cur, HW, C) * gate0.unsqueeze(2)).view(B, S, C)
+        assert torch.equal(mg2_residual_gate_add(x, y, gate0, num_frames=F_cur, frame_seq=HW), ref_rg)
+
+        w = torch.randn(C, device=device, dtype=dtype)
+        ref_rms = (x.float() * torch.rsqrt(x.float().pow(2).mean(dim=-1, keepdim=True) + 1e-6)).type_as(x) * w
+        assert torch.equal(mg2_rmsnorm(x, w, eps=1e-6, exact=True), ref_rms)
+
+        q_proj = torch.randn(B, S, C, device=device, dtype=dtype)
+        k_proj = torch.randn(B, S, C, device=device, dtype=dtype)
+        qw = torch.randn(C, device=device, dtype=dtype)
+        kw = torch.randn(C, device=device, dtype=dtype)
+        theta = torch.randn(S, head_dim // 2, device=device, dtype=torch.float64)
+        cos, sin = torch.cos(theta), torch.sin(theta)
+        k_dst = torch.zeros(B, S + 8, num_heads, head_dim, device=device, dtype=dtype)
+        q_out = mg2_qk_rmsnorm_rope_write_kv(
+            q_proj,
+            k_proj,
+            qw,
+            kw,
+            cos,
+            sin,
+            k_dst,
+            dst_token_offset=8,
+            num_heads=num_heads,
+            head_dim=head_dim,
+            eps=1e-6,
+            exact=True,
+        )
+
+        def _ref_rope(t_bshd: torch.Tensor) -> torch.Tensor:
+            xc = torch.view_as_complex(t_bshd.to(torch.float64).reshape(B, S, num_heads, head_dim // 2, 2))
+            fc = torch.complex(cos, sin).view(1, S, 1, head_dim // 2)
+            return torch.view_as_real(xc * fc).flatten(3).to(torch.float32).to(dtype)
+
+        qn = (
+            (q_proj.float() * torch.rsqrt(q_proj.float().pow(2).mean(dim=-1, keepdim=True) + 1e-6)).type_as(q_proj) * qw
+        ).view(B, S, num_heads, head_dim)
+        kn = (
+            (k_proj.float() * torch.rsqrt(k_proj.float().pow(2).mean(dim=-1, keepdim=True) + 1e-6)).type_as(k_proj) * kw
+        ).view(B, S, num_heads, head_dim)
+        assert torch.equal(q_out, _ref_rope(qn))
+        assert torch.equal(k_dst[:, 8 : 8 + S], _ref_rope(kn))
+
+        # Main self-attention FA3 vs SDPA parity
+        v = torch.randn(B, S + 8, num_heads, head_dim, device=device, dtype=dtype)
+        o_torch = mg2_main_self_attention(q_out, k_dst, v, backend="torch")
+        o_fa3 = mg2_main_self_attention(q_out, k_dst, v, backend="flash_attention_3")
+        assert torch.allclose(o_torch, o_fa3, atol=2e-2, rtol=2e-2)
+
+    # Policy checks: accept flash_attention_3 & vae_compile; reject unsupported sage
+    pol_fa3 = _matrix_game2_runtime_policy(
+        {"attention_backend": "flash_attention_3", "vae_compile": True}, device=device, dtype=dtype
+    )
+    assert pol_fa3.options["_resolved_attention_backend"] == "flash_attention_3"
+    assert pol_fa3.options["vae_compile"] is True
+    with pytest.raises(ValueError, match="attention_backend"):
+        _matrix_game2_runtime_policy({"attention_backend": "sage"}, device=device, dtype=dtype)
+
+    # Steady compile method exists on VAEDecoderWrapper
+    assert callable(getattr(VAEDecoderWrapper, "enable_steady_compile", None))
+
+
+@requires_cuda
+def test_hy_worldplay_wave2_fused_triton_and_bshd_fa3_parity() -> None:
+    from worldfoundry.base_models.diffusion_model.models.networks.hunyuan_video.h15.action_camera import (
+        _fused_qkv_rmsnorm_rope_prope,
+    )
+    from worldfoundry.base_models.diffusion_model.models.networks.hunyuan_video.h15.camera_attention import (
+        prepare_static_kv_arena,
+        prepare_static_kv_arena_bshd,
+        sequence_parallel_attention_bi_fa3,
+        sequence_parallel_attention_vision,
+    )
+    from worldfoundry.base_models.diffusion_model.models.networks.hunyuan_video.h15.camera_modulation import (
+        fused_layernorm_modulate,
+        fused_residual_dual_gate,
+        fused_residual_gate,
+    )
+    from worldfoundry.core.attention import apply_nd_rotary_embedding, get_nd_rotary_pos_embed
+    from worldfoundry.core.nn import normalization_layer
+
+    device = torch.device("cuda")
+    dtype = torch.bfloat16
+    torch.manual_seed(103)
+    B, T, HW, H, D = 1, 2, 16, 4, 64
+    S = T * HW
+    C = H * D
+
+    with torch.inference_mode():
+        # 1. Fused LayerNorm+Modulate, Residual-Gate, Dual-Residual-Gate (chunked strided views!)
+        x = torch.randn(B, S, C, device=device, dtype=dtype)
+        y1 = torch.randn_like(x)
+        y2 = torch.randn_like(x)
+        mods = torch.randn(B * T, 6 * C, device=device, dtype=dtype)
+        sh1, sc1, g1, _, _, _ = mods.chunk(6, dim=-1)
+        assert not sh1.is_contiguous()
+        ref_ln = modulate(torch.nn.functional.layer_norm(x, (C,), eps=1e-6), shift=sh1, scale=sc1)
+        fast_ln = fused_layernorm_modulate(x, shift=sh1, scale=sc1, eps=1e-6)
+        assert torch.allclose(fast_ln, ref_ln, atol=5e-2, rtol=2e-2)
+
+        ref_rg = x + apply_gate(y1, gate=g1)
+        fast_rg = fused_residual_gate(x, y1, g1)
+        assert torch.allclose(fast_rg, ref_rg, atol=5e-2, rtol=2e-2)
+
+        ref_rdg = x + apply_gate(y1 + y2, gate=g1)
+        fast_rdg = fused_residual_dual_gate(x, y1, y2, g1)
+        assert torch.allclose(fast_rdg, ref_rdg, atol=5e-2, rtol=2e-2)
+
+        # 2. Single-pass fused QKV-RMSNorm+RoPE+PRoPE kernel parity
+        qkv = torch.randn(B, S, 3 * C, device=device, dtype=dtype)
+        rms_cls = normalization_layer("rms")
+        qn = rms_cls(D, eps=1e-6, elementwise_affine=True, device=device, dtype=dtype)
+        kn = rms_cls(D, eps=1e-6, elementwise_affine=True, device=device, dtype=dtype)
+        qn.weight.data.uniform_(0.5, 1.5)
+        kn.weight.data.uniform_(0.5, 1.5)
+
+        vm = torch.eye(4, device=device, dtype=torch.float32).view(1, 1, 4, 4).repeat(B, T, 1, 1)
+        vm[0, 1, 0, 3] = 0.25
+        ks = torch.eye(3, device=device, dtype=torch.float32).view(1, 1, 3, 3).repeat(B, T, 1, 1)
+        ks[..., 0, 0] = 1.2
+        ks[..., 1, 1] = 1.15
+        p_mat, p_inv_t, _ = _precompute_prope_mats(vm, ks)
+        fcos, fsin = get_nd_rotary_pos_embed([16, 24, 24], [T, 4, 4], theta=256, use_real=True, theta_rescale_factor=1)
+        freqs_cis = (fcos.to(device=device), fsin.to(device=device))
+
+        rq, rk, rv = qkv.chunk(3, dim=-1)
+        rq = qn(rq.view(B, S, H, D)).to(rv)
+        rk = kn(rk.view(B, S, H, D)).to(rv)
+        rv = rv.view(B, S, H, D)
+        rq_p = _apply_prope_mat(rq, p_mat)
+        rk_p = _apply_prope_mat(rk, p_inv_t)
+        rv_p = _apply_prope_mat(rv, p_inv_t)
+        rq_r, rk_r = apply_nd_rotary_embedding(rq, rk, freqs_cis, head_first=False)
+
+        fused = _fused_qkv_rmsnorm_rope_prope(
+            qkv, qn.weight, kn.weight, freqs_cis, p_mat, p_inv_t, heads_num=H, eps=1e-6
+        )
+        assert fused is not None
+        fq_r, fk_r, fv, fq_p, fk_p, fv_p = fused
+        assert torch.allclose(fq_r, rq_r, atol=5e-2, rtol=2e-2)
+        assert torch.allclose(fk_r, rk_r, atol=5e-2, rtol=2e-2)
+        assert torch.equal(fv, rv)
+        assert torch.allclose(fq_p, rq_p, atol=5e-2, rtol=2e-2)
+        assert torch.allclose(fk_p, rk_p, atol=5e-2, rtol=2e-2)
+        assert torch.equal(fv_p, rv_p)
+
+        # 3. Direct BSHD static KV arena + FA3 vision & bi attention parity
+        kv_cache = [
+            {
+                "k_txt": torch.randn(B, H, 16, D, device=device, dtype=dtype),
+                "v_txt": torch.randn(B, H, 16, D, device=device, dtype=dtype),
+                "k_vision": torch.randn(B, H, 32, D, device=device, dtype=dtype),
+                "v_vision": torch.randn(B, H, 32, D, device=device, dtype=dtype),
+            }
+        ]
+        bhsd_bufs, pref, _ = prepare_static_kv_arena(kv_cache, S, dtype=dtype)
+        bshd_bufs, pref_bshd, key_bshd = prepare_static_kv_arena_bshd(kv_cache, S, dtype=dtype)
+        assert pref == pref_bshd and key_bshd[0] == "bshd"
+        o_vis_sdpa, _ = sequence_parallel_attention_vision(
+            fq_r, fk_r, fv, block_idx=0, attn_mode="torch", static_kv_buffer=bhsd_bufs[0], static_prefix_len=pref
+        )
+        o_vis_fa3, _ = sequence_parallel_attention_vision(
+            fq_r,
+            fk_r,
+            fv,
+            block_idx=0,
+            attn_mode="flash_attention_3",
+            static_bshd_kv_buffer=bshd_bufs[0],
+            static_prefix_len=pref_bshd,
+        )
+        assert torch.allclose(o_vis_sdpa, o_vis_fa3, atol=2e-2, rtol=2e-2)
+
+        tq = torch.randn(B, 16, H, D, device=device, dtype=dtype)
+        tk = torch.randn(B, 16, H, D, device=device, dtype=dtype)
+        tv = torch.randn(B, 16, H, D, device=device, dtype=dtype)
+        bi_fa3 = sequence_parallel_attention_bi_fa3((fq_r, tq), (fk_r, tk), (fv, tv))
+        assert bi_fa3.shape == (B, S + 16, C) and torch.isfinite(bi_fa3).all()
+
+    # 4. End-to-end ARHunyuanVideo_1_5_DiffusionTransformer FA3+BSHD+CG (vision) & FA3 compacted (bi) parity
+    cfg = _tiny_worldplay_config()
+    cfg["hidden_size"] = 128
+    cfg["heads_num"] = 2
+    cfg["rope_dim_list"] = [16, 24, 24]
+    cfg["mm_double_blocks_depth"] = 3
+    model = ARHunyuanVideo_1_5_DiffusionTransformer(**cfg)
+    model.add_prope_parameters()
+    model.add_discrete_action_parameters()
+    _init_zero_params(model)
+    model = model.to(device=device, dtype=dtype).eval()
+    model.fuse_qkv()
+
+    hs = torch.randn(1, 8, 2, 2, 2, device=device, dtype=dtype)
+    ts = torch.full((2,), 500.0, device=device, dtype=dtype)
+    t_txt = torch.zeros((1,), device=device, dtype=dtype)
+    tx = torch.randn(1, 10, 32, device=device, dtype=dtype)
+    mk = torch.tensor([[1, 1, 1, 0, 0, 1, 0, 1, 0, 0]], device=device, dtype=torch.long)
+    vm = torch.eye(4, device=device).view(1, 1, 4, 4).repeat(1, 2, 1, 1)
+    ks = torch.eye(3, device=device).view(1, 1, 3, 3).repeat(1, 2, 1, 1)
+    act = torch.zeros((1, 2), device=device, dtype=torch.long)
+
+    with torch.inference_mode(), torch.autocast("cuda", dtype=dtype):
+        # forward_bi: torch vs flash_attention_3 (with padded mask compaction!)
+        model.set_attention_backend("torch")
+        bi_ref = model.forward_bi(
+            hidden_states=hs,
+            timestep=ts,
+            timestep_txt=t_txt,
+            text_states=tx,
+            text_states_2=None,
+            encoder_attention_mask=mk,
+            viewmats=vm,
+            Ks=ks,
+            action=act,
+        )[0]
+        model.set_attention_backend("flash_attention_3")
+        bi_fa3_out = model.forward_bi(
+            hidden_states=hs,
+            timestep=ts,
+            timestep_txt=t_txt,
+            text_states=tx,
+            text_states_2=None,
+            encoder_attention_mask=mk,
+            viewmats=vm,
+            Ks=ks,
+            action=act,
+        )[0]
+        assert torch.allclose(bi_fa3_out, bi_ref, atol=3e-2, rtol=3e-2)
+
+        # forward_vision: torch+CG vs flash_attention_3+BSHD+CG
+        kv = model.forward_txt(timestep_txt=t_txt, text_states=tx, encoder_attention_mask=mk, cache_txt=True)
+        model.enable_cuda_graph(warmup=1)
+        model.set_attention_backend("torch")
+        for _ in range(3):
+            vis_ref = model.forward_vision(
+                hidden_states=hs,
+                timestep=ts,
+                action=act,
+                viewmats=vm,
+                Ks=ks,
+                kv_cache=kv,
+                rope_temporal_size=4,
+                start_rope_start_idx=0,
+            )[0]
+        model.set_attention_backend("flash_attention_3")
+        for _ in range(3):
+            vis_fa3 = model.forward_vision(
+                hidden_states=hs,
+                timestep=ts,
+                action=act,
+                viewmats=vm,
+                Ks=ks,
+                kv_cache=kv,
+                rope_temporal_size=4,
+                start_rope_start_idx=0,
+            )[0]
+        rep = model.graph_report()
+        assert rep is not None and rep["capture"] >= 1 and rep["replay"] >= 1 and rep["capture_failed"] == 0
+        assert torch.allclose(vis_fa3, vis_ref, atol=3e-2, rtol=3e-2)
+
+
+@requires_cuda
+def test_longlive_wave2_o1_rolling_graph_isolation_and_edge_cases(monkeypatch: pytest.MonkeyPatch) -> None:
+    import worldfoundry.base_models.diffusion_model.models.networks.wan.variants.forcing.self_forcing as sf_mod
+    from worldfoundry.base_models.diffusion_model.contracts import DenoiserInput
+    from worldfoundry.base_models.diffusion_model.models.denoisers.wan import SelfForcingWanDenoiser
+    from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.forcing.self_forcing import (
+        CausalWanModel,
+    )
+    from worldfoundry.pipelines.longlive.fast_kernels import (
+        LongLiveFastDenoiserEngine,
+        fast_longlive_self_attention,
+        wan_layernorm_adaln,
+        wan_residual_gate_add,
+        wan_rmsnorm,
+    )
+
+    # Pin the baseline reference denoiser to exact PyTorch FP64 RoPE (matching causal_rope_apply
+    # bit-for-bit without Triton FMA drift) so torch.equal asserts true 0-ULP lossless parity.
+    def _exact_pytorch_rope(x: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor) -> torch.Tensor:
+        s = int(cos.shape[1])
+        x0, x1 = x[:, :s].to(cos.dtype).reshape(x.shape[0], s, x.shape[2], x.shape[3] // 2, 2).unbind(-1)
+        return torch.stack((x0 * cos - x1 * sin, x0 * sin + x1 * cos), dim=-1).flatten(-2).to(x.dtype)
+
+    monkeypatch.setattr(sf_mod, "_apply_real_rope", _exact_pytorch_rope)
+
+    device = torch.device("cuda")
+    dtype = torch.bfloat16
+    torch.manual_seed(201)
+
+    def _mk(latents: torch.Tensor, t: torch.Tensor, cond: dict[str, Any]) -> DenoiserInput:
+        return DenoiserInput(
+            latents=latents, timestep=t, next_timestep=t * 0, step_index=0, total_steps=4, conditioning=cond
+        )
+
+    model = (
+        CausalWanModel(
+            model_type="t2v",
+            patch_size=(1, 2, 2),
+            text_len=8,
+            in_dim=4,
+            dim=128,
+            ffn_dim=256,
+            freq_dim=64,
+            text_dim=32,
+            out_dim=4,
+            num_heads=2,
+            num_layers=2,
+            local_attn_size=12,
+            sink_size=5,
+            qk_norm=True,
+            cross_attn_norm=True,
+            kv_cache_relative_rope=True,
+        )
+        .to(device=device, dtype=dtype)
+        .eval()
+    )
+    for p in model.parameters():
+        if p.ndim >= 2:
+            nn.init.normal_(p, std=0.05)
+
+    den_fast = SelfForcingWanDenoiser(
+        model, block_size=3, kv_window="sink5-window7-rerope", compute_dtype=dtype, enable_cuda_graph=True
+    )
+    engine = LongLiveFastDenoiserEngine(den_fast, attention_backend="torch", enable_cuda_graph=True, exact_norms=True)
+    den_ref = SelfForcingWanDenoiser(
+        model, block_size=3, kv_window="sink5-window7-rerope", compute_dtype=dtype, enable_cuda_graph=False
+    )
+
+    # 1. Full 8-chunk rolling O(1) rollout: bit-exact parity + strictly 4 segments forever
+    kv_f = den_fast.create_kv_cache(
+        batch_size=1, n_views=1, latent_frames_per_view=12, frame_sequence_length=16, device=device, dtype=dtype
+    )
+    kv_r = den_ref.create_kv_cache(
+        batch_size=1, n_views=1, latent_frames_per_view=12, frame_sequence_length=16, device=device, dtype=dtype
+    )
+    ctx1 = torch.randn(1, 8, 32, device=device, dtype=dtype) * 4.0
+    with torch.inference_mode():
+        for chunk in range(8):
+            for t_val in (900.0, 500.0, 0.0):
+                xs = torch.randn(1, 4, 3, 8, 8, device=device, dtype=dtype)
+                ts = torch.tensor([t_val], device=device)
+                of = engine(_mk(xs, ts, {"context": ctx1, "kv_cache": kv_f, "current_start": chunk * 48})).sample
+                or_ = den_ref(_mk(xs, ts, {"context": ctx1, "kv_cache": kv_r, "current_start": chunk * 48})).sample
+                assert torch.equal(of, or_)
+    rep = den_fast._piecewise_graph.report()
+    assert rep["segment_count"] == 4 and rep["capture"] == 4 and rep["eager"] == 0
+
+    # 2. Restart at current_start=0 without reset_causal_host_cache must not produce negative slot indices
+    x0 = torch.randn(1, 4, 3, 8, 8, device=device, dtype=dtype)
+    t500 = torch.tensor([500.0], device=device)
+    kv_r0 = den_ref.create_kv_cache(
+        batch_size=1, n_views=1, latent_frames_per_view=12, frame_sequence_length=16, device=device, dtype=dtype
+    )
+    with torch.inference_mode():
+        o_restart = engine(_mk(x0, t500, {"context": ctx1, "kv_cache": kv_f, "current_start": 0})).sample
+        o_ref0 = den_ref(_mk(x0, t500, {"context": ctx1, "kv_cache": kv_r0, "current_start": 0})).sample
+    assert torch.equal(o_restart, o_ref0)
+
+    # 3. Reusing pooled cache outside inference_mode after inference_mode init + portrait after landscape (same H*W)
+    kv_land = den_fast.create_kv_cache(
+        batch_size=1, n_views=1, latent_frames_per_view=12, frame_sequence_length=32, device=device, dtype=dtype
+    )
+    x_land = torch.randn(1, 4, 3, 8, 16, device=device, dtype=dtype)
+    with torch.inference_mode():
+        for _ in range(3):
+            engine(_mk(x_land, t500, {"context": ctx1, "kv_cache": kv_land, "current_start": 0}))
+    # Must not fail with "Inplace update to inference tensor outside InferenceMode is not allowed"
+    kv_port = den_fast.create_kv_cache(
+        batch_size=1, n_views=1, latent_frames_per_view=12, frame_sequence_length=32, device=device, dtype=dtype
+    )
+    x_port = torch.randn(1, 4, 3, 16, 8, device=device, dtype=dtype)
+    kv_port_ref = den_ref.create_kv_cache(
+        batch_size=1, n_views=1, latent_frames_per_view=12, frame_sequence_length=32, device=device, dtype=dtype
+    )
+    with torch.inference_mode():
+        o_port = engine(_mk(x_port, t500, {"context": ctx1, "kv_cache": kv_port, "current_start": 0})).sample
+        o_port_ref = den_ref(_mk(x_port, t500, {"context": ctx1, "kv_cache": kv_port_ref, "current_start": 0})).sample
+    assert torch.equal(o_port, o_port_ref)
+
+    # 4. B=2 and fresh unpooled cache with a different prompt must not collide with B=1 captured graph
+    kv_b2 = den_fast.create_kv_cache(
+        batch_size=2, n_views=1, latent_frames_per_view=12, frame_sequence_length=16, device=device, dtype=dtype
+    )
+    ctx_b2 = torch.randn(2, 8, 32, device=device, dtype=dtype) * -3.0
+    x_b2 = torch.randn(2, 4, 3, 8, 8, device=device, dtype=dtype)
+    kv_b2_ref = den_ref.create_kv_cache(
+        batch_size=2, n_views=1, latent_frames_per_view=12, frame_sequence_length=16, device=device, dtype=dtype
+    )
+    kv_fresh = den_ref.create_kv_cache(
+        batch_size=1, n_views=1, latent_frames_per_view=12, frame_sequence_length=32, device=device, dtype=dtype
+    )
+    ctx2 = torch.randn(1, 8, 32, device=device, dtype=dtype) * -5.0
+    kv_fresh_ref = den_ref.create_kv_cache(
+        batch_size=1, n_views=1, latent_frames_per_view=12, frame_sequence_length=32, device=device, dtype=dtype
+    )
+    with torch.inference_mode():
+        o_b2 = engine(_mk(x_b2, t500, {"context": ctx_b2, "kv_cache": kv_b2, "current_start": 0})).sample
+        o_b2_ref = den_ref(_mk(x_b2, t500, {"context": ctx_b2, "kv_cache": kv_b2_ref, "current_start": 0})).sample
+        o_fresh = engine(_mk(x_land, t500, {"context": ctx2, "kv_cache": kv_fresh, "current_start": 0})).sample
+        o_fresh_ref = den_ref(_mk(x_land, t500, {"context": ctx2, "kv_cache": kv_fresh_ref, "current_start": 0})).sample
+    assert torch.equal(o_b2, o_b2_ref)
+    assert torch.equal(o_fresh, o_fresh_ref)
+
+    # 5. NaN-poisoned roped_k_arena eviction mid-rollout backfills cleanly from raw kv_cache
+    den_nocg = SelfForcingWanDenoiser(
+        model, block_size=3, kv_window="sink5-window7-rerope", compute_dtype=dtype, enable_cuda_graph=False
+    )
+    eng_nocg = LongLiveFastDenoiserEngine(
+        den_nocg, attention_backend="torch", enable_cuda_graph=False, exact_norms=True
+    )
+    kv_a = den_nocg.create_kv_cache(
+        batch_size=1, n_views=1, latent_frames_per_view=12, frame_sequence_length=16, device=device, dtype=dtype
+    )
+    kv_b = den_ref.create_kv_cache(
+        batch_size=1, n_views=1, latent_frames_per_view=12, frame_sequence_length=16, device=device, dtype=dtype
+    )
+    t0 = torch.tensor([0.0], device=device)
+    x1 = torch.randn(1, 4, 3, 8, 8, device=device, dtype=dtype)
+    with torch.inference_mode():
+        eng_nocg(_mk(x0, t0, {"context": ctx1, "kv_cache": kv_a, "current_start": 0}))
+        den_ref(_mk(x0, t0, {"context": ctx1, "kv_cache": kv_b, "current_start": 0}))
+        for arena in eng_nocg._roped_k_arenas.values():
+            for buf in arena:
+                buf.fill_(float("nan"))
+        eng_nocg._roped_k_arenas.clear()
+        oa = eng_nocg(_mk(x1, t0, {"context": ctx1, "kv_cache": kv_a, "current_start": 48})).sample
+        ob = den_ref(_mk(x1, t0, {"context": ctx1, "kv_cache": kv_b, "current_start": 48})).sample
+    assert torch.equal(oa, ob)
+
+    # 6. Broadcasted B>1 modulation, mixed-dtype rounding, FP32 RMSNorm weight, and FP32 FA3 guard
+    with torch.inference_mode():
+        xm = torch.randn(2, 48, 256, device=device, dtype=dtype)
+        ym = torch.randn_like(xm)
+        sc = torch.randn(1, 3, 1, 256, device=device, dtype=dtype)
+        sh = torch.randn(1, 3, 1, 256, device=device, dtype=torch.float32)
+        ref_ln = (
+            torch.nn.functional.layer_norm(xm, (256,), eps=1e-6).type_as(xm).unflatten(1, (3, 16)) * (1 + sc) + sh
+        ).flatten(1, 2)
+        assert torch.equal(wan_layernorm_adaln(xm, sc, sh, num_frames=3, frame_seq=16, eps=1e-6, exact=True), ref_ln)
+        with torch.autocast("cuda", dtype=dtype):
+            sc_bf = torch.randn(2, 3, 1, 256, device=device, dtype=dtype)
+            sh_bf = torch.randn(2, 3, 1, 256, device=device, dtype=dtype)
+            ref_ln_ac = (
+                torch.nn.functional.layer_norm(xm, (256,), eps=1e-6).type_as(xm).unflatten(1, (3, 16)) * (1 + sc_bf)
+                + sh_bf
+            ).flatten(1, 2)
+            assert torch.equal(
+                wan_layernorm_adaln(xm, sc_bf, sh_bf, num_frames=3, frame_seq=16, eps=1e-6, exact=True), ref_ln_ac
+            )
+
+        g_b = torch.randn(2, 1, 1, 256, device=device, dtype=dtype)
+        assert torch.equal(
+            wan_residual_gate_add(xm.float(), ym, g_b, num_frames=3, frame_seq=16),
+            xm.float() + (ym.unflatten(1, (3, 16)) * g_b).flatten(1, 2),
+        )
+        w32 = torch.randn(256, device=device, dtype=torch.float32)
+        rms_ref = (xm.float() * torch.rsqrt(xm.float().pow(2).mean(dim=-1, keepdim=True) + 1e-6)).type_as(xm) * w32
+        rms_got = wan_rmsnorm(xm, w32, eps=1e-6, exact=True)
+        assert rms_got.dtype == torch.float32 and torch.equal(rms_got, rms_ref)
+
+        q32 = torch.randn(1, 16, 4, 64, device=device, dtype=torch.float32)
+        o32 = fast_longlive_self_attention(q32, q32, q32, backend="flash_attention_3")
+        assert o32.dtype == torch.float32 and torch.isfinite(o32).all()
+
+
+@requires_cuda
+def test_matrix_game2_wave2_edge_cases_and_steady_vae_compile() -> None:
+    from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.action_conditioning_21 import (
+        ActionModule,
+    )
+    from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.causal_action_21 import (
+        CausalWanModel,
+    )
+    from worldfoundry.synthesis.visual_generation.matrix_game.matrix_game_2_runtime.utils.fast_kernels import (
+        mg2_fast_action_module_forward,
+        mg2_fast_steady_forward,
+        mg2_layernorm_adaln,
+        mg2_main_self_attention,
+        mg2_residual_gate_add,
+        mg2_rmsnorm,
+        precompute_action_inputs,
+    )
+    from worldfoundry.synthesis.visual_generation.matrix_game.matrix_game_2_runtime.utils.vae_runtime.vae_block3 import (
+        VAEDecoderWrapper,
+    )
+    from worldfoundry.synthesis.visual_generation.matrix_game.matrix_game_2_runtime.utils.wan_wrapper import (
+        WanDiffusionWrapper,
+    )
+
+    device = torch.device("cuda")
+    dtype = torch.bfloat16
+    torch.manual_seed(202)
+
+    with torch.inference_mode():
+        # 1. FP32 FA3 guard + B=2 broadcasted modulation + mixed-dtype rounding + FP32 RMSNorm weight
+        q32 = torch.randn(1, 16, 4, 64, device=device, dtype=torch.float32)
+        o32 = mg2_main_self_attention(q32, q32, q32, backend="flash_attention_3")
+        assert o32.dtype == torch.float32 and torch.isfinite(o32).all()
+
+        xm = torch.randn(2, 48, 256, device=device, dtype=dtype)
+        ym = torch.randn_like(xm)
+        sc = torch.randn(1, 3, 1, 256, device=device, dtype=dtype)
+        sh = torch.randn(1, 3, 1, 256, device=device, dtype=torch.float32)
+        ref_ln = (
+            torch.nn.functional.layer_norm(xm, (256,), eps=1e-6).type_as(xm).unflatten(1, (3, 16)) * (1 + sc) + sh
+        ).flatten(1, 2)
+        assert torch.equal(mg2_layernorm_adaln(xm, sc, sh, num_frames=3, frame_seq=16, eps=1e-6), ref_ln)
+        with torch.autocast("cuda", dtype=dtype):
+            sc_bf = torch.randn(2, 3, 1, 256, device=device, dtype=dtype)
+            sh_bf = torch.randn(2, 3, 1, 256, device=device, dtype=dtype)
+            ref_ln_ac = (
+                torch.nn.functional.layer_norm(xm, (256,), eps=1e-6).type_as(xm).unflatten(1, (3, 16)) * (1 + sc_bf)
+                + sh_bf
+            ).flatten(1, 2)
+            assert torch.equal(mg2_layernorm_adaln(xm, sc_bf, sh_bf, num_frames=3, frame_seq=16, eps=1e-6), ref_ln_ac)
+        g_b = torch.randn(2, 1, 1, 256, device=device, dtype=dtype)
+        assert torch.equal(
+            mg2_residual_gate_add(xm.float(), ym, g_b, num_frames=3, frame_seq=16),
+            xm.float() + (ym.unflatten(1, (3, 16)) * g_b).flatten(1, 2),
+        )
+        w32 = torch.randn(256, device=device, dtype=torch.float32)
+        assert mg2_rmsnorm(xm, w32, eps=1e-6, exact=True).dtype == torch.float32
+
+        # 2. ActionModule qk_norm=False must match exact path when exact_mouse_sdpa=False
+        am = (
+            ActionModule(
+                mouse_dim_in=2,
+                keyboard_dim_in=4,
+                hidden_size=32,
+                img_hidden_size=128,
+                keyboard_hidden_dim=128,
+                mouse_hidden_dim=128,
+                heads_num=2,
+                qk_norm=False,
+                enable_mouse=True,
+                enable_keyboard=True,
+                local_attn_size=6,
+            )
+            .to(device=device, dtype=dtype)
+            .eval()
+        )
+        B, T, S = 1, 3, 16
+        xa = torch.randn(B, T * S, 128, device=device, dtype=dtype)
+        mouse = torch.randn(B, 9, 2, device=device, dtype=dtype)
+        kb = torch.randn(B, 9, 4, device=device, dtype=dtype)
+        gm, kbs = precompute_action_inputs(am, mouse_cond=mouse, keyboard_cond=kb, num_frames=T, spatial_s=S)
+        kv_m1 = {
+            "k": torch.zeros(B * S, 6, 2, 64, device=device, dtype=dtype),
+            "v": torch.zeros(B * S, 6, 2, 64, device=device, dtype=dtype),
+        }
+        kv_k1 = {
+            "k": torch.zeros(B, 6, 2, 64, device=device, dtype=dtype),
+            "v": torch.zeros(B, 6, 2, 64, device=device, dtype=dtype),
+        }
+        kv_m2 = {"k": torch.zeros_like(kv_m1["k"]), "v": torch.zeros_like(kv_m1["v"])}
+        kv_k2 = {"k": torch.zeros_like(kv_k1["k"]), "v": torch.zeros_like(kv_k1["v"])}
+        o_ex = mg2_fast_action_module_forward(
+            am,
+            xa,
+            num_frames=T,
+            spatial_s=S,
+            group_mouse_pre=gm,
+            kb_cond_slice=kbs,
+            kv_cache_mouse=kv_m1,
+            kv_cache_keyboard=kv_k1,
+            action_local_start=0,
+            action_local_end=3,
+            action_k_start=0,
+            start_frame=0,
+            exact_mouse_sdpa=True,
+        )
+        o_fa = mg2_fast_action_module_forward(
+            am,
+            xa,
+            num_frames=T,
+            spatial_s=S,
+            group_mouse_pre=gm,
+            kb_cond_slice=kbs,
+            kv_cache_mouse=kv_m2,
+            kv_cache_keyboard=kv_k2,
+            action_local_start=0,
+            action_local_end=3,
+            action_k_start=0,
+            start_frame=0,
+            exact_mouse_sdpa=False,
+        )
+        assert torch.equal(o_ex, o_fa)
+
+        # 3. local_attn_size=-1 (global attention) must not slice negatively or fail non-contiguous .view()
+        m_global = (
+            CausalWanModel(
+                model_type="i2v",
+                patch_size=(1, 2, 2),
+                in_dim=20,
+                dim=128,
+                ffn_dim=256,
+                freq_dim=64,
+                text_dim=32,
+                out_dim=16,
+                num_heads=2,
+                num_layers=1,
+                local_attn_size=-1,
+                sink_size=0,
+                qk_norm=True,
+                cross_attn_norm=True,
+                action_config={
+                    "blocks": [0],
+                    "mouse_dim_in": 2,
+                    "keyboard_dim_in": 4,
+                    "hidden_size": 32,
+                    "img_hidden_size": 128,
+                    "keyboard_hidden_dim": 128,
+                    "mouse_hidden_dim": 128,
+                    "heads_num": 2,
+                    "enable_mouse": True,
+                    "enable_keyboard": True,
+                },
+            )
+            .to(device=device, dtype=dtype)
+            .eval()
+        )
+        m_global.freqs = m_global.freqs.to(device)
+        xv = torch.randn(B, 16, T, 8, 8, device=device, dtype=dtype)
+        cc = torch.randn(B, 4, T, 8, 8, device=device, dtype=dtype)
+        t_in = torch.full((B, T), 500.0, device=device, dtype=torch.float32)
+        kv_g = [
+            {
+                "k": torch.zeros(B, 6 * S, 2, 64, device=device, dtype=dtype),
+                "v": torch.zeros(B, 6 * S, 2, 64, device=device, dtype=dtype),
+            }
+        ]
+        ca_g = [
+            {
+                "k": torch.randn(B, 8, 2, 64, device=device, dtype=dtype),
+                "v": torch.randn(B, 8, 2, 64, device=device, dtype=dtype),
+                "is_init": True,
+            }
+        ]
+        s_freqs = torch.pow(10000.0, -torch.arange(32, device=device, dtype=torch.float64).div(32))
+        out_g = mg2_fast_steady_forward(
+            m_global,
+            xv,
+            t_in,
+            cc,
+            kb,
+            mouse,
+            sinusoid_freqs=s_freqs,
+            kv_cache=kv_g,
+            kv_cache_mouse=[kv_m1],
+            kv_cache_keyboard=[kv_k1],
+            crossattn_cache=ca_g,
+            local_start_index=0,
+            local_end_index=T * S,
+            action_local_start=0,
+            action_local_end=T,
+            start_frame=0,
+            attention_backend="torch",
+            exact_norms=True,
+        )
+        assert torch.isfinite(out_g).all()
+
+    # 4. WanDiffusionWrapper fast warmup updates GPU cache indices when host mirror keys are absent
+    cfg = {
+        "model_type": "i2v",
+        "patch_size": (1, 2, 2),
+        "in_dim": 20,
+        "dim": 128,
+        "ffn_dim": 256,
+        "freq_dim": 64,
+        "text_dim": 32,
+        "out_dim": 16,
+        "num_heads": 2,
+        "num_layers": 1,
+        "local_attn_size": 6,
+        "sink_size": 0,
+        "qk_norm": True,
+        "cross_attn_norm": True,
+        "action_config": {
+            "blocks": [0],
+            "mouse_dim_in": 2,
+            "keyboard_dim_in": 4,
+            "hidden_size": 32,
+            "img_hidden_size": 128,
+            "keyboard_hidden_dim": 128,
+            "mouse_hidden_dim": 128,
+            "heads_num": 2,
+            "enable_mouse": True,
+            "enable_keyboard": True,
+        },
+    }
+    wrapper = WanDiffusionWrapper(model_config=cfg, is_causal=True).to(device=device, dtype=dtype).eval()
+    wrapper.enable_block_cuda_graph(warmup=1)
+    kv_w = [
+        {
+            "k": torch.zeros(B, 6 * S, 2, 64, device=device, dtype=dtype),
+            "v": torch.zeros(B, 6 * S, 2, 64, device=device, dtype=dtype),
+            "global_end_index": torch.zeros(1, dtype=torch.long, device=device),
+            "local_end_index": torch.zeros(1, dtype=torch.long, device=device),
+        }
+    ]
+    kvm_w = [
+        {
+            "k": torch.zeros(B * S, 6, 2, 64, device=device, dtype=dtype),
+            "v": torch.zeros(B * S, 6, 2, 64, device=device, dtype=dtype),
+            "global_end_index": torch.zeros(1, dtype=torch.long, device=device),
+            "local_end_index": torch.zeros(1, dtype=torch.long, device=device),
+        }
+    ]
+    kvk_w = [
+        {
+            "k": torch.zeros(B, 6, 2, 64, device=device, dtype=dtype),
+            "v": torch.zeros(B, 6, 2, 64, device=device, dtype=dtype),
+            "global_end_index": torch.zeros(1, dtype=torch.long, device=device),
+            "local_end_index": torch.zeros(1, dtype=torch.long, device=device),
+        }
+    ]
+    ca_w: list[dict[str, Any]] = [{"is_init": False}]
+    cond_w = {
+        "cond_concat": cc,
+        "visual_context": torch.randn(B, 8, 1280, device=device, dtype=dtype),
+        "keyboard_cond": kb,
+        "mouse_cond": mouse,
+    }
+    with torch.inference_mode():
+        wrapper(
+            xv,
+            cond_w,
+            t_in,
+            kv_cache=kv_w,
+            kv_cache_mouse=kvm_w,
+            kv_cache_keyboard=kvk_w,
+            crossattn_cache=ca_w,
+            current_start=0,
+        )
+    assert kv_w[0]["global_end_index"].item() == T * S and kv_w[0]["local_end_index"].item() == T * S
+    ca_w[0]["k"].zero_()
+
+    # 5. VAEDecoderWrapper.enable_steady_compile() numerical parity across chunk 0 -> steady chunks
+    vae_ref = VAEDecoderWrapper().to(device=device, dtype=torch.float16).eval()
+    vae_comp = VAEDecoderWrapper().to(device=device, dtype=torch.float16).eval()
+    vae_comp.load_state_dict(vae_ref.state_dict())
+    vae_comp.enable_steady_compile(mode="default")
+    z0 = torch.randn(1, 3, 16, 8, 8, device=device, dtype=torch.float16)
+    z1 = torch.randn(1, 3, 16, 8, 8, device=device, dtype=torch.float16)
+    with torch.inference_mode():
+        ce: list[Any] = [None] * 34
+        cc_vae: list[Any] = [None] * 34
+        _, ce = vae_ref(z0, *ce)
+        _, cc_vae = vae_comp(z0, *cc_vae)
+        o1_e, ce = vae_ref(z1, *ce)
+        o1_c, cc_vae = vae_comp(z1, *cc_vae)
+        o2_e, _ = vae_ref(z1, *ce)
+        o2_c, _ = vae_comp(z1, *cc_vae)
+    assert torch.allclose(o1_c, o1_e, atol=1e-2, rtol=1e-2)
+    assert torch.allclose(o2_c, o2_e, atol=1e-2, rtol=1e-2)
+
+
+@requires_cuda
+def test_hy_worldplay_wave2_edge_cases_and_h15_double_block_fa3() -> None:
+    from worldfoundry.base_models.diffusion_model.models.networks.hunyuan_video.h15.action_camera import (
+        MMDoubleStreamBlock,
+        _fused_qkv_rmsnorm_rope_prope,
+    )
+    from worldfoundry.base_models.diffusion_model.models.networks.hunyuan_video.h15.camera_attention import (
+        prepare_static_kv_arena_bshd,
+    )
+    from worldfoundry.base_models.diffusion_model.models.networks.hunyuan_video.h15.camera_modulation import (
+        fused_layernorm_modulate,
+        fused_residual_gate,
+    )
+    from worldfoundry.base_models.diffusion_model.models.networks.hunyuan_video.h15.hunyuanvideo_1_5_transformer import (
+        MMDoubleStreamBlock as H15DoubleBlock,
+    )
+    from worldfoundry.core.attention import get_nd_rotary_pos_embed
+
+    device = torch.device("cuda")
+    dtype = torch.bfloat16
+    torch.manual_seed(203)
+
+    # 1. qk_norm_type="layer" must not invoke RMSNorm-only fused QKV kernel after fuse_qkv()
+    blk = (
+        MMDoubleStreamBlock(hidden_size=128, heads_num=2, mlp_width_ratio=2.0, qk_norm=True, qk_norm_type="layer")
+        .to(device=device, dtype=dtype)
+        .eval()
+    )
+    assert isinstance(blk.img_attn_q_norm, nn.LayerNorm) and isinstance(blk.img_attn_k_norm, nn.LayerNorm)
+    assert blk.img_attn_q_norm.bias is not None and blk.img_attn_k_norm.bias is not None
+    blk.img_attn_q_norm.bias.data.fill_(2.5)
+    blk.img_attn_k_norm.bias.data.fill_(-1.5)
+    img = torch.randn(1, 32, 128, device=device, dtype=dtype) + 3.0
+    vec = torch.randn(2, 128, device=device, dtype=dtype)
+    vm = torch.eye(4, device=device).view(1, 1, 4, 4).repeat(1, 2, 1, 1)
+    ks = torch.eye(3, device=device).view(1, 1, 3, 3).repeat(1, 2, 1, 1)
+    pm = _precompute_prope_mats(vm, ks)
+    fcos, fsin = get_nd_rotary_pos_embed([16, 24, 24], [2, 4, 4], theta=256, use_real=True, theta_rescale_factor=1)
+    fc = (fcos.to(device), fsin.to(device))
+    with torch.inference_mode():
+        ref = blk._img_qkv_rope_prope(vec, img, fc, pm, vm, ks)
+        blk.fuse_qkv()
+        fused = blk._img_qkv_rope_prope(vec, img, fc, pm, vm, ks)
+    assert torch.allclose(fused[0], ref[0], atol=2e-2, rtol=2e-2)
+
+    # 2. _fused_qkv_rmsnorm_rope_prope rejects mismatched batch p_mat (no OOB GPU read)
+    qkv = torch.randn(2, 32, 384, device=device, dtype=dtype)
+    qw = torch.ones(64, device=device, dtype=dtype)
+    with torch.inference_mode():
+        assert _fused_qkv_rmsnorm_rope_prope(qkv, qw, qw, fc, pm[0], pm[1], heads_num=2) is None
+
+    # 3. camera_modulation handles B=2 with broadcast row-count=1 without ZeroDivisionError
+    x2 = torch.randn(2, 16, 128, device=device, dtype=dtype)
+    sc1 = torch.randn(1, 128, device=device, dtype=dtype)
+    sh1 = torch.randn(1, 128, device=device, dtype=dtype)
+    with torch.inference_mode():
+        assert fused_layernorm_modulate(x2, sh1, sc1).shape == x2.shape
+        assert fused_residual_gate(x2, x2, sc1).shape == x2.shape
+
+    # 4. prepare_static_kv_arena_bshd allocates non-inference tensors safe across inference_mode -> no_grad
+    arena: dict[tuple[Any, ...], list[tuple[torch.Tensor, torch.Tensor]]] = {}
+    kv_a = [
+        {
+            "k_txt": torch.randn(1, 2, 8, 64, device=device, dtype=dtype),
+            "v_txt": torch.randn(1, 2, 8, 64, device=device, dtype=dtype),
+        }
+    ]
+    with torch.inference_mode():
+        bufs, _, _ = prepare_static_kv_arena_bshd(kv_a, 16, arena=arena, dtype=dtype)
+    bufs[0][0].zero_()
+
+    # 5. HunyuanVideo_1_5_DiffusionTransformer MMDoubleStreamBlock FA3 parity (masked & unmasked, B=2)
+    h15_blk = (
+        H15DoubleBlock(hidden_size=128, heads_num=2, mlp_width_ratio=2.0, attn_mode="torch")
+        .to(device=device, dtype=dtype)
+        .eval()
+    )
+    img2 = torch.randn(2, 32, 128, device=device, dtype=dtype)
+    txt2 = torch.randn(2, 10, 128, device=device, dtype=dtype)
+    vec2 = torch.randn(2, 128, device=device, dtype=dtype)
+    mask2 = torch.tensor(
+        [[1, 1, 1, 1, 0, 0, 0, 0, 0, 0], [1, 1, 1, 1, 1, 1, 1, 0, 0, 0]], device=device, dtype=torch.bool
+    )
+    with torch.inference_mode():
+        h15_blk.set_attention_backend("torch")
+        ri_m, rt_m = h15_blk(img2, txt2, vec2, freqs_cis=fc, text_mask=mask2)
+        ri_0, rt_0 = h15_blk(img2, txt2, vec2, freqs_cis=fc, text_mask=None)
+        h15_blk.set_attention_backend("flash_attention_3")
+        fi_m, ft_m = h15_blk(img2, txt2, vec2, freqs_cis=fc, text_mask=mask2)
+        fi_0, ft_0 = h15_blk(img2, txt2, vec2, freqs_cis=fc, text_mask=None)
+    assert torch.allclose(fi_m, ri_m, atol=5e-2, rtol=2e-2)
+    assert torch.allclose(ft_m, rt_m, atol=5e-2, rtol=2e-2)
+    assert torch.allclose(fi_0, ri_0, atol=5e-2, rtol=2e-2)
+    assert torch.allclose(ft_0, rt_0, atol=5e-2, rtol=2e-2)

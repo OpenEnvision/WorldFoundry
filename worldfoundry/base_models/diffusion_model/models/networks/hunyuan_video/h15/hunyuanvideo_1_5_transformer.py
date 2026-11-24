@@ -63,6 +63,8 @@ from worldfoundry.core.nn import (
     normalization_layer as get_norm_layer,
 )
 
+from .camera_attention import sequence_parallel_attention_bi_fa3, sequence_parallel_attention_bi_fp8
+from .camera_modulation import fused_layernorm_modulate, fused_residual_gate
 from .modules.embed_layers import ByT5Mapper, PatchEmbed, VisionProjection
 from .modules.token_refiner import SingleTokenRefiner
 
@@ -255,8 +257,9 @@ class MMDoubleStreamBlock(nn.Module):
             txt_mod2_gate,
         ) = self.txt_mod(vec).chunk(6, dim=-1)
 
-        img_modulated = self.img_norm1(img)
-        img_modulated = modulate(img_modulated, shift=img_mod1_shift, scale=img_mod1_scale)
+        img_modulated = fused_layernorm_modulate(
+            img, shift=img_mod1_shift, scale=img_mod1_scale, eps=float(self.img_norm1.eps)
+        )
 
         if hasattr(self, "img_attn_qkv"):
             img_q, img_k, img_v = self.img_attn_qkv(img_modulated).chunk(3, dim=-1)
@@ -278,8 +281,9 @@ class MMDoubleStreamBlock(nn.Module):
             )
             img_q, img_k = img_qq, img_kk
 
-        txt_modulated = self.txt_norm1(txt)
-        txt_modulated = modulate(txt_modulated, shift=txt_mod1_shift, scale=txt_mod1_scale)
+        txt_modulated = fused_layernorm_modulate(
+            txt, shift=txt_mod1_shift, scale=txt_mod1_scale, eps=float(self.txt_norm1.eps)
+        )
         if hasattr(self, "txt_attn_qkv"):
             txt_q, txt_k, txt_v = self.txt_attn_qkv(txt_modulated).chunk(3, dim=-1)
         else:
@@ -294,14 +298,18 @@ class MMDoubleStreamBlock(nn.Module):
 
         attn_mode = "flash" if is_flash else (self.attention_backend or self.attn_mode)
         if attn_mode == "cudnn_fp8" and text_mask is None:
-            from .camera_attention import sequence_parallel_attention_bi_fp8
-
             attn = sequence_parallel_attention_bi_fp8(
                 (img_q, txt_q),
                 (img_k, txt_k),
                 (img_v, txt_v),
                 block_idx=block_idx,
                 stream_tag="h15_double",
+            )
+        elif attn_mode == "flash_attention_3" and text_mask is None:
+            attn = sequence_parallel_attention_bi_fa3(
+                (img_q, txt_q),
+                (img_k, txt_k),
+                (img_v, txt_v),
             )
         else:
             eff_attn_mode = "torch" if attn_mode == "cudnn_fp8" else attn_mode
@@ -319,16 +327,28 @@ class MMDoubleStreamBlock(nn.Module):
 
         img_attn, txt_attn = attn[:, : img_q.shape[1]].contiguous(), attn[:, img_q.shape[1] :].contiguous()
 
-        img = img + apply_gate(self.img_attn_proj(img_attn), gate=img_mod1_gate)
-        img = img + apply_gate(
-            _run_hy15_mlp(self.img_mlp, modulate(self.img_norm2(img), shift=img_mod2_shift, scale=img_mod2_scale)),
-            gate=img_mod2_gate,
+        img = fused_residual_gate(img, self.img_attn_proj(img_attn), img_mod1_gate)
+        img = fused_residual_gate(
+            img,
+            _run_hy15_mlp(
+                self.img_mlp,
+                fused_layernorm_modulate(
+                    img, shift=img_mod2_shift, scale=img_mod2_scale, eps=float(self.img_norm2.eps)
+                ),
+            ),
+            img_mod2_gate,
         )
 
-        txt = txt + apply_gate(self.txt_attn_proj(txt_attn), gate=txt_mod1_gate)
-        txt = txt + apply_gate(
-            _run_hy15_mlp(self.txt_mlp, modulate(self.txt_norm2(txt), shift=txt_mod2_shift, scale=txt_mod2_scale)),
-            gate=txt_mod2_gate,
+        txt = fused_residual_gate(txt, self.txt_attn_proj(txt_attn), txt_mod1_gate)
+        txt = fused_residual_gate(
+            txt,
+            _run_hy15_mlp(
+                self.txt_mlp,
+                fused_layernorm_modulate(
+                    txt, shift=txt_mod2_shift, scale=txt_mod2_scale, eps=float(self.txt_norm2.eps)
+                ),
+            ),
+            txt_mod2_gate,
         )
 
         return img, txt
@@ -982,6 +1002,7 @@ class HunyuanVideo_1_5_DiffusionTransformer(nn.Module, NativeConfigMixin):
         block_text_mask = text_mask
         if block_text_mask is not None and self.attn_mode in {
             "torch",
+            "flash_attention_3",
             "sol_attn",
             "cudnn_fp8",
             "triton_tma",

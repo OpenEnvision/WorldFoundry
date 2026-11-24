@@ -265,6 +265,20 @@ def load_interactive_prompt_jsonl(path: str | os.PathLike[str]) -> list[str]:
     return prompts
 
 
+class _LongLiveWindowedDenoiserProxy:
+    """Transparent proxy routing denoiser calls through :class:`LongLiveFastDenoiserEngine`."""
+
+    def __init__(self, base_denoiser: Any, engine: Any) -> None:
+        self._base = base_denoiser
+        self._engine = engine
+
+    def __call__(self, model_input: Any) -> Any:
+        return self._engine(model_input)
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._base, name)
+
+
 class NativeLongLivePipeline(NativeSelfForcingPipeline):
     """Accelerated native LongLive-1.3B interactive streaming video pipeline.
 
@@ -303,6 +317,7 @@ class NativeLongLivePipeline(NativeSelfForcingPipeline):
         self._lora_report: dict[str, Any] = dict(lora_report or {"applied": False, "merged_layers": 0})
         self._post_merge_qkv_blocks: int = int(post_merge_qkv_blocks)
         self._post_merge_quant_report: Any = post_merge_quant_report
+        self._fast_engine: Any = None
         self._last_clean_latent: torch.Tensor | None = None
         self._prompt_switches: int = 0
 
@@ -320,6 +335,7 @@ class NativeLongLivePipeline(NativeSelfForcingPipeline):
         lora_alpha: float | None = None,
         lora_scale: float | None = None,
         kv_window: str | None = "sink5-window7-rerope",
+        fast_longlive: bool = True,
         **kwargs: Any,
     ) -> NativeLongLivePipeline:
         """Load LongLive-1.3B with optional zero-overhead LoRA merge + SOL optimizations."""
@@ -335,6 +351,18 @@ class NativeLongLivePipeline(NativeSelfForcingPipeline):
         if kv_window is not None:
             load_kwargs["kv_window"] = kv_window
 
+        # When streaming_compile is requested on CUDA, enable channels_last_3d on the
+        # causal Wan VAE by default (unless caller explicitly opted out) to eliminate
+        # ~30 ms/chunk of cuDNN NCHW<->NHWC layout conversions in lossless BF16.
+        if (
+            bool(load_kwargs.get("vae_streaming_compile", False))
+            and str(device).startswith("cuda")
+            and "vae_channels_last_3d" not in load_kwargs
+        ):
+            load_kwargs["vae_channels_last_3d"] = True
+            load_kwargs.setdefault("vae_channels_last", True)
+
+        requested_attention = load_kwargs.get("attention_backend") or load_kwargs.get("attention")
         if resolved_lora is not None and str(load_kwargs.get("offload_mode", "none")).strip().lower() != "none":
             raise ValueError(
                 "LongLive load-time LoRA merge requires offload_mode='none' so base weights are materialized"
@@ -367,6 +395,11 @@ class NativeLongLivePipeline(NativeSelfForcingPipeline):
                     deferred_quant_policy = _coerce_quantization_policy(spec)
                 else:
                     deferred_quant_policy = _coerce_quantization_policy(quant_raw)
+
+        # Avoid rejecting flash_attention_3 in base loader if LongLiveFastDenoiserEngine handles it on CUDA.
+        if fast_longlive and str(device).startswith("cuda") and requested_attention is not None:
+            load_kwargs.pop("attention_backend", None)
+            load_kwargs.pop("attention", None)
 
         base_pipe = NativeSelfForcingPipeline.from_pretrained(
             model_path=resolved_model_path,
@@ -420,6 +453,24 @@ class NativeLongLivePipeline(NativeSelfForcingPipeline):
         )
         if hasattr(base_pipe._codec, "streaming_compile"):
             instance._codec.streaming_compile = getattr(base_pipe._codec, "streaming_compile", False)
+
+        # Install LongLive's O(1) bounded rolling-window graph + Hopper FA3 + fused Triton engine.
+        if fast_longlive and str(device).startswith("cuda"):
+            from .fast_kernels import LongLiveFastDenoiserEngine
+
+            runner = instance._window_runner
+            base_denoiser = runner.windowed_denoiser
+            cg_enabled = bool(getattr(base_denoiser, "enable_cuda_graph", False))
+            attn_choice = str(requested_attention) if requested_attention is not None else "torch"
+            fast_engine = LongLiveFastDenoiserEngine(
+                base_denoiser,
+                attention_backend=attn_choice,
+                enable_cuda_graph=cg_enabled,
+            )
+            proxy = _LongLiveWindowedDenoiserProxy(base_denoiser, fast_engine)
+            object.__setattr__(runner.components, "denoiser", proxy)
+            runner.windowed_denoiser = cast(Any, proxy)
+            instance._fast_engine = fast_engine
         return instance
 
     @property
@@ -446,12 +497,13 @@ class NativeLongLivePipeline(NativeSelfForcingPipeline):
             ),
             "kv_window": getattr(denoiser, "kv_window", None),
             "prompt_switches": self._prompt_switches,
+            "fast_engine": self._fast_engine.report() if self._fast_engine is not None else None,
         }
         return base_report
 
+    @staticmethod
     @torch.no_grad()
-    def _refresh_crossattn_cache_inplace(
-        self,
+    def _refresh_crossattn_cache_inplace_static(
         model: nn.Module,
         context: torch.Tensor,
         crossattn_cache: list[dict[str, Any]],
@@ -498,22 +550,43 @@ class NativeLongLivePipeline(NativeSelfForcingPipeline):
 
                 existing_k = layer_cache.get("k")
                 existing_v = layer_cache.get("v")
-                if (
+                can_copy_inplace = (
                     isinstance(existing_k, torch.Tensor)
                     and isinstance(existing_v, torch.Tensor)
                     and existing_k.shape == k_new.shape
                     and existing_v.shape == v_new.shape
                     and existing_k.device == k_new.device
                     and existing_v.device == v_new.device
-                ):
+                    and (not existing_k.is_inference() or torch.is_inference_mode_enabled())
+                    and (not existing_v.is_inference() or torch.is_inference_mode_enabled())
+                )
+                if can_copy_inplace:
+                    assert isinstance(existing_k, torch.Tensor) and isinstance(existing_v, torch.Tensor)
                     existing_k.copy_(k_new)
                     existing_v.copy_(v_new)
                 else:
-                    layer_cache["k"] = k_new.contiguous()
-                    layer_cache["v"] = v_new.contiguous()
+                    # Allocate persistent cache buffers as normal (non-inference) tensors so later
+                    # create_kv_cache() / switch_prompt_realtime() calls outside inference_mode()
+                    # can safely mutate them in place.
+                    with torch.inference_mode(False):
+                        k_buf = torch.empty(k_new.shape, dtype=k_new.dtype, device=k_new.device)
+                        v_buf = torch.empty(v_new.shape, dtype=v_new.dtype, device=v_new.device)
+                        k_buf.copy_(k_new)
+                        v_buf.copy_(v_new)
+                    layer_cache["k"] = k_buf
+                    layer_cache["v"] = v_buf
                     in_place_preserved = False
                 layer_cache["is_init"] = True
         return in_place_preserved
+
+    @torch.no_grad()
+    def _refresh_crossattn_cache_inplace(
+        self,
+        model: nn.Module,
+        context: torch.Tensor,
+        crossattn_cache: list[dict[str, Any]],
+    ) -> bool:
+        return self._refresh_crossattn_cache_inplace_static(model, context, crossattn_cache)
 
     @torch.no_grad()
     def switch_prompt_realtime(
@@ -725,7 +798,7 @@ class NativeLongLivePipeline(NativeSelfForcingPipeline):
 
         def _pixels_to_uint8_gpu(pixels: torch.Tensor) -> torch.Tensor:
             frames_t = pixels[0].permute(1, 2, 3, 0).float()
-            return frames_t.add(1.0).mul(127.5).clamp(0.0, 255.0).round().to(torch.uint8).contiguous()
+            return frames_t.clamp(-1.0, 1.0).add(1.0).mul(127.5).to(torch.uint8).contiguous()
 
         def _flush_pending():
             nonlocal pending_cpu_uint8, pending_event

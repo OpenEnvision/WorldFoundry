@@ -157,6 +157,22 @@ class VAEDecoderWrapper(nn.Module):
         self._cuda_graph_enabled: bool = False
         self._steady_graph_runner: Any = None
         self._steady_graph_key: tuple[Any, ...] | None = None
+        self._steady_compiled_fn: Any = None
+        self._steady_compile_mode: str | None = None
+
+    def enable_steady_compile(self, *, mode: str = "default") -> None:
+        """Compile only the steady-state tensor-cached decode path without chunk-0 ``None``/``"Rep"`` guards."""
+        import torch._dynamo as _dynamo
+
+        if _dynamo.config.cache_size_limit < 64:
+            _dynamo.config.cache_size_limit = 64
+
+        def _steady_decode(z_in: torch.Tensor, *cache_in: torch.Tensor):
+            out_t, next_cache = self._decode_eager(z_in, list(cache_in))
+            return (out_t, *next_cache)
+
+        self._steady_compiled_fn = torch.compile(_steady_decode, mode=mode, dynamic=False)
+        self._steady_compile_mode = mode
 
     def enable_cuda_graph(self, *, warmup: int = 1) -> None:
         """Capture and replay steady-state causal VAE decode chunks via CUDA Graph."""
@@ -210,13 +226,11 @@ class VAEDecoderWrapper(nn.Module):
 
     def forward(self, z: torch.Tensor, *feat_cache: list[torch.Tensor]):
         cache_list = list(feat_cache)
-        if (
-            self._cuda_graph_enabled
-            and z.is_cuda
-            and not self.training
-            and len(cache_list) > 0
-            and all(isinstance(item, torch.Tensor) for item in cache_list)
-        ):
+        all_tensors = len(cache_list) > 0 and all(isinstance(item, torch.Tensor) for item in cache_list)
+        if self._steady_compiled_fn is not None and z.is_cuda and not self.training and all_tensors:
+            packed = self._steady_compiled_fn(z, *cache_list)
+            return packed[0], list(packed[1:])
+        if self._cuda_graph_enabled and z.is_cuda and not self.training and all_tensors:
             z_contig = z.contiguous()
             cache_contig = [t.contiguous() for t in cache_list]
             sig = (tuple(z_contig.shape), z_contig.dtype, z_contig.device, tuple(tuple(t.shape) for t in cache_contig))

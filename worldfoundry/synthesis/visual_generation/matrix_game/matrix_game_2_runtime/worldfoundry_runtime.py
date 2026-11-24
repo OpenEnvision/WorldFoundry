@@ -203,9 +203,22 @@ def _matrix_game2_runtime_policy(kwargs, *, device, dtype):
         raise ValueError("Matrix-Game-2 qkv_split_threshold must be a positive integer")
     options.update(qkv_strategy=strategy, qkv_split_threshold=threshold)
 
+    _supported_attn = {
+        AttentionBackend.AUTO,
+        AttentionBackend.TORCH,
+        AttentionBackend.SDPA,
+        AttentionBackend.FLASH_ATTENTION_3,
+    }
+    resolved_attn = AttentionBackend.AUTO
     for key in ("attention", "attention_backend"):
-        if key in options and parse_attention_backend(options[key], owner="Matrix-Game-2") is not AttentionBackend.AUTO:
-            raise ValueError(f"Matrix-Game-2 does not support requested {key}; its causal attention owns the provider")
+        if key in options:
+            parsed = parse_attention_backend(options[key], owner="Matrix-Game-2")
+            if parsed not in _supported_attn:
+                raise ValueError(
+                    f"Matrix-Game-2 does not support requested {key}; its causal attention owns the provider"
+                )
+            resolved_attn = parsed
+    options["_resolved_attention_backend"] = resolved_attn.value
     for key in ("offload", "offload_mode"):
         if key in options and options[key] is not None:
             offload = parse_offload_policy(options[key], owner="Matrix-Game-2")
@@ -370,20 +383,31 @@ class MatrixGame2Runtime:
         current_vae_decoder.to(device, torch.float16)
         current_vae_decoder.requires_grad_(False)
         current_vae_decoder.eval()
+        use_vae_compile = _enable_torch_compile() or runtime_policy.options.get("vae_compile", False)
+        use_cl2d = runtime_policy.options.get("vae_channels_last", False)
+        use_cl3d = runtime_policy.options.get("vae_channels_last_3d", False)
+        if use_vae_compile and runtime_policy.device.type == "cuda":
+            if "vae_channels_last_3d" not in kwargs and "vae_channels_last_3d" not in (
+                kwargs.get("runtime_options") or {}
+            ):
+                use_cl3d = True
+            if "vae_channels_last" not in kwargs and "vae_channels_last" not in (kwargs.get("runtime_options") or {}):
+                use_cl2d = True
         vae_layout = None
-        if runtime_policy.options.get("vae_channels_last", False) or runtime_policy.options.get(
-            "vae_channels_last_3d", False
-        ):
+        if use_cl2d or use_cl3d:
             from worldfoundry.core.acceleration.convolution_layout import convert_convolution_weight_layouts
 
             vae_layout = convert_convolution_weight_layouts(
                 current_vae_decoder,
-                conv2d=runtime_policy.options.get("vae_channels_last", False),
-                conv3d=runtime_policy.options.get("vae_channels_last_3d", False),
+                conv2d=use_cl2d,
+                conv3d=use_cl3d,
             )
             current_vae_decoder._worldfoundry_convolution_layout = vae_layout
-        if _enable_torch_compile() or runtime_policy.options.get("vae_compile", False):
-            current_vae_decoder.compile(mode="default")
+        if use_vae_compile:
+            if hasattr(current_vae_decoder, "enable_steady_compile") and runtime_policy.device.type == "cuda":
+                current_vae_decoder.enable_steady_compile(mode="default")
+            else:
+                current_vae_decoder.compile(mode="default")
         elif (
             runtime_policy.options.get("vae_cuda_graph", False)
             and runtime_policy.device.type == "cuda"
@@ -407,6 +431,10 @@ class MatrixGame2Runtime:
         pipeline.generator.to(dtype=weight_dtype)
         applied = _apply_matrix_game2_optimizations(pipeline.generator.model, runtime_policy)
         block_cuda_graph = runtime_policy.options.get("block_cuda_graph", False)
+        requested_attn = runtime_policy.options.get("_resolved_attention_backend", "auto")
+        if hasattr(pipeline.generator, "set_attention_backend"):
+            pipeline.generator.set_attention_backend(requested_attn)
+        applied.requested["attention_backend"] = requested_attn
         applied.requested["block_cuda_graph"] = block_cuda_graph
         if block_cuda_graph:
             if runtime_policy.device.type == "cuda" and hasattr(pipeline.generator, "enable_block_cuda_graph"):
