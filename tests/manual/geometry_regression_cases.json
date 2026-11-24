@@ -1,4 +1,162 @@
 {
+  "fastframes-l-t2v-checkpoint-replay": {
+    "id": "fastframes-l-t2v-checkpoint-replay",
+    "model_id": "fastframes",
+    "seed": 0,
+    "deterministic": true,
+    "requires_gpu": true,
+    "target": "worldfoundry.pipelines.fastframes.pipeline_fastframes:FastFramesPipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/apple--FastFrames-L",
+      "model_id": "fastframes",
+      "variant": "fastframes-l",
+      "device": "cuda",
+      "dit_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/apple--FastFrames-L/fastframes-l/dit.safetensors",
+      "refiner_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/apple--FastFrames-L/fastframes-l/kv_refiner.safetensors",
+      "decoder_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/apple--FastFrames-L/fastframes-l/pixel_decoder.safetensors",
+      "wan_dir": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Wan-AI--Wan2.1-T2V-14B"
+    },
+    "call": {
+      "prompt": "A corgi surfing a wave at sunset",
+      "height": 480,
+      "width": 832,
+      "num_frames": 81,
+      "fps": 16,
+      "seed": 0,
+      "context": "refiner",
+      "noise": "pregenerated",
+      "output_path": "${OUTPUT_DIR}/video.mp4",
+      "return_dict": true
+    },
+    "assets": {
+      "special_tokens": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Wan-AI--Wan2.1-T2V-14B/google/umt5-xxl/special_tokens_map.json",
+      "sentencepiece": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Wan-AI--Wan2.1-T2V-14B/google/umt5-xxl/spiece.model",
+      "tokenizer": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Wan-AI--Wan2.1-T2V-14B/google/umt5-xxl/tokenizer.json",
+      "tokenizer_config": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Wan-AI--Wan2.1-T2V-14B/google/umt5-xxl/tokenizer_config.json",
+      "text_encoder": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Wan-AI--Wan2.1-T2V-14B/models_t5_umt5-xxl-enc-bf16.pth",
+      "dit": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/apple--FastFrames-L/fastframes-l/dit.safetensors",
+      "refiner": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/apple--FastFrames-L/fastframes-l/kv_refiner.safetensors",
+      "decoder": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/apple--FastFrames-L/fastframes-l/pixel_decoder.safetensors"
+    },
+    "asset_sha256": {
+      "special_tokens": "7b8a9f5040adb67b5805abdfd42c1f8d0f3d0e711f10726580eb3789cd0ad61d",
+      "sentencepiece": "e3909a67b780650b35cf529ac782ad2b6b26e6d1f849d3fbb6a872905f452458",
+      "tokenizer": "6e197b4d3dbd71da14b4eb255f4fa91c9c1f2068b20a2de2472967ca3d22602b",
+      "tokenizer_config": "ed9a3a8b0faa71a70a32847e0435fe036e6e112d4df4edb7bb48a921e344dc05",
+      "text_encoder": "7cace0da2b446bbbbc57d031ab6cf163a3d59b366da94e5afe36745b746fd81d",
+      "dit": "cd0ec8980516663d623186fafe4b2a3ca9398e7ed29ccce1c65581640bef15de",
+      "refiner": "841047b9226cf770ca19f99ef718edcb57db29c29ee58a64f9ae5dc1d6fbdf74",
+      "decoder": "75e6c99c358a3d8b87476add2c732b0853aef76279bae4c807a6157e95555f55"
+    },
+    "result_outputs": [],
+    "output_arrays": [
+      "video.mp4"
+    ],
+    "export_artifacts": [
+      "video.mp4"
+    ],
+    "required_outputs": [
+      "artifact.video.mp4.frames",
+      "artifact.video.mp4.fps"
+    ],
+    "array_contracts": {
+      "artifact.video.mp4.frames": {
+        "shape": [
+          81,
+          480,
+          832,
+          3
+        ],
+        "dtype": "uint8"
+      },
+      "artifact.video.mp4.fps": {
+        "values": [
+          16,
+          1
+        ]
+      }
+    },
+    "scope": "FastFrames-L with the released Apple DiT, KV refiner and bridged pixel decoder, and Wan UMT5."
+  },
+  "fastframes-s-t2v-checkpoint-replay": {
+    "id": "fastframes-s-t2v-checkpoint-replay",
+    "model_id": "fastframes",
+    "seed": 0,
+    "deterministic": true,
+    "requires_gpu": true,
+    "target": "worldfoundry.pipelines.fastframes.pipeline_fastframes:FastFramesPipeline",
+    "load": {
+      "model_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/apple--FastFrames-S",
+      "model_id": "fastframes",
+      "variant": "fastframes-s",
+      "device": "cuda",
+      "dit_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/zhuhz22--Causal-Forcing/causal-forcing++/framewise-2step.pt",
+      "refiner_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/apple--FastFrames-S/fastframes-s/kv_refiner.safetensors",
+      "decoder_path": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/apple--FastFrames-S/fastframes-s/pixel_decoder.safetensors",
+      "wan_dir": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Wan-AI--Wan2.1-T2V-1.3B"
+    },
+    "call": {
+      "prompt": "A corgi surfing a wave at sunset",
+      "height": 480,
+      "width": 832,
+      "num_frames": 81,
+      "fps": 16,
+      "seed": 0,
+      "context": "refiner",
+      "noise": "sequential",
+      "output_path": "${OUTPUT_DIR}/video.mp4",
+      "return_dict": true
+    },
+    "assets": {
+      "special_tokens": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Wan-AI--Wan2.1-T2V-1.3B/google/umt5-xxl/special_tokens_map.json",
+      "sentencepiece": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Wan-AI--Wan2.1-T2V-1.3B/google/umt5-xxl/spiece.model",
+      "tokenizer": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Wan-AI--Wan2.1-T2V-1.3B/google/umt5-xxl/tokenizer.json",
+      "tokenizer_config": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Wan-AI--Wan2.1-T2V-1.3B/google/umt5-xxl/tokenizer_config.json",
+      "text_encoder": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/Wan-AI--Wan2.1-T2V-1.3B/models_t5_umt5-xxl-enc-bf16.pth",
+      "refiner": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/apple--FastFrames-S/fastframes-s/kv_refiner.safetensors",
+      "decoder": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/apple--FastFrames-S/fastframes-s/pixel_decoder.safetensors",
+      "dit": "${WORLDFOUNDRY_REGRESSION_CHECKPOINT_ROOT}/zhuhz22--Causal-Forcing/causal-forcing++/framewise-2step.pt"
+    },
+    "asset_sha256": {
+      "special_tokens": "7b8a9f5040adb67b5805abdfd42c1f8d0f3d0e711f10726580eb3789cd0ad61d",
+      "sentencepiece": "e3909a67b780650b35cf529ac782ad2b6b26e6d1f849d3fbb6a872905f452458",
+      "tokenizer": "6e197b4d3dbd71da14b4eb255f4fa91c9c1f2068b20a2de2472967ca3d22602b",
+      "tokenizer_config": "ed9a3a8b0faa71a70a32847e0435fe036e6e112d4df4edb7bb48a921e344dc05",
+      "text_encoder": "7cace0da2b446bbbbc57d031ab6cf163a3d59b366da94e5afe36745b746fd81d",
+      "refiner": "b4f36d00effd78a60435526dcc2b1a0e6bbed0f09621ee8ab4019460769a7bbb",
+      "decoder": "815682581f6376d2cdacc60568facf1bd979112091e4157fb6c00ae946b89b32",
+      "dit": "8f899a016dffb9539788fac82c6200e43ef6e23b6e61ec6b885bb507a760ce42"
+    },
+    "result_outputs": [],
+    "output_arrays": [
+      "video.mp4"
+    ],
+    "export_artifacts": [
+      "video.mp4"
+    ],
+    "required_outputs": [
+      "artifact.video.mp4.frames",
+      "artifact.video.mp4.fps"
+    ],
+    "array_contracts": {
+      "artifact.video.mp4.frames": {
+        "shape": [
+          81,
+          480,
+          832,
+          3
+        ],
+        "dtype": "uint8"
+      },
+      "artifact.video.mp4.fps": {
+        "values": [
+          16,
+          1
+        ]
+      }
+    },
+    "scope": "FastFrames-S with the released Causal Forcing++ framewise DiT, Apple KV refiner and pixel decoder, and Wan UMT5."
+  },
   "hy-nomas-segments-short": {
     "id": "hy-nomas-segments-short",
     "model_id": "hy-nomas",

@@ -438,6 +438,8 @@ def test_committed_baseline_preserves_real_repository_gaps():
         ("lingbot-world-v2-1.3b", "lingbot-world-v2-1p3b-causal-short"),
         ("matrix-game-4-egypt", "matrix-game4-egypt-video-short"),
         ("wonderworld", "wonderworld-scene-short"),
+        ("fastframes", "fastframes-s-t2v-checkpoint-replay"),
+        ("fastframes", "fastframes-l-t2v-checkpoint-replay"),
     ],
 )
 def test_new_variant_has_its_own_checkpoint_and_numerical_replay(model_id: str, case_id: str) -> None:
@@ -463,6 +465,13 @@ def test_new_variant_has_its_own_checkpoint_and_numerical_replay(model_id: str, 
         assert case["call"]["sample_audio"] is False
         assert "artifact.video.mp4.frames" in case["required_outputs"]
         assert case["array_contracts"]["artifact.video.mp4.fps"]["values"] == [24, 1]
+    elif model_id == "fastframes":
+        assert case_id == f"{case['load']['variant']}-t2v-checkpoint-replay"
+        assert case["call"]["seed"] == case["seed"] == 0
+        assert case["asset_sha256"].keys() == case["assets"].keys()
+        assert case["required_outputs"] == ["artifact.video.mp4.frames", "artifact.video.mp4.fps"]
+        assert case["array_contracts"]["artifact.video.mp4.frames"]["shape"] == [81, 480, 832, 3]
+        assert case["array_contracts"]["artifact.video.mp4.fps"]["values"] == [16, 1]
     else:
         a, b, repeat = case["sequence"]
         assert (a["name"], b["name"], repeat["name"]) == ("a", "b", "repeat")

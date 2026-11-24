@@ -146,6 +146,14 @@
     "scripts/docs/**"
   ],
   "components": {
+    "fastframes": [
+      "worldfoundry/pipelines/fastframes/**",
+      "worldfoundry/operators/fastframes_operator.py",
+      "worldfoundry/runtime/inference_specs/fastframes.py",
+      "worldfoundry/base_models/diffusion_model/models/denoisers/fastframes.py",
+      "worldfoundry/base_models/diffusion_model/models/networks/wan/variants/fastframes/**",
+      "worldfoundry/base_models/diffusion_model/schedulers/fastframes.py"
+    ],
     "depth-anything-v1": [
       "worldfoundry/base_models/three_dimensions/depth/depth_anything/runtime_v1.py",
       "worldfoundry/base_models/three_dimensions/depth/depth_anything/depth_anything_v1/**",
@@ -927,6 +935,12 @@
     ]
   },
   "cases": {
+    "fastframes-l-t2v-checkpoint-replay": [
+      "fastframes"
+    ],
+    "fastframes-s-t2v-checkpoint-replay": [
+      "fastframes"
+    ],
     "hy-nomas-segments-short": ["hy-nomas"],
     "hy-nomas-low-memory-short": ["hy-nomas"],
     "pika-h3-flex-t2va-short": ["pika-h3-flex"],
@@ -1874,6 +1888,9 @@
     }
   ],
   "environment_variants": {
+    "worldfoundry/data/models/runtime/environments/video/fastframes.yaml": [
+      "fastframes@fastframes"
+    ],
     "worldfoundry/data/models/runtime/environments/three_d/geometry-priors.yaml": [
       "dap@dap",
       "depth-anything-v2-prior@depth-anything-v2-prior",
