@@ -64,6 +64,8 @@ def load_fast(
     device = torch.device(device)
     if device.type != "cuda" or not torch.cuda.is_available():
         raise RuntimeError("Fast inference requires CUDA")
+    if device.index is None:
+        device = torch.device("cuda", torch.cuda.current_device())
     torch.cuda.set_device(device)
     root = Path(model_path).expanduser().resolve()
     config = json.loads((root / "inference_config.json").read_text())
@@ -108,7 +110,10 @@ def load_fast(
         ),
     )
 
+    resolved_attention_backend = attention_backend
+
     def transformer(branch):
+        nonlocal resolved_attention_backend
         model = WorldCrafterTransformer3DModel.from_pretrained(
             root / f"transformer_{branch}_noise", torch_dtype=torch.bfloat16
         )
@@ -126,7 +131,7 @@ def load_fast(
             raise ValueError(f"Incomplete {branch} UCPE state")
         model = replace_rmsnorm_with_fp32(model)
         model = replace_all_norms_with_flash_norms(model)
-        configure_attention(model, attention_backend)
+        resolved_attention_backend = configure_attention(model, attention_backend)
         return model
 
     early = transformer("high")
@@ -202,7 +207,7 @@ def load_fast(
         memory_provider=provider,
         model_path=root,
         device=device,
-        attention_backend=attention_backend,
+        attention_backend=resolved_attention_backend,
         adapter_load={"high": early_lora, "low": late_lora},
         height=height,
         width=width,

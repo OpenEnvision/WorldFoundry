@@ -120,6 +120,8 @@ def validate_weights(model_path: Path, shared_model_path: Path | None = None) ->
 
 
 def configure_attention(transformer: WorldCrafterTransformer3DModel, backend: str) -> str:
+    if backend == "sdpa":
+        backend = "native"
     if backend != "auto":
         transformer.set_attention_backend(backend)
         return backend
@@ -216,6 +218,8 @@ class WorldCrafter:
             raise RuntimeError("WorldCrafter inference requires CUDA")
         if (height, width) != (MODEL_HEIGHT, MODEL_WIDTH):
             raise ValueError("WorldCrafter-Base is fixed to 384x640 inference")
+        if torch_device.index is None:
+            torch_device = torch.device("cuda", torch.cuda.current_device())
         torch.cuda.set_device(torch_device)
         paths = validate_weights(model_path, shared_model_path)
 
