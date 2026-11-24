@@ -649,6 +649,10 @@ envs:
   python: '3.11'
   cuda_profile: cu128
   driver_status: compatible
+  pip_packages:
+  - python-multipart==0.0.33
+  validation_imports:
+  - python_multipart
   notes:
   - Krea realtime video uses the shared CUDA 12.8 inference environment.
 - model_id: sana
