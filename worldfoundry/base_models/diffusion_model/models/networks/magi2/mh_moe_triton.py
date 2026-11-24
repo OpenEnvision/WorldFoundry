@@ -198,8 +198,7 @@ def _scatter_back(
 
     scatter_idx = gather_ids.long() if num_heads == 1 else gather_ids.long() * num_heads + head_ids.long()
 
-    scatter_idx = scatter_idx.unsqueeze(-1).expand_as(y_sorted)
-    y.scatter_add_(0, scatter_idx, y_sorted.to(y.dtype))
+    y.index_add_(0, scatter_idx, y_sorted.to(y.dtype))
 
     return y.view_as(ref_y)
 
