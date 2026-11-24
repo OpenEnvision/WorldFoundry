@@ -233,7 +233,6 @@ unset _wf_cuda_include
 export HF_HOME="${HF_HOME_ROOT}"
 export HF_HUB_CACHE="${HF_HOME_ROOT}/hub"
 export HF_DATASETS_CACHE="${HF_HOME_ROOT}/datasets"
-export TRANSFORMERS_CACHE="${HF_HOME_ROOT}/transformers"
 EOF
 fi
 

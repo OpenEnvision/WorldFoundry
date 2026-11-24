@@ -79690,6 +79690,17 @@
               "description": "Prompt used as the input for direct MiniMax H3 inference."
             },
             {
+              "field": "negative-prompt",
+              "option": "--pipeline.negative-prompt",
+              "detail": "Optional",
+              "kind": "string",
+              "target": "call",
+              "required": false,
+              "default": null,
+              "choices": [],
+              "description": "Negative Prompt passed to the pipeline for every generated sample."
+            },
+            {
               "field": "steps",
               "option": "--pipeline.steps",
               "detail": "Optional",

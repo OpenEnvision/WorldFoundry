@@ -51,6 +51,18 @@ RUN apt-get update -qq \
         xz-utils \
     && rm -rf /var/lib/apt/lists/*
 
+# scripts/setup/bootstrap_worldfoundry.sh creates its environments with conda.
+RUN curl -fsSL -o /tmp/miniforge.sh \
+        "https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-$(uname -m).sh" \
+    && bash /tmp/miniforge.sh -b -p /opt/conda \
+    && rm -f /tmp/miniforge.sh \
+    && /opt/conda/bin/conda clean -afy \
+    && echo ". /opt/conda/etc/profile.d/conda.sh" >> /etc/bash.bashrc
+ENV PATH=/opt/conda/condabin:${PATH}
+
+# Checkouts bind-mounted from the host are owned by a different user.
+RUN git config --global --add safe.directory '*'
+
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 CMD ["/bin/bash"]
