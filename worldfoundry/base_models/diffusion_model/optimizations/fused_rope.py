@@ -18,6 +18,8 @@ from weakref import WeakValueDictionary
 import torch
 from torch import nn
 
+_FUSED_ROPE_DISPATCH_OPS = frozenset({"hidden_qk_rmsnorm_rope_3d", "hidden_qk_rmsnorm_rope_freqs"})
+
 
 @dataclass
 class FusedRoPERuntimeState:
@@ -54,9 +56,7 @@ class FusedRoPERuntimeState:
             self.malformed_receipts += 1
             return
         dispatches = [
-            item
-            for item in raw_dispatches
-            if isinstance(item, Mapping) and item.get("op") == "hidden_qk_rmsnorm_rope_3d"
+            item for item in raw_dispatches if isinstance(item, Mapping) and item.get("op") in _FUSED_ROPE_DISPATCH_OPS
         ]
         if len(dispatches) != 1:
             self.malformed_receipts += 1

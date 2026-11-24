@@ -80,7 +80,7 @@ def parse_quantization_policy(
         if not isinstance(raw_options, Mapping):
             raise TypeError(f"{owner} quantization options must be a mapping")
         options = dict(raw_options)
-        for name in ("min_features", "scaling", "keep_dense_fallback", "use_fast_accum"):
+        for name in ("min_features", "scaling", "keep_dense_fallback", "use_fast_accum", "fuse_fp8_ffn"):
             if name in value:
                 options[name] = value[name]
     else:

@@ -88,6 +88,7 @@ _WAN_DENOISER_OPTION_KEYS = frozenset(
         "dynamicblock",
         "feature_cache",
         "firstblock",
+        "fused_adaln",
         "fused_rope",
         "inplace_residual",
         "magcache",
@@ -2716,6 +2717,12 @@ def _build_wan_denoiser(
             context.policy.options.get("fused_rope", False),
         )
     )
+    fused_adaln = bool(
+        context.component_options.get(
+            "fused_adaln",
+            context.policy.options.get("fused_adaln", fused_rope),
+        )
+    )
     inplace_residual_value = context.component_options.get(
         "inplace_residual",
         context.policy.options.get("inplace_residual", False),
@@ -2845,6 +2852,7 @@ def _build_wan_denoiser(
     if not isinstance(model, WanModel):
         raise TypeError(f"expected WanModel, got {type(model).__name__}")
     model._worldfoundry_dit_weight_dtype = weight_dtype
+    model._worldfoundry_fused_adaln = fused_adaln
     model._worldfoundry_fused_rope = fused_rope
     model._worldfoundry_rope_precision = rope_precision
     model._worldfoundry_inplace_residual = inplace_residual

@@ -102,6 +102,10 @@ class NativeSelfForcingPipeline(NativeVisualDiffusionPipeline):
         self._realtime_seed = 0
         self._realtime_options: dict[str, Any] = {}
         self.overlap_vae_decode: bool = False
+        self._overlap_stream_device: torch.device | None = None
+        self._overlap_compute_stream: torch.cuda.Stream | None = None
+        self._overlap_decode_stream: torch.cuda.Stream | None = None
+        self._overlap_pinned_buffers: dict[tuple[int, ...], torch.Tensor] = {}
 
     @property
     def _window_runner(self) -> AutoregressiveWindowRunner:
@@ -275,11 +279,24 @@ class NativeSelfForcingPipeline(NativeVisualDiffusionPipeline):
         runner = self._window_runner
         total_limit = max_chunks if max_chunks is not None else stream.total_blocks
         is_cuda = runner.device.type == "cuda"
-        # Dedicated non-blocking streams avoid CUDA default-stream (stream 0)
-        # implicit synchronization when concurrent DiT and VAE kernels overlap.
+        # Reuse dedicated non-blocking streams across rollouts so CUDA Graph /
+        # Inductor stream pools do not leak per rollout and concurrent DiT/VAE
+        # kernels never hit CUDA Stream-0 implicit synchronization.
         entry_stream = torch.cuda.current_stream(runner.device) if is_cuda else None
-        compute_stream = torch.cuda.Stream(device=runner.device) if is_cuda else None
-        decode_stream = torch.cuda.Stream(device=runner.device) if is_cuda else None
+        if is_cuda:
+            if (
+                self._overlap_stream_device != runner.device
+                or self._overlap_compute_stream is None
+                or self._overlap_decode_stream is None
+            ):
+                self._overlap_compute_stream = torch.cuda.Stream(device=runner.device)
+                self._overlap_decode_stream = torch.cuda.Stream(device=runner.device)
+                self._overlap_stream_device = runner.device
+            compute_stream = self._overlap_compute_stream
+            decode_stream = self._overlap_decode_stream
+        else:
+            compute_stream = None
+            decode_stream = None
         if is_cuda and entry_stream is not None and compute_stream is not None and decode_stream is not None:
             init_ev = torch.cuda.Event()
             init_ev.record(entry_stream)
@@ -297,12 +314,23 @@ class NativeSelfForcingPipeline(NativeVisualDiffusionPipeline):
             frames_t = pixels[0].permute(1, 2, 3, 0).float()
             return frames_t.clamp(-1.0, 1.0).add(1.0).mul(127.5).to(torch.uint8).contiguous()
 
+        def _pinned_staging_buffer(shape: tuple[int, ...]) -> torch.Tensor:
+            buf = self._overlap_pinned_buffers.get(shape)
+            if buf is None:
+                if len(self._overlap_pinned_buffers) >= 4:
+                    self._overlap_pinned_buffers.clear()
+                buf = torch.empty(shape, dtype=torch.uint8, pin_memory=True)
+                self._overlap_pinned_buffers[shape] = buf
+            return buf
+
         def _flush_pending():
             nonlocal pending_cpu_uint8, pending_event
             if pending_cpu_uint8 is None or pending_event is None:
                 return None
             pending_event.synchronize()
-            frames_np = pending_cpu_uint8.numpy()
+            # Copy out of the reusable pinned staging buffer (<0.4ms CPU memcpy)
+            # so callers own independent arrays without per-chunk cudaHostAlloc/Free.
+            frames_np = pending_cpu_uint8.numpy().copy()
             pending_meta["wall_ms"] = (time.perf_counter() - pending_meta["chunk_t0"]) * 1000.0
             payload = {
                 "video": frames_np,
@@ -343,7 +371,7 @@ class NativeSelfForcingPipeline(NativeVisualDiffusionPipeline):
                             is_first_chunk=first_chunk,
                         )
                         uint8_gpu = _pixels_to_uint8_gpu(pixels_cur)
-                        cpu_buf = torch.empty(uint8_gpu.shape, dtype=torch.uint8, pin_memory=True)
+                        cpu_buf = _pinned_staging_buffer(tuple(int(dim) for dim in uint8_gpu.shape))
                         cpu_buf.copy_(uint8_gpu, non_blocking=True)
                         done_ev = torch.cuda.Event()
                         done_ev.record(decode_stream)
@@ -391,6 +419,11 @@ class NativeSelfForcingPipeline(NativeVisualDiffusionPipeline):
                 entry_stream.wait_stream(compute_stream)
                 entry_stream.wait_stream(decode_stream)
         finally:
+            if pending_event is not None:
+                pending_event.synchronize()
+            if is_cuda and entry_stream is not None and compute_stream is not None and decode_stream is not None:
+                entry_stream.wait_stream(compute_stream)
+                entry_stream.wait_stream(decode_stream)
             self.reset_realtime()
 
     def reset_realtime(self) -> None:
@@ -406,6 +439,10 @@ class NativeSelfForcingPipeline(NativeVisualDiffusionPipeline):
     def cleanup(self) -> None:
         """Close any open realtime rollout before the pipeline is unloaded."""
         self.reset_realtime()
+        self._overlap_pinned_buffers.clear()
+        self._overlap_compute_stream = None
+        self._overlap_decode_stream = None
+        self._overlap_stream_device = None
 
 
 class NativeCausalForcingPipeline(NativeSelfForcingPipeline):

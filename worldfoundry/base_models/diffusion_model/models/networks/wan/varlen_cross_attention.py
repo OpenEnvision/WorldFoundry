@@ -7,9 +7,51 @@ installer can distinguish self-attention from text/image cross-attention.
 
 from typing import Any
 
+import torch
 from torch import Tensor
 
 from worldfoundry.core.attention.sequence.varlen import flash_attention
+
+_FA3_FUNC: Any | None = None
+
+
+def _get_fa3_func() -> Any:
+    global _FA3_FUNC
+    if _FA3_FUNC is None:
+        _FA3_FUNC = __import__("flash_attn_interface", fromlist=["flash_attn_func"]).flash_attn_func
+    return _FA3_FUNC
+
+
+@torch.library.custom_op("worldfoundry::wan_flash_attn_3_bshd", mutates_args=(), device_types="cuda")
+def wan_flash_attn_3_bshd(q: Tensor, k: Tensor, v: Tensor) -> Tensor:
+    """Compile- and CUDA-Graph-safe Hopper FlashAttention-3 wrapper for ``[B, S, H, D]``."""
+    fa3_func = _get_fa3_func()
+    q_in = q if q.stride(-1) == 1 else q.contiguous()
+    k_in = k if k.stride(-1) == 1 else k.contiguous()
+    v_in = v if v.stride(-1) == 1 else v.contiguous()
+    if q_in.dtype != v_in.dtype:
+        q_in = q_in.to(v_in.dtype)
+    if k_in.dtype != v_in.dtype:
+        k_in = k_in.to(v_in.dtype)
+    out = fa3_func(q_in, k_in, v_in)
+    if isinstance(out, tuple):
+        out = out[0]
+    return out
+
+
+@wan_flash_attn_3_bshd.register_fake
+def _wan_flash_attn_3_bshd_fake(q: Tensor, k: Tensor, v: Tensor) -> Tensor:
+    del k
+    return torch.empty_like(q, dtype=v.dtype)
+
+
+def _can_use_wan_fa3_bshd(q: Tensor, k: Tensor, v: Tensor) -> bool:
+    """True when the inference-only Hopper FA3 custom op is safe for ``(q, k, v)``."""
+    return (
+        q.device.type == "cuda"
+        and q.dtype in {torch.float16, torch.bfloat16}
+        and not (torch.is_grad_enabled() and (q.requires_grad or k.requires_grad or v.requires_grad))
+    )
 
 
 class UncachedTextCrossAttentionMixin:
@@ -79,7 +121,14 @@ class CachedTextCrossAttentionMixin:
             v = self.v(context).view(b, -1, n, d)
 
         # compute attention
-        x = flash_attention(q, k, v, k_lens=context_lens)
+        if (
+            context_lens is None
+            and getattr(self, "attention_backend", None) == "flash_attention_3"
+            and _can_use_wan_fa3_bshd(q, k, v)
+        ):
+            x = wan_flash_attn_3_bshd(q, k, v)
+        else:
+            x = flash_attention(q, k, v, k_lens=context_lens)
 
         # output
         x = x.flatten(2)
@@ -107,9 +156,16 @@ class ImageTextCrossAttentionMixin:
         v = self.v(context).view(b, -1, n, d)
         k_img = self.norm_k_img(self.k_img(context_img)).view(b, -1, n, d)
         v_img = self.v_img(context_img).view(b, -1, n, d)
-        img_x = flash_attention(q, k_img, v_img, k_lens=None)
+        use_fa3 = getattr(self, "attention_backend", None) == "flash_attention_3"
+        if use_fa3 and _can_use_wan_fa3_bshd(q, k_img, v_img):
+            img_x = wan_flash_attn_3_bshd(q, k_img, v_img)
+        else:
+            img_x = flash_attention(q, k_img, v_img, k_lens=None)
         # compute attention
-        x = flash_attention(q, k, v, k_lens=context_lens)
+        if context_lens is None and use_fa3 and _can_use_wan_fa3_bshd(q, k, v):
+            x = wan_flash_attn_3_bshd(q, k, v)
+        else:
+            x = flash_attention(q, k, v, k_lens=context_lens)
 
         # output
         x = x.flatten(2)

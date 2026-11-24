@@ -395,6 +395,20 @@ class CausalWanSelfAttention(nn.Module):
                 cached_v = kv_cache["v"][:, max(0, local_end_index - self.max_attention_size) : local_end_index]
             if self.attention_backend in (None, "torch"):
                 x = attention(roped_query, cached_k, cached_v)
+            elif (
+                self.attention_backend == "flash_attention_3"
+                and roped_query.device.type == "cuda"
+                and roped_query.dtype in {torch.float16, torch.bfloat16}
+                and not (
+                    torch.is_grad_enabled()
+                    and (roped_query.requires_grad or cached_k.requires_grad or cached_v.requires_grad)
+                )
+            ):
+                from worldfoundry.base_models.diffusion_model.models.networks.wan.varlen_cross_attention import (
+                    wan_flash_attn_3_bshd,
+                )
+
+                x = wan_flash_attn_3_bshd(roped_query, cached_k, cached_v)
             else:
                 from worldfoundry.core.attention.backends.dispatch import attention_forward
 

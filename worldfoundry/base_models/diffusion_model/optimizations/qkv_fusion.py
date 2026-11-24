@@ -302,6 +302,7 @@ def _fused_self_attention_forward(
         freqs,
         fused_table=kwargs.pop("_worldfoundry_rope_table", None),
         fused_grid=kwargs.pop("_worldfoundry_rope_grid", None),
+        fused_indexed=bool(kwargs.pop("_worldfoundry_fused_rope_indexed", False)),
         precision=kwargs.pop("_worldfoundry_rope_precision", "fp64"),
     )
     x = self.attn(q, k, v)

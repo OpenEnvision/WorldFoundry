@@ -203,8 +203,20 @@ def _build_pipeline_options(args: argparse.Namespace, world_size: int, sm_major:
         opts.pop("vae_parallel", None)
         opts.pop("vae_spatial_tiling", None)
     elif world_size > 1 and opts.get("vae_parallel", 1) > 1:
-        opts.setdefault("vae_tile_size", (30, 52) if args.height <= 480 else (34, 34))
-        opts.setdefault("vae_tile_stride", (15, 26) if args.height <= 480 else (18, 18))
+        if args.vae_tile_size is not None and args.vae_tile_stride is not None:
+            opts["vae_tile_size"] = tuple(int(v) for v in args.vae_tile_size)
+            opts["vae_tile_stride"] = tuple(int(v) for v in args.vae_tile_stride)
+        elif args.height <= 480:
+            opts.setdefault("vae_tile_size", (30, 52))
+            opts.setdefault("vae_tile_stride", (15, 26))
+        elif sm_major >= 9 and int(opts.get("vae_parallel", 1)) >= 4 and args.height == 720 and args.width == 1280:
+            # 2x2 balanced grid for 720p latents (90x160): 4 tiles = 1 tile/GPU
+            # with 18x20 latent feathering overlap (1.35x vs 3.21x pixel work and fewer seams).
+            opts.setdefault("vae_tile_size", (54, 90))
+            opts.setdefault("vae_tile_stride", (36, 70))
+        else:
+            opts.setdefault("vae_tile_size", (34, 34))
+            opts.setdefault("vae_tile_stride", (18, 18))
     if args.cuda_graph is not None:
         if args.cuda_graph == "off":
             opts.pop("cuda_graph", None)
@@ -238,6 +250,12 @@ def _build_pipeline_options(args: argparse.Namespace, world_size: int, sm_major:
                 "keep_dense_fallback": False,
             },
         }
+    if args.no_fuse_fp8_ffn and isinstance(opts.get("quantization"), Mapping):
+        qcfg_ffn: dict[str, Any] = dict(opts["quantization"])
+        qopts_ffn = dict(qcfg_ffn.get("options") or {})
+        qopts_ffn["fuse_fp8_ffn"] = False
+        qcfg_ffn["options"] = qopts_ffn
+        opts["quantization"] = qcfg_ffn
     if args.fp8_exact_accum and isinstance(opts.get("quantization"), Mapping):
         qcfg_acc: dict[str, Any] = dict(opts["quantization"])
         qopts = dict(qcfg_acc.get("options") or {})
@@ -316,6 +334,34 @@ def _build_pipeline_options(args: argparse.Namespace, world_size: int, sm_major:
         topo_label = "x".join(parts) if parts else f"{world_size}GPU"
 
     return opts, topo_label
+
+
+def _save_four_frame_grid(sample: torch.Tensor, out_path: Path) -> str:
+    """Save a 1x4 horizontal RGB PNG strip of evenly spaced frames from ``[B, C, T, H, W]``."""
+    from PIL import Image
+
+    video = sample[0].detach().float().cpu()
+    num_frames = int(video.shape[1])
+    if num_frames <= 1:
+        indices = [0] * 4
+    else:
+        indices = [0, num_frames // 3, (2 * num_frames) // 3, num_frames - 1]
+    tiles = []
+    for idx in indices:
+        frame = video[:, idx].permute(1, 2, 0)
+        if frame.min().item() < -0.05:
+            frame = (frame.clamp(-1.0, 1.0) + 1.0) * 127.5
+        elif frame.max().item() <= 1.05:
+            frame = frame.clamp(0.0, 1.0) * 255.0
+        else:
+            frame = frame.clamp(0.0, 255.0)
+        tiles.append(frame.to(torch.uint8).numpy())
+    import numpy as np
+
+    strip = np.concatenate(tiles, axis=1)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    Image.fromarray(strip, mode="RGB").save(out_path)
+    return str(out_path)
 
 
 def run_benchmark(args: argparse.Namespace) -> dict[str, Any]:
@@ -437,7 +483,10 @@ def run_benchmark(args: argparse.Namespace) -> dict[str, Any]:
 
     receipt = orig_den.runtime_optimization_report() if hasattr(orig_den, "runtime_optimization_report") else {}
     quality: dict[str, Any] = {}
+    grid_path_saved: str | None = None
     if rank == 0 and last_out is not None:
+        if args.save_grid:
+            grid_path_saved = _save_four_frame_grid(last_out.sample, Path(args.save_grid))
         if args.save_ref:
             ref_path = Path(args.save_ref)
             ref_path.parent.mkdir(parents=True, exist_ok=True)
@@ -465,6 +514,7 @@ def run_benchmark(args: argparse.Namespace) -> dict[str, Any]:
         "median_vae_s": round(statistics.median(r["vae_s"] for r in runs), 3),
         "peak_alloc_gib": max(r["peak_alloc_gib"] for r in runs),
         "quality": quality,
+        "visual_grid": grid_path_saved,
         "options": opts,
         "receipt": {
             "quality_tier": receipt.get("quality_tier") if isinstance(receipt, Mapping) else None,
@@ -517,6 +567,8 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--cfg-parallel", type=int, default=None)
     parser.add_argument("--sp-degree", type=int, default=None)
     parser.add_argument("--no-vae-parallel", dest="vae_parallel", action="store_false", default=True)
+    parser.add_argument("--vae-tile-size", type=int, nargs=2, default=None)
+    parser.add_argument("--vae-tile-stride", type=int, nargs=2, default=None)
     parser.add_argument("--cuda-graph", choices=("off", "whole", "piecewise"), default=None)
     parser.add_argument("--teacache", type=float, default=None)
     parser.add_argument("--quantization", choices=("none", "fp8"), default=None)
@@ -542,6 +594,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--compile-mode", type=str, default=None)
     parser.add_argument("--save-ref", type=str, default=None)
     parser.add_argument("--compare-ref", type=str, default=None)
+    parser.add_argument("--save-grid", type=str, default=None)
     parser.add_argument("--out", type=str, required=True)
     return parser.parse_args(argv)
 

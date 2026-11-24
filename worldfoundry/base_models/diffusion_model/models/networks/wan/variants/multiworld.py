@@ -314,6 +314,7 @@ class MultiWorldDiTBlock(DiTBlock):
         # WanModel forwards its exact-RoPE policy through every block. Keep
         # that policy when MultiWorld replaces the standard Wan cross-attn.
         kwargs.pop("_worldfoundry_inplace_residual", None)
+        kwargs.pop("_worldfoundry_fused_adaln", None)
         sequence_timestep = t_mod.ndim == 4
         chunk_dim = 2 if sequence_timestep else 1
         shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = (

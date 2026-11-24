@@ -317,7 +317,7 @@ def resolve_acceleration_profile(
                         "min_features": 1024,
                         "scaling": "rowwise",
                         "use_fast_accum": False,
-                        "fuse_fp8_ffn": False,
+                        "fuse_fp8_ffn": True,
                         "keep_dense_fallback": False,
                     },
                 }

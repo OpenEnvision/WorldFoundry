@@ -13,7 +13,7 @@ from typing import cast
 import torch
 from torch import nn
 
-from .linear import Float8Linear, _fp8_linear_eligible, _is_compiling
+from .linear import Float8Linear, _autocast_linear_input, _fp8_linear_eligible, _is_compiling
 
 
 class FusedFP8GELUFeedForward(nn.Sequential):
@@ -25,9 +25,13 @@ class FusedFP8GELUFeedForward(nn.Sequential):
     def forward(self, input: torch.Tensor) -> torch.Tensor:
         up, activation, down = self[0], self[1], cast(Float8Linear, self[2])
         hidden = up(input)
+        if hidden.numel() == 0:
+            return down(activation(hidden))
+        hidden = _autocast_linear_input(hidden)
         eligible = (
             down.low_precision_enabled
             and down.scaling == "rowwise"
+            and down.input_scale is None
             and _fp8_linear_eligible(
                 hidden, down.out_features, down._hardware_eligible, min_gemm_work=0 if down.weight is None else None
             )

@@ -461,12 +461,35 @@ def _attention_policy(model: Any, options: Mapping[str, Any], policy: Any) -> Pr
                 "tile_3d": sol_schedule["tile_3d"],
             }
         reports[scope] = report_entry
+        _APPROX_ATTN_BACKENDS = {"sol_attn", "sage_attention", "sage_attention_3", "cudnn_fp8", "scaled_int8_fp8"}
+        existing_dense_backend: str | None = None
+        for parent in parents:
+            candidate_backend = getattr(parent.attn, "attention_backend", None)
+            if isinstance(candidate_backend, str) and candidate_backend not in {
+                "",
+                "auto",
+                *_APPROX_ATTN_BACKENDS,
+            }:
+                existing_dense_backend = candidate_backend
+                break
+        dense_backend = existing_dense_backend or "torch"
         if targets:
             for attribute, value in (("attention_backend", resolved), ("_worldfoundry_attention_options", values)):
                 plans.append(_attribute_plan("attention_policy", targets, attribute, value, {}, frozenset()))
+            if resolved == "sol_attn":
+                plans.append(
+                    _attribute_plan(
+                        "attention_policy",
+                        targets,
+                        "_worldfoundry_dense_attention_backend",
+                        dense_backend,
+                        {},
+                        frozenset(),
+                    )
+                )
         if dense_targets:
             plans.append(
-                _attribute_plan("attention_policy", dense_targets, "attention_backend", "torch", {}, frozenset())
+                _attribute_plan("attention_policy", dense_targets, "attention_backend", dense_backend, {}, frozenset())
             )
             plans.append(
                 _attribute_plan(

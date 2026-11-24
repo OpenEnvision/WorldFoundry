@@ -264,7 +264,7 @@ def run_sol_integrator(args: argparse.Namespace) -> dict[str, Any]:
                         mode="fp8",
                         scaling="rowwise",
                         use_fast_accum=False,
-                        fuse_fp8_ffn=False,
+                        fuse_fp8_ffn=True,
                         keep_dense_fallback=False,
                         exclude_edge_blocks=hw.num_heads <= 16,
                     ),

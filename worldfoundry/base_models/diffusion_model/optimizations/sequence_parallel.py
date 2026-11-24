@@ -113,6 +113,7 @@ class SequenceParallelSelfAttentionProcessor:
         sp_rank = dist.get_rank(group) if dist.is_initialized() else 0
         fused_table = kwargs.pop("_worldfoundry_rope_table", None)
         fused_grid = kwargs.pop("_worldfoundry_rope_grid", None)
+        fused_indexed = bool(kwargs.pop("_worldfoundry_fused_rope_indexed", False))
         rope_precision = str(kwargs.pop("_worldfoundry_rope_precision", "fp64")).strip().casefold()
         if rope_precision not in {"fp32", "fp64"}:
             raise ValueError("Wan RoPE precision must be 'fp32' or 'fp64'")
@@ -166,6 +167,49 @@ class SequenceParallelSelfAttentionProcessor:
                     q, k = fused_call()
                 runtime_state.record_eager_dispatch(receipt)
             self._state.fused_rope_calls += 1
+        elif fused_indexed:
+            # Pre-indexed per-token RoPE (e.g. after 3D Sol-Attn tile permutation):
+            # run single-pass Triton FP64 QK-RMSNorm+RoPE instead of complex128 PyTorch.
+            from worldfoundry.core.kernels import hidden_qk_rmsnorm_rope_freqs
+
+            freqs_rank = _rank_slice_freqs(freqs, sp_rank, s_local)
+
+            def indexed_fused_call() -> tuple[torch.Tensor, torch.Tensor]:
+                return hidden_qk_rmsnorm_rope_freqs(
+                    q,
+                    k,
+                    attention.norm_q.weight,
+                    attention.norm_k.weight,
+                    freqs_rank,
+                    num_heads=num_heads,
+                    eps=attention.norm_q.eps,
+                    precision=rope_precision,
+                )
+
+            runtime_state = getattr(
+                attention,
+                "_worldfoundry_fused_rope_runtime",
+                None,
+            )
+            if runtime_state is None:
+                q, k = indexed_fused_call()
+            elif torch.compiler.is_compiling():
+                from .fused_rope import record_compiled_fused_rope_graph_trace
+
+                receipt_token = getattr(attention, "_worldfoundry_fused_rope_token", None)
+                if isinstance(receipt_token, str):
+                    record_compiled_fused_rope_graph_trace(receipt_token)
+                q, k = indexed_fused_call()
+            else:
+                from worldfoundry.core.kernels.registry import (
+                    kernel_dispatch_receipt_scope,
+                )
+
+                receipt = {}
+                with kernel_dispatch_receipt_scope(receipt):
+                    q, k = indexed_fused_call()
+                runtime_state.record_eager_dispatch(receipt)
+            self._state.fused_rope_calls += 1
         else:
             q = attention.norm_q(q)
             k = attention.norm_k(k)
@@ -209,7 +253,8 @@ class SequenceParallelSelfAttentionProcessor:
         head_dim = q.shape[3]
         attention_module = attention.attn
         force_dense = bool(getattr(attention_module, "_worldfoundry_force_dense", False))
-        attention_backend = "torch" if force_dense else getattr(attention_module, "attention_backend", None)
+        dense_backend = getattr(attention_module, "_worldfoundry_dense_attention_backend", None) or "torch"
+        attention_backend = dense_backend if force_dense else getattr(attention_module, "attention_backend", None)
         attention_options = None if force_dense else getattr(attention_module, "_worldfoundry_attention_options", None)
         if not force_dense and attention_backend == "sol_attn":
             sink_override = getattr(attention_module, "_worldfoundry_sol_sink_tokens", None)

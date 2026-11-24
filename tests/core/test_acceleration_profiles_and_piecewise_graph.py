@@ -76,7 +76,8 @@ def test_resolve_acceleration_profiles() -> None:
     assert fast.options["fused_rope"] is True
     assert fast.options["quantization"]["mode"] == "fp8"
     assert "time_embedding" in fast.options["quantization"]["exclude"]
-    assert fast.options["quantization"]["options"]["fuse_fp8_ffn"] is False
+    assert fast.options["quantization"]["options"]["fuse_fp8_ffn"] is True
+    assert fast.options["quantization"]["options"]["use_fast_accum"] is False
     assert fast.options["cfg_parallel"] == 2
     assert fast.options["sequence_parallel"] == 4
 

@@ -161,7 +161,7 @@ class QuantizationPillar:
     mode: Literal["none", "fp8"] = "none"
     scaling: Literal["rowwise", "tensorwise"] = "rowwise"
     use_fast_accum: bool = False
-    fuse_fp8_ffn: bool = False
+    fuse_fp8_ffn: bool = True
     keep_dense_fallback: bool = False
     min_features: int = 1024
     exclude_edge_blocks: bool = False
@@ -493,13 +493,13 @@ def compose_sol_stack(
             quantization = (
                 QuantizationPillar(mode="none")
                 if small_dit
-                else QuantizationPillar(mode="fp8", exclude_edge_blocks=True, fuse_fp8_ffn=False)
+                else QuantizationPillar(mode="fp8", exclude_edge_blocks=True, fuse_fp8_ffn=True)
             )
         else:
             quantization = QuantizationPillar(
                 mode="fp8",
                 exclude_edge_blocks=small_dit,
-                fuse_fp8_ffn=False,
+                fuse_fp8_ffn=True,
             )
 
     if kernel_fusion is None:
