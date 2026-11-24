@@ -80,11 +80,19 @@ class FeedForward(nn.Module):
         hidden_states = self.w1(hidden_states)
 
         if self.use_gated:
-            # Single-GPU port: SGLang used a fused
-            # ``silu_and_mul_with_activation_rounding`` CUDA kernel on
-            # contiguous fp16/bf16 inputs; we keep only the exact eager form.
-            gate, hidden_states = hidden_states.chunk(2, dim=-1)
-            hidden_states = self.act_fn(gate).mul_(hidden_states)
+            if (
+                isinstance(self.act_fn, nn.SiLU)
+                and hidden_states.is_cuda
+                and hidden_states.dtype in (torch.bfloat16, torch.float16)
+                and not torch.compiler.is_compiling()
+                and not (torch.is_grad_enabled() and hidden_states.requires_grad)
+            ):
+                from worldfoundry.core.kernels import silu_and_mul
+
+                hidden_states = silu_and_mul(hidden_states)
+            else:
+                gate, hidden_states = hidden_states.chunk(2, dim=-1)
+                hidden_states = self.act_fn(gate).mul_(hidden_states)
         else:
             hidden_states = self.act_fn(hidden_states)
 

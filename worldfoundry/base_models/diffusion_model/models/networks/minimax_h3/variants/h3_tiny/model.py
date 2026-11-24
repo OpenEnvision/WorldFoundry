@@ -121,7 +121,11 @@ class H3TinyMeanFlowTimeEmbedder(MiniMaxH3TimeEmbedder):
             endpoint = endpoint_timestep.to(device=t_fp32.device, dtype=torch.float32)
         if endpoint.shape != t_fp32.shape:
             raise ValueError(f"endpoint_timestep {list(endpoint.shape)} != timestep {list(t_fp32.shape)}")
-        if bool((endpoint < t_fp32).any()):
+        if (
+            not getattr(self, "_skip_host_validation", False)
+            and not (t_fp32.is_cuda and torch.cuda.is_current_stream_capturing())
+            and bool((endpoint < t_fp32).any())
+        ):
             raise ValueError("MeanFlow endpoints must be dataward of their timesteps (r >= t)")
         interval = endpoint - t_fp32
         return temb + self.r_time_embedder(interval)
@@ -228,6 +232,8 @@ class H3TinyDiTModel(MiniMaxH3DiTModel):
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Predict video/audio velocities for one unpadded, batch-one packed layout."""
         if hidden_states is None and "x" in extra:
+            if token_tags is not None:
+                extra["token_tags"] = token_tags
             with self.time_embedder.endpoint_context(endpoint_timestep):
                 return super().forward(**extra)
         if extra:
@@ -268,9 +274,13 @@ class H3TinyDiTModel(MiniMaxH3DiTModel):
                 img_pos_for_infer_output_info={"position_ids": video_indices},
                 update_mask=hidden_states.new_ones(video_indices.shape),
                 skip_mask_out_condition=True,
-                packed_seq_params={"cu_seqlens_q": torch.tensor([0, length], device=device, dtype=torch.int32)},
+                packed_seq_params={
+                    "cu_seqlens_q": torch.tensor([0, length], device=device, dtype=torch.int32),
+                    "cu_seqlens_q_host": (0, length),
+                },
                 refiner_packed_seq_params={
-                    "cu_seqlens_q": torch.tensor([0, text_indices.numel()], device=device, dtype=torch.int32)
+                    "cu_seqlens_q": torch.tensor([0, text_indices.numel()], device=device, dtype=torch.int32),
+                    "cu_seqlens_q_host": (0, int(text_indices.numel())),
                 },
             )
         return video_out[None], audio_out[None]

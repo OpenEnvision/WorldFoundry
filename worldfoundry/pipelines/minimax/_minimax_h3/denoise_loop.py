@@ -212,6 +212,7 @@ class MiniMaxH3DenoiseBranch:
                 "cu_seqlens_q": cu.to(device),
                 "cu_seqlens_q_host": tuple(int(value) for value in cu.tolist()),
                 "max_seqlen_q": int(cu[1]),
+                "ignore_trailing_pad": bool(int(cu[1]) < seq_len),
             },
             "refiner_packed_seq_params": {
                 "cu_seqlens_q": torch.tensor(refiner_bounds, dtype=torch.int32, device=device),
@@ -444,12 +445,45 @@ def minimax_h3_denoise_loop(
     video_denoised_scratch = torch.empty_like(video_rows[video_target_slice])
     audio_denoised_scratch = torch.empty_like(audio_rows[audio_target_slice])
 
+    from worldfoundry.base_models.diffusion_model.models.networks.minimax_h3.dit import MiniMaxH3DiTModel
+
+    branch_cached_extras: dict[int, dict[str, Any]] = {}
+    if isinstance(model, MiniMaxH3DiTModel):
+        branches_to_prep = [positive] + ([negative] if use_cfg and negative is not None else [])
+        with torch.inference_mode():
+            for br in branches_to_prep:
+                extras: dict[str, Any] = {}
+                if "rope_cache" not in br.static_kwargs:
+                    extras["rope_cache"] = model.build_rope_cache(
+                        br.static_kwargs["img_position_ids"],
+                        device=device,
+                    )
+                if "refined_prompt_embeds_length" not in br.static_kwargs:
+                    refiner_psp = br.static_kwargs["refiner_packed_seq_params"]
+                    refiner_host = refiner_psp.get("cu_seqlens_q_host")
+                    refined = model.refine_prompt_embeds(
+                        br.static_kwargs["prompt_embeds"],
+                        refiner_psp["cu_seqlens_q"],
+                        device=device,
+                        refiner_cu_seqlens_host=refiner_host,
+                    )
+                    extras["prompt_embeds"] = refined
+                    extras["refined_prompt_embeds_length"] = int(refined.shape[0])
+                branch_cached_extras[id(br)] = extras
+
+    dense_initial_steps = int(getattr(model, "_dense_initial_steps", 0)) if isinstance(model, MiniMaxH3DiTModel) else 0
+
     def _run_branch(branch: MiniMaxH3DenoiseBranch, step_t: tuple[torch.Tensor, torch.Tensor, torch.Tensor], step: int):
         fk = branch.forward_kwargs(
             video_rows=video_rows,
             audio_rows=audio_rows,
             step_timesteps=step_t,
         )
+        extras = branch_cached_extras.get(id(branch))
+        if extras:
+            fk.update(extras)
+        if dense_initial_steps > 0 and step < dense_initial_steps:
+            fk["force_dense_attention"] = True
         if model_forward is None:
             return model(**fk)
         return model_forward(model, fk, step)
@@ -486,7 +520,7 @@ def minimax_h3_denoise_loop(
                         mv_video_t,
                         sigma_t=video_sigma_t[step],
                         sigma_curr=s_v,
-                        sigma_next=video_sigmas[step + 1],
+                        sigma_next=sigmas_video[step + 1],
                         sigma_ratio=video_sigma_ratios[step],
                         one_minus_sigma_ratio=video_one_minus_sigma_ratios[step],
                         denoised_scratch=video_denoised_scratch,
@@ -500,7 +534,7 @@ def minimax_h3_denoise_loop(
                         mv_audio_t,
                         sigma_t=audio_sigma_t[step],
                         sigma_curr=s_a,
-                        sigma_next=audio_sigmas[step + 1],
+                        sigma_next=sigmas_audio[step + 1],
                         sigma_ratio=audio_sigma_ratios[step],
                         one_minus_sigma_ratio=audio_one_minus_sigma_ratios[step],
                         denoised_scratch=audio_denoised_scratch,

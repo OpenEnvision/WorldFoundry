@@ -1,22 +1,24 @@
-"""Triton fused indexed AdaLN modulation for MiniMax H3.
+"""Triton fused indexed AdaLN modulation and RMSNorm+AdaLN for MiniMax H3.
 
-Two in-place bf16 kernels back the H3 DiT block's AdaLN:
+Register-safe tiled bf16 kernels backing the H3 DiT block's AdaLN:
 
-* ``indexed_scale_shift_bf16_`` — ``x = x * (1 + scale[idx]) + shift[idx]``
-* ``indexed_gate_bf16_``        — ``x = x + gate[idx] * other``
+* ``indexed_scale_shift_bf16`` / ``indexed_scale_shift_bf16_`` —
+  ``out = x * (1 + scale[idx]) + shift[idx]``
+* ``indexed_gate_bf16`` / ``indexed_gate_bf16_`` —
+  ``out = x + gate[idx] * other``
+* ``rms_norm_indexed_scale_shift_bf16`` —
+  ``out = rms_norm(x, weight, eps) * (1 + scale[idx]) + shift[idx]`` in one
+  kernel pass without materializing the intermediate ``[T, H]`` normalized
+  tensor in HBM.
 
-Both round the intermediate bf16 products back to fp32 (``_round_bf16_to_fp32``)
-so the fused result is bit-compatible with the reference kernel boundary. Each
-row selects its modality-specific scale/shift/gate vector via ``indices``.
+All kernels round intermediate bf16 products via ``_round_bf16_to_fp32`` so the
+fused results match the reference eager boundaries to 1 ULP, and tile columns
+in ``BLOCK_N = 1024`` chunks so wide H3 rows (``H = 5376``) never spill
+8192-element register vectors to local memory.
 
 Not this module:
     Generic (non-indexed) AdaLN fusion lives in :mod:`worldfoundry.core.kernels.triton_diffusion`.
     Registry dispatch lives in :mod:`worldfoundry.core.kernels.diffusion`.
-
-Public surface:
-
-- :func:`indexed_scale_shift_bf16_` / :func:`indexed_gate_bf16_` — in-place,
-  empty-row no-ops, ``BLOCK_N = next_power_of_2(H)``, ``num_warps=8``.
 """
 
 from __future__ import annotations
@@ -24,6 +26,9 @@ from __future__ import annotations
 import torch
 import triton
 import triton.language as tl
+
+_TILE_BLOCK_N = 1024
+
 
 # ──────────────────────────────────────────────────────────────────────────
 # BF16 rounding — bit-level half-to-even so Triton cannot fuse past eager casts
@@ -34,7 +39,6 @@ import triton.language as tl
 def _round_bf16_to_fp32(value):
     """Round an fp32 accumulator to bf16 then promote, matching eager kernel cuts."""
 
-    # Force the eager BF16 kernel boundary so Triton cannot contract the add.
     bits = value.to(tl.int32, bitcast=True)
     rounding_bias = 0x7FFF + ((bits >> 16) & 1)
     rounded_bits = (bits + rounding_bias) & -65536
@@ -42,25 +46,27 @@ def _round_bf16_to_fp32(value):
 
 
 @triton.jit
-def _indexed_scale_shift_bf16_kernel(
+def _indexed_scale_shift_bf16_tiled_kernel(
     output_ptr,
     x_ptr,
     shift_ptr,
     scale_ptr,
     indices_ptr,
     hidden_size,
+    stride_out_row,
     stride_x_row,
     stride_shift_row,
     stride_scale_row,
     stride_indices,
     BLOCK_N: tl.constexpr,
 ):
-    """One row: ``out = round(x * round(1 + scale[idx])) + shift[idx]``."""
+    """One tile of one row: ``out = round(x * round(1 + scale[idx])) + shift[idx]``."""
 
-    row = tl.program_id(0)
-    columns = tl.arange(0, BLOCK_N)
+    row = tl.program_id(0).to(tl.int64)
+    tile = tl.program_id(1)
+    columns = tile * BLOCK_N + tl.arange(0, BLOCK_N)
     mask = columns < hidden_size
-    index = tl.load(indices_ptr + row * stride_indices)
+    index = tl.load(indices_ptr + row * stride_indices).to(tl.int64)
 
     x = tl.load(x_ptr + row * stride_x_row + columns, mask=mask, other=0.0).to(tl.float32)
     shift = tl.load(shift_ptr + index * stride_shift_row + columns, mask=mask, other=0.0).to(tl.float32)
@@ -68,41 +74,171 @@ def _indexed_scale_shift_bf16_kernel(
 
     one_plus_scale = _round_bf16_to_fp32(1.0 + scale)
     scaled = _round_bf16_to_fp32(x * one_plus_scale)
-    tl.store(output_ptr + row * stride_x_row + columns, scaled + shift, mask=mask)
+    tl.store(output_ptr + row * stride_out_row + columns, (scaled + shift).to(tl.bfloat16), mask=mask)
 
 
 @triton.jit
-def _indexed_gate_bf16_kernel(
+def _indexed_gate_bf16_tiled_kernel(
     output_ptr,
     x_ptr,
     gate_ptr,
     other_ptr,
     indices_ptr,
     hidden_size,
+    stride_out_row,
     stride_x_row,
     stride_gate_row,
     stride_other_row,
     stride_indices,
     BLOCK_N: tl.constexpr,
 ):
-    """One row: ``out = x + round(gate[idx] * other)``."""
+    """One tile of one row: ``out = x + round(gate[idx] * other)``."""
 
-    row = tl.program_id(0)
-    columns = tl.arange(0, BLOCK_N)
+    row = tl.program_id(0).to(tl.int64)
+    tile = tl.program_id(1)
+    columns = tile * BLOCK_N + tl.arange(0, BLOCK_N)
     mask = columns < hidden_size
-    index = tl.load(indices_ptr + row * stride_indices)
+    index = tl.load(indices_ptr + row * stride_indices).to(tl.int64)
 
     x = tl.load(x_ptr + row * stride_x_row + columns, mask=mask, other=0.0).to(tl.float32)
     gate = tl.load(gate_ptr + index * stride_gate_row + columns, mask=mask, other=0.0).to(tl.float32)
     other = tl.load(other_ptr + row * stride_other_row + columns, mask=mask, other=0.0).to(tl.float32)
 
     gated = _round_bf16_to_fp32(gate * other)
-    tl.store(output_ptr + row * stride_x_row + columns, x + gated, mask=mask)
+    tl.store(output_ptr + row * stride_out_row + columns, (x + gated).to(tl.bfloat16), mask=mask)
+
+
+@triton.jit
+def _rms_norm_indexed_scale_shift_bf16_kernel(
+    output_ptr,
+    x_ptr,
+    weight_ptr,
+    shift_ptr,
+    scale_ptr,
+    indices_ptr,
+    hidden_size,
+    eps,
+    stride_out_row,
+    stride_x_row,
+    stride_shift_row,
+    stride_scale_row,
+    stride_indices,
+    BLOCK_N: tl.constexpr,
+):
+    """Two-pass tiled RMSNorm + indexed scale/shift for one bf16 row.
+
+    Streams ``BLOCK_N`` tiles across ``hidden_size`` so ``H = 5376`` never
+    spills registers while remaining L1/L2 resident between the variance pass
+    and the normalize+modulate pass.
+    """
+
+    row = tl.program_id(0).to(tl.int64)
+    index = tl.load(indices_ptr + row * stride_indices).to(tl.int64)
+    x_row = x_ptr + row * stride_x_row
+    out_row = output_ptr + row * stride_out_row
+    shift_row = shift_ptr + index * stride_shift_row
+    scale_row = scale_ptr + index * stride_scale_row
+
+    sum_sq = tl.full((), 0.0, tl.float32)
+    for start in tl.range(0, hidden_size, BLOCK_N):
+        cols = start + tl.arange(0, BLOCK_N)
+        mask = cols < hidden_size
+        vals = tl.load(x_row + cols, mask=mask, other=0.0).to(tl.float32)
+        sum_sq += tl.sum(vals * vals, axis=0)
+
+    rstd = tl.rsqrt(sum_sq / hidden_size + eps)
+
+    for start in tl.range(0, hidden_size, BLOCK_N):
+        cols = start + tl.arange(0, BLOCK_N)
+        mask = cols < hidden_size
+        vals = tl.load(x_row + cols, mask=mask, other=0.0).to(tl.float32)
+        weight = tl.load(weight_ptr + cols, mask=mask, other=0.0).to(tl.bfloat16)
+        shift = tl.load(shift_row + cols, mask=mask, other=0.0).to(tl.float32)
+        scale = tl.load(scale_row + cols, mask=mask, other=0.0).to(tl.float32)
+
+        normed = ((vals * rstd).to(tl.bfloat16) * weight).to(tl.float32)
+        one_plus_scale = _round_bf16_to_fp32(1.0 + scale)
+        scaled = _round_bf16_to_fp32(normed * one_plus_scale)
+        tl.store(out_row + cols, (scaled + shift).to(tl.bfloat16), mask=mask)
 
 
 # ──────────────────────────────────────────────────────────────────────────
-# Public in-place wrappers — empty batches skip launch (CUDA Graph-safe no-op)
+# Public wrappers — empty batches skip launch (CUDA Graph-safe no-op)
 # ──────────────────────────────────────────────────────────────────────────
+
+
+def _launch_indexed_scale_shift(
+    out: torch.Tensor,
+    x: torch.Tensor,
+    shift: torch.Tensor,
+    scale: torch.Tensor,
+    indices: torch.Tensor,
+) -> torch.Tensor:
+    rows, hidden_size = x.shape
+    if rows == 0 or hidden_size == 0:
+        return out
+    block_n = min(triton.next_power_of_2(hidden_size), _TILE_BLOCK_N)
+    num_tiles = triton.cdiv(hidden_size, block_n)
+    num_warps = 4 if block_n <= 512 else 8
+    _indexed_scale_shift_bf16_tiled_kernel[(rows, num_tiles)](
+        out,
+        x,
+        shift,
+        scale,
+        indices,
+        hidden_size,
+        out.stride(0),
+        x.stride(0),
+        shift.stride(0),
+        scale.stride(0),
+        indices.stride(0),
+        BLOCK_N=block_n,
+        num_warps=num_warps,
+    )
+    return out
+
+
+def _launch_indexed_gate(
+    out: torch.Tensor,
+    x: torch.Tensor,
+    gate: torch.Tensor,
+    other: torch.Tensor,
+    indices: torch.Tensor,
+) -> torch.Tensor:
+    rows, hidden_size = x.shape
+    if rows == 0 or hidden_size == 0:
+        return out
+    block_n = min(triton.next_power_of_2(hidden_size), _TILE_BLOCK_N)
+    num_tiles = triton.cdiv(hidden_size, block_n)
+    num_warps = 4 if block_n <= 512 else 8
+    _indexed_gate_bf16_tiled_kernel[(rows, num_tiles)](
+        out,
+        x,
+        gate,
+        other,
+        indices,
+        hidden_size,
+        out.stride(0),
+        x.stride(0),
+        gate.stride(0),
+        other.stride(0),
+        indices.stride(0),
+        BLOCK_N=block_n,
+        num_warps=num_warps,
+    )
+    return out
+
+
+def indexed_scale_shift_bf16(
+    x: torch.Tensor,
+    shift: torch.Tensor,
+    scale: torch.Tensor,
+    indices: torch.Tensor,
+) -> torch.Tensor:
+    """Out-of-place ``x * (1 + scale[idx]) + shift[idx]`` for bf16 ``[rows, H]``."""
+
+    out = torch.empty(x.shape, device=x.device, dtype=x.dtype)
+    return _launch_indexed_scale_shift(out, x, shift, scale, indices)
 
 
 def indexed_scale_shift_bf16_(
@@ -113,25 +249,19 @@ def indexed_scale_shift_bf16_(
 ) -> torch.Tensor:
     """In-place ``x = x * (1 + scale[idx]) + shift[idx]`` for bf16 ``[rows, H]``."""
 
-    rows, hidden_size = x.shape
-    if rows == 0:
-        return x
-    block_n = triton.next_power_of_2(hidden_size)
-    _indexed_scale_shift_bf16_kernel[(rows,)](
-        x,
-        x,
-        shift,
-        scale,
-        indices,
-        hidden_size,
-        x.stride(0),
-        shift.stride(0),
-        scale.stride(0),
-        indices.stride(0),
-        BLOCK_N=block_n,
-        num_warps=8,
-    )
-    return x
+    return _launch_indexed_scale_shift(x, x, shift, scale, indices)
+
+
+def indexed_gate_bf16(
+    x: torch.Tensor,
+    gate: torch.Tensor,
+    other: torch.Tensor,
+    indices: torch.Tensor,
+) -> torch.Tensor:
+    """Out-of-place gated residual ``x + gate[idx] * other`` for bf16 ``[rows, H]``."""
+
+    out = torch.empty(x.shape, device=x.device, dtype=x.dtype)
+    return _launch_indexed_gate(out, x, gate, other, indices)
 
 
 def indexed_gate_bf16_(
@@ -142,25 +272,50 @@ def indexed_gate_bf16_(
 ) -> torch.Tensor:
     """In-place gated residual ``x = x + gate[idx] * other`` for bf16 ``[rows, H]``."""
 
+    return _launch_indexed_gate(x, x, gate, other, indices)
+
+
+def rms_norm_indexed_scale_shift_bf16(
+    x: torch.Tensor,
+    weight: torch.Tensor,
+    shift: torch.Tensor,
+    scale: torch.Tensor,
+    indices: torch.Tensor,
+    *,
+    eps: float = 1e-5,
+) -> torch.Tensor:
+    """Fused out-of-place ``RMSNorm(x, weight, eps) * (1 + scale[idx]) + shift[idx]``."""
+
+    out = torch.empty(x.shape, device=x.device, dtype=x.dtype)
     rows, hidden_size = x.shape
-    if rows == 0:
-        return x
-    block_n = triton.next_power_of_2(hidden_size)
-    _indexed_gate_bf16_kernel[(rows,)](
+    if rows == 0 or hidden_size == 0:
+        return out
+    block_n = min(triton.next_power_of_2(hidden_size), _TILE_BLOCK_N)
+    num_warps = 4 if block_n <= 512 else 8
+    _rms_norm_indexed_scale_shift_bf16_kernel[(rows,)](
+        out,
         x,
-        x,
-        gate,
-        other,
+        weight,
+        shift,
+        scale,
         indices,
         hidden_size,
+        float(eps),
+        out.stride(0),
         x.stride(0),
-        gate.stride(0),
-        other.stride(0),
+        shift.stride(0),
+        scale.stride(0),
         indices.stride(0),
         BLOCK_N=block_n,
-        num_warps=8,
+        num_warps=num_warps,
     )
-    return x
+    return out
 
 
-__all__ = ["indexed_gate_bf16_", "indexed_scale_shift_bf16_"]
+__all__ = [
+    "indexed_gate_bf16",
+    "indexed_gate_bf16_",
+    "indexed_scale_shift_bf16",
+    "indexed_scale_shift_bf16_",
+    "rms_norm_indexed_scale_shift_bf16",
+]

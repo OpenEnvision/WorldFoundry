@@ -37,7 +37,7 @@ def _linear_with_module_dtype(linear, tensor, out_dtype=None):
 def _pack_tensors_3d(tensors, patch_size, patch_size_t):
     batch_size, num_channels_tensors, temporal, height, width = tensors.shape
 
-    tensors = tensors.view(
+    tensors = tensors.reshape(
         batch_size,
         num_channels_tensors,
         temporal // patch_size_t,
@@ -245,23 +245,20 @@ class ViT3DDecoder(ViTBase):
         autocast.
         """
 
-        if dtype not in (torch.float16, torch.bfloat16):
-            raise ValueError(f"MiniMax H3 decoder autocast weights require fp16 or bf16, got {dtype}")
+        if dtype not in (torch.float16, torch.bfloat16, torch.float32):
+            raise ValueError(f"MiniMax H3 decoder autocast weights require fp16, bf16, or fp32, got {dtype}")
         if self._autocast_linear_dtype == dtype:
             return 0
 
         converted = 0
         for block in self.transformer_blocks:
-            for linear in (
-                block.attn.to_qkv,
-                block.attn.to_out,
-                block.ff.w1,
-                block.ff.w2,
-            ):
-                if linear.weight.dtype != dtype:
-                    linear.to(dtype=dtype)
-                    converted += 1
-        self._autocast_linear_dtype = dtype
+            raw_block = getattr(block, "_orig_mod", block)
+            for parent in (raw_block.attn, raw_block.ff):
+                for linear in parent.modules():
+                    if isinstance(linear, nn.Linear) and linear.weight.dtype != dtype:
+                        linear.to(dtype=dtype)
+                        converted += 1
+        self._autocast_linear_dtype = None if dtype == torch.float32 else dtype
         return converted
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:

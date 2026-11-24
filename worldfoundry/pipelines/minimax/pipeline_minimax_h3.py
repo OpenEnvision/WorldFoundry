@@ -260,7 +260,7 @@ class NativeMiniMaxH3Pipeline(PipelineABC):
                 transformer_subfolder=transformer_subfolder,
             )
 
-        return cls(
+        pipe = cls(
             transformer=transformer,
             video_vae=video_vae,
             audio_vae=audio_vae,
@@ -270,6 +270,82 @@ class NativeMiniMaxH3Pipeline(PipelineABC):
             component_devices=placements,
             model_id=resolved_model_id,
         )
+        if any(
+            options.get(key) not in (None, False)
+            for key in (
+                "acceleration",
+                "vae_decode_autocast",
+                "vae_channels_last_3d",
+                "vae_stack_tiling",
+                "vae_tile_batch_size",
+                "vae_compile",
+            )
+        ):
+            pipe.configure_acceleration(
+                acceleration=options.get("acceleration"),
+                vae_decode_autocast=options.get("vae_decode_autocast"),
+                vae_channels_last_3d=options.get("vae_channels_last_3d"),
+                vae_stack_tiling=options.get("vae_stack_tiling"),
+                vae_tile_batch_size=options.get("vae_tile_batch_size"),
+                vae_compile=bool(options.get("vae_compile", False)),
+            )
+        return pipe
+
+    def configure_acceleration(
+        self,
+        *,
+        acceleration: Any = None,
+        vae_decode_autocast: torch.dtype | str | bool | None = None,
+        vae_channels_last_3d: bool | None = None,
+        vae_stack_tiling: bool | None = None,
+        vae_tile_batch_size: int | None = None,
+        vae_compile: bool = False,
+    ) -> dict[str, Any]:
+        """Configure SOL-Engine acceleration across the DiT and Video VAE."""
+
+        receipt: dict[str, Any] = {}
+        if acceleration is not None and self.transformer is not None:
+            from worldfoundry.base_models.diffusion_model.models.networks.minimax_h3.acceleration import (
+                accelerate_minimax_h3_dit,
+            )
+
+            receipt["transformer"] = accelerate_minimax_h3_dit(self.transformer, acceleration)
+            # When a declarative SOL profile tier string is requested and VAE
+            # flags were not explicitly overridden, align VAE acceleration too.
+            if isinstance(acceleration, str):
+                if vae_decode_autocast is None:
+                    vae_decode_autocast = torch.bfloat16
+                if vae_channels_last_3d is None:
+                    vae_channels_last_3d = True
+                if vae_stack_tiling is None:
+                    vae_stack_tiling = True
+
+        if (
+            self.video_vae is not None
+            and hasattr(self.video_vae, "configure_acceleration")
+            and any(
+                flag not in (None, False)
+                for flag in (vae_decode_autocast, vae_channels_last_3d, vae_stack_tiling, vae_compile)
+            )
+        ):
+            receipt["video_vae"] = self.video_vae.configure_acceleration(
+                autocast_dtype=vae_decode_autocast,
+                channels_last_3d=bool(vae_channels_last_3d),
+                stack_tiling=bool(vae_stack_tiling),
+                tile_batch_size=vae_tile_batch_size,
+                compile_blocks=bool(vae_compile),
+            )
+        return receipt
+
+    def acceleration_report(self) -> dict[str, Any]:
+        """Return runtime acceleration receipts for the transformer and video VAE."""
+
+        report: dict[str, Any] = {}
+        if self.transformer is not None and hasattr(self.transformer, "acceleration_report"):
+            report["transformer"] = self.transformer.acceleration_report()
+        if self.video_vae is not None and hasattr(self.video_vae, "acceleration_report"):
+            report["video_vae"] = self.video_vae.acceleration_report()
+        return report
 
     @classmethod
     def _load_components(

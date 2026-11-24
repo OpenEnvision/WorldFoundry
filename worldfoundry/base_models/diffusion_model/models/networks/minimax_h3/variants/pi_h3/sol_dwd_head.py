@@ -299,6 +299,15 @@ class SolH3SwiGLU(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         hidden = self.w1(x)
+        if (
+            hidden.is_cuda
+            and hidden.dtype in (torch.bfloat16, torch.float16)
+            and not torch.compiler.is_compiling()
+            and not (torch.is_grad_enabled() and hidden.requires_grad)
+        ):
+            from worldfoundry.core.kernels import silu_and_mul
+
+            return self.w2(silu_and_mul(hidden))
         gate, up = hidden.chunk(2, dim=-1)
         return self.w2(F.silu(gate) * up)
 
@@ -345,9 +354,18 @@ class SolH3Block(nn.Module):
         global_indices: tuple[torch.Tensor, ...] | None = None,
         window_indices: tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor] | None = None,
         *,
+        rope: tuple[torch.Tensor, torch.Tensor] | None = None,
         force_padded: bool = False,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        x, g = self._attention(x, g, shifted, global_indices, window_indices, force_padded=force_padded)
+        x, g = self._attention(
+            x,
+            g,
+            shifted,
+            global_indices,
+            window_indices,
+            rope=rope,
+            force_padded=force_padded,
+        )
         scale2 = self.scale2.to(x.dtype)
         x = x + self.ff(_fp32_rms_norm(self.norm2, x)) * scale2
         g = g + self.ff(_fp32_rms_norm(self.norm2, g)) * scale2
@@ -361,6 +379,7 @@ class SolH3Block(nn.Module):
         global_indices: tuple[torch.Tensor, ...] | None,
         window_indices: tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor] | None,
         *,
+        rope: tuple[torch.Tensor, torch.Tensor] | None = None,
         force_padded: bool = False,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         B, T, H, W, _ = x.shape
@@ -376,19 +395,20 @@ class SolH3Block(nn.Module):
         k = self.attn.norm_k(qkv[:, :, 1].float()).to(x.dtype)
         v = qkv[:, :, 2]
 
-        rope = _rope(
-            T,
-            H,
-            W,
-            s,
-            st,
-            x.device,
-            block=self.block_size,
-            window=self.window_size,
-            time_norm=self.time_norm,
-            rope_dim=self.rope_dim,
-            rope_theta=self.rope_theta,
-        )
+        if rope is None:
+            rope = _rope(
+                T,
+                H,
+                W,
+                s,
+                st,
+                x.device,
+                block=self.block_size,
+                window=self.window_size,
+                time_norm=self.time_norm,
+                rope_dim=self.rope_dim,
+                rope_theta=self.rope_theta,
+            )
         _rotate_(q[:N].view(B, -1, heads, dh), rope)
         _rotate_(k[:N].view(B, -1, heads, dh), rope)
 
@@ -595,8 +615,29 @@ class SolH3DWDHead(nn.Module):
             global_tokens = global_tokens.unsqueeze(1).expand(B, num_blocks, -1, -1).contiguous()
         g = global_tokens.to(device=x.device, dtype=x.dtype)
 
+        rope_cache: dict[bool, tuple[torch.Tensor, torch.Tensor]] = {}
         for block, args in self.block_args(x.shape, g.shape, x.device, x.dtype, force_padded=force_padded):
-            x, g = block(x, g, *args, force_padded=force_padded)
+            if not isinstance(block, SolH3Block):
+                raise TypeError(f"Expected SolH3Block, got {type(block).__name__}")
+            shifted = bool(args[0])
+            rope = rope_cache.get(shifted)
+            if rope is None:
+                s, st = (block.window_size // 2, block.t_shift) if shifted else (0, 0)
+                rope = _rope(
+                    T,
+                    H,
+                    W,
+                    s,
+                    st,
+                    x.device,
+                    block=block.block_size,
+                    window=block.window_size,
+                    time_norm=block.time_norm,
+                    rope_dim=block.rope_dim,
+                    rope_theta=block.rope_theta,
+                )
+                rope_cache[shifted] = rope
+            x, g = block(x, g, *args, rope=rope, force_padded=force_padded)
 
         x = self.norm_out(x.to(self.norm_out.weight.dtype)).to(self.proj_out.weight.dtype)
         num_chunks, tail = divmod(T, self.block_size)

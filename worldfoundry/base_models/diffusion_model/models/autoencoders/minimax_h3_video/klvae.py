@@ -132,6 +132,7 @@ class AutoencoderKL(nn.Module):
         self.encoder_tiling = kwargs.get("encoder_tiling", False)
         self.decoder_tiling = kwargs.get("decoder_tiling", False)
         self.stack_tiling = kwargs.get("stack_tiling", False)
+        self.tile_batch_size = kwargs.get("tile_batch_size")
         self.tile_size = kwargs.get("tile_size", 256)
         self.tile_overlap_min = kwargs.get("tile_overlap_min", 64)
         self.decoder_tile_size = kwargs.get("decoder_tile_size", self.tile_size)
@@ -275,12 +276,24 @@ class AutoencoderKL(nn.Module):
     def _run_tile_tasks(self, tiles, tile_indices, forward_fn, stack_tiling, cls_agg=None):
         if stack_tiling and tile_indices:
             sample_batch_size = tiles[0].shape[0]
-            tile_batch = torch.cat([tiles[idx] for idx in tile_indices], dim=0)
-            output_batch = forward_fn(tile_batch)
-            output_tiles = output_batch.unflatten(0, (len(tile_indices), sample_batch_size)).unbind(dim=0)
-            if cls_agg is not None:
-                cls_agg.collect_stacked(len(tile_indices), sample_batch_size)
-            return list(output_tiles)
+            max_batch = getattr(self, "tile_batch_size", None)
+            if max_batch is None or int(max_batch) <= 0 or int(max_batch) >= len(tile_indices):
+                tile_batch = torch.cat([tiles[idx] for idx in tile_indices], dim=0)
+                output_batch = forward_fn(tile_batch)
+                output_tiles = output_batch.unflatten(0, (len(tile_indices), sample_batch_size)).unbind(dim=0)
+                if cls_agg is not None:
+                    cls_agg.collect_stacked(len(tile_indices), sample_batch_size)
+                return list(output_tiles)
+            chunk_size = int(max_batch)
+            outputs = []
+            for start in range(0, len(tile_indices), chunk_size):
+                chunk_ids = tile_indices[start : start + chunk_size]
+                tile_batch = torch.cat([tiles[idx] for idx in chunk_ids], dim=0)
+                output_batch = forward_fn(tile_batch)
+                outputs.extend(output_batch.unflatten(0, (len(chunk_ids), sample_batch_size)).unbind(dim=0))
+                if cls_agg is not None:
+                    cls_agg.collect_stacked(len(chunk_ids), sample_batch_size)
+            return outputs
 
         tasks = []
         for idx in tile_indices:

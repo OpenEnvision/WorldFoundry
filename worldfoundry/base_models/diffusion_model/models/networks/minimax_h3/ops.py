@@ -4,13 +4,6 @@ Consumed by :class:`dit.MiniMaxH3DiTModel` for per-head QK RMSNorm, 3-D
 RoPE, SwiGLU, and indexed AdaLN.  Triton kernels behind
 ``can_use_fused_*`` are optional; these bodies are the numerical reference.
 
-Every function here mirrors the exact math of the SGLang MiniMax H3 DiT
-(``sglang.multimodal_gen.runtime.models.dits.minimax_h3``) but uses only
-plain PyTorch so the model runs on any device without the SGLang custom
-CUDA/Triton kernels. Stage 8 of the integration wires the fused kernels behind
-the ``can_use_fused_*`` probes; until then those probes return ``False`` and
-the fallbacks below are always taken.
-
 Numerics that must not drift from the reference:
 
 * qk RMSNorm accumulates the variance in fp32, rounds back to the input dtype,
@@ -26,6 +19,8 @@ Numerics that must not drift from the reference:
 
 from __future__ import annotations
 
+import os
+
 import torch
 import torch.nn as nn
 
@@ -36,32 +31,69 @@ _FP32 = torch.float32
 
 
 # --------------------------------------------------------------------------- #
-# Fused-kernel probes (Stage 8 replaces the bodies; fallbacks are exact).
+# Fused-kernel probes (fallbacks are exact).
 # --------------------------------------------------------------------------- #
 _FUSED_QKNORM_ROPE_HEAD_DIMS = frozenset({64, 128, 256})
 
 
-def can_use_fused_qknorm_rope(q: torch.Tensor, k: torch.Tensor, cos_sin_cache: torch.Tensor) -> bool:
-    """Return whether the fused Triton qk-norm+RoPE kernel is eligible.
+def _fused_backend_enabled() -> bool:
+    """Whether fused kernels are permitted (env override + torch.compile guard)."""
 
-    Requires CUDA bf16 contiguous ``[T, num_heads, head_dim]`` q/k with a
-    supported head_dim and an even rot_dim. Otherwise the split
-    ``apply_qk_norm`` + ``apply_rope_qk`` reference path (exact) is used.
+    if torch.compiler.is_compiling():
+        return False
+    requested = os.getenv("WORLDFOUNDRY_KERNEL_BACKEND", "auto").strip().casefold() or "auto"
+    return requested not in {"torch", "pytorch", "native", "off", "disabled"}
+
+
+def _resolve_rms_norm_eps(norm: nn.RMSNorm, dtype: torch.dtype) -> float:
+    """Resolve ``nn.RMSNorm.eps`` matching PyTorch when ``eps is None``."""
+
+    if norm.eps is not None:
+        return float(norm.eps)
+    return float(torch.finfo(dtype).eps)
+
+
+def _autograd_active(*tensors: torch.Tensor | None) -> bool:
+    """Return True when autograd must be preserved for any operand."""
+
+    if not torch.is_grad_enabled():
+        return False
+    return any(t is not None and t.requires_grad for t in tensors)
+
+
+def can_use_fused_qknorm_rope(q: torch.Tensor, k: torch.Tensor, cos_sin_cache: torch.Tensor) -> bool:
+    """Return whether the single-kernel strided Triton qk-norm+RoPE is eligible.
+
+    Requires CUDA bf16 ``[T, num_heads, head_dim]`` q/k and bf16 ``[T, rot_dim]``
+    ``cos_sin_cache`` with unit innermost stride (supporting direct strided slices
+    from a fused QKV projection), a supported head_dim, and an even
+    ``rot_dim <= head_dim`` matching ``T``.
     """
 
     if not _fused_backend_enabled():
         return False
     if not (q.is_cuda and k.is_cuda and cos_sin_cache.is_cuda):
         return False
-    if q.dtype != _BF16 or k.dtype != _BF16:
+    if q.device != k.device or q.device != cos_sin_cache.device:
         return False
-    if q.ndim != 3 or q.shape != k.shape:
+    if q.dtype != _BF16 or k.dtype != _BF16 or cos_sin_cache.dtype != _BF16:
+        return False
+    if q.ndim != 3 or q.shape != k.shape or cos_sin_cache.ndim != 2:
+        return False
+    if int(cos_sin_cache.shape[0]) != int(q.shape[0]):
         return False
     head_dim = int(q.shape[-1])
     if head_dim not in _FUSED_QKNORM_ROPE_HEAD_DIMS:
         return False
     rot_dim = int(cos_sin_cache.shape[-1])
-    return rot_dim > 0 and rot_dim % 2 == 0 and rot_dim <= head_dim and q.is_contiguous() and k.is_contiguous()
+    return (
+        rot_dim > 0
+        and rot_dim % 2 == 0
+        and rot_dim <= head_dim
+        and q.stride(-1) == 1
+        and k.stride(-1) == 1
+        and cos_sin_cache.stride(-1) == 1
+    )
 
 
 def qk_norm_rope(
@@ -74,33 +106,38 @@ def qk_norm_rope(
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Apply per-head RMSNorm then RoPE, using the fused kernel when eligible."""
 
-    if can_use_fused_qknorm_rope(q, k, cos_sin_cache):
-        from worldfoundry.base_models.diffusion_model.models.networks.minimax_h3.triton_qknorm_rope import (
-            fused_qknorm_rope,
-        )
+    if (
+        can_use_fused_qknorm_rope(q, k, cos_sin_cache)
+        and q_norm.weight is not None
+        and k_norm.weight is not None
+        and q_norm.weight.is_cuda
+        and k_norm.weight.is_cuda
+        and q_norm.weight.device == q.device
+        and k_norm.weight.device == q.device
+        and q_norm.weight.dtype == _BF16
+        and k_norm.weight.dtype == _BF16
+        and not _autograd_active(q, k, cos_sin_cache, q_norm.weight, k_norm.weight)
+    ):
+        q_eps = _resolve_rms_norm_eps(q_norm, q.dtype)
+        k_eps = _resolve_rms_norm_eps(k_norm, k.dtype)
+        if q_eps == k_eps:
+            from worldfoundry.base_models.diffusion_model.models.networks.minimax_h3.triton_qknorm_rope import (
+                fused_qknorm_rope,
+            )
 
-        return fused_qknorm_rope(q, k, q_norm.weight, k_norm.weight, cos_sin_cache, eps=float(q_norm.eps))
+            return fused_qknorm_rope(q, k, q_norm.weight, k_norm.weight, cos_sin_cache, eps=q_eps)
     q, k = apply_qk_norm(q, k, q_norm, k_norm, q.shape[-1])
     return apply_rope_qk(q, k, cos_sin_cache, positions)
-
-
-def _fused_backend_enabled() -> bool:
-    """Whether fused kernels are permitted (env override + torch.compile guard)."""
-
-    import os
-
-    if torch.compiler.is_compiling():
-        return False
-    requested = os.getenv("WORLDFOUNDRY_KERNEL_BACKEND", "auto").strip().casefold() or "auto"
-    return requested not in {"torch", "pytorch", "native", "off", "disabled"}
 
 
 def can_use_fused_indexed_modulation(*tensors: torch.Tensor) -> bool:
     """Return whether the fused indexed AdaLN Triton kernels are eligible.
 
-    Requires all operands on CUDA, bf16, and contiguous rows — the exact
-    contract of the ported Triton kernels. Any other case falls back to the
-    portable PyTorch math (which is the numerical reference).
+    Requires all operands on the same CUDA device, bf16, with unit innermost
+    stride (``stride(-1) == 1``) so row-strided slices from
+    ``adaln_proj(...).chunk(...)`` dispatch directly without copying. Callers
+    also enforce autograd safety and exact 2D/1D rank/shape compatibility
+    before launching the Triton kernel.
     """
 
     if not tensors or not _fused_backend_enabled():
@@ -108,7 +145,11 @@ def can_use_fused_indexed_modulation(*tensors: torch.Tensor) -> bool:
     first = tensors[0]
     if not first.is_cuda or first.dtype != _BF16:
         return False
-    return all(t.is_cuda and t.dtype == _BF16 and t.is_contiguous() and t.stride(-1) == 1 for t in tensors)
+    device = first.device
+    return all(
+        t.is_cuda and t.device == device and t.dtype == _BF16 and t.ndim in (1, 2) and t.stride(-1) == 1
+        for t in tensors
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -191,8 +232,12 @@ def apply_rope_qk(
 
 
 # --------------------------------------------------------------------------- #
-# Indexed AdaLN modulation.
+# Indexed AdaLN modulation & fused RMSNorm + indexed AdaLN.
 # --------------------------------------------------------------------------- #
+def _as_index_tensor(indices: torch.Tensor) -> torch.Tensor:
+    return indices if indices.dtype == torch.int64 else indices.to(torch.int64)
+
+
 def indexed_scale_shift(
     x: torch.Tensor,
     shift: torch.Tensor,
@@ -203,15 +248,69 @@ def indexed_scale_shift(
 ) -> torch.Tensor:
     """Return ``x * (1 + scale[idx]) + shift[idx]`` cast to ``dtype``."""
 
-    if dtype == _BF16 and can_use_fused_indexed_modulation(x, shift, scale):
+    if (
+        dtype == _BF16
+        and x.ndim == 2
+        and shift.ndim == 2
+        and scale.ndim == 2
+        and indices.ndim == 1
+        and indices.is_cuda
+        and indices.device == x.device
+        and x.shape[0] == indices.shape[0]
+        and x.shape[1] == shift.shape[1] == scale.shape[1]
+        and not _autograd_active(x, shift, scale)
+        and can_use_fused_indexed_modulation(x, shift, scale)
+    ):
         from worldfoundry.base_models.diffusion_model.models.networks.minimax_h3.triton_modulation import (
-            indexed_scale_shift_bf16_,
+            indexed_scale_shift_bf16,
         )
 
-        # Kernel is in-place; clone to preserve the functional (non-mutating)
-        # contract callers rely on for the pre-norm activation.
-        return indexed_scale_shift_bf16_(x.clone(), shift, scale, indices.to(torch.int64))
+        return indexed_scale_shift_bf16(x, shift, scale, _as_index_tensor(indices))
     return (x * (1.0 + scale.index_select(0, indices)) + shift.index_select(0, indices)).to(dtype)
+
+
+def rms_norm_indexed_scale_shift(
+    x: torch.Tensor,
+    norm: nn.RMSNorm,
+    shift: torch.Tensor,
+    scale: torch.Tensor,
+    indices: torch.Tensor,
+    *,
+    dtype: torch.dtype,
+) -> torch.Tensor:
+    """Return ``norm(x) * (1 + scale[idx]) + shift[idx]`` using one fused kernel when eligible."""
+
+    weight = norm.weight
+    if (
+        dtype == _BF16
+        and isinstance(norm, nn.RMSNorm)
+        and weight is not None
+        and x.ndim == 2
+        and weight.ndim == 1
+        and shift.ndim == 2
+        and scale.ndim == 2
+        and indices.ndim == 1
+        and indices.is_cuda
+        and indices.device == x.device
+        and x.shape[0] == indices.shape[0]
+        and x.shape[1] == weight.shape[0] == shift.shape[1] == scale.shape[1]
+        and not _autograd_active(x, weight, shift, scale)
+        and can_use_fused_indexed_modulation(x, weight, shift, scale)
+    ):
+        from worldfoundry.base_models.diffusion_model.models.networks.minimax_h3.triton_modulation import (
+            rms_norm_indexed_scale_shift_bf16,
+        )
+
+        return rms_norm_indexed_scale_shift_bf16(
+            x,
+            weight,
+            shift,
+            scale,
+            _as_index_tensor(indices),
+            eps=_resolve_rms_norm_eps(norm, x.dtype),
+        )
+    h = norm(x)
+    return indexed_scale_shift(h, shift, scale, indices, dtype=dtype)
 
 
 def indexed_gate(
@@ -224,12 +323,25 @@ def indexed_gate(
 ) -> torch.Tensor:
     """Return the gated residual ``x + gate[idx] * other`` cast to ``dtype``."""
 
-    if dtype == _BF16 and can_use_fused_indexed_modulation(x, gate, other):
+    if (
+        dtype == _BF16
+        and x.ndim == 2
+        and gate.ndim == 2
+        and other.ndim == 2
+        and indices.ndim == 1
+        and indices.is_cuda
+        and indices.device == x.device
+        and x.shape == other.shape
+        and x.shape[0] == indices.shape[0]
+        and x.shape[1] == gate.shape[1]
+        and not _autograd_active(x, gate, other)
+        and can_use_fused_indexed_modulation(x, gate, other)
+    ):
         from worldfoundry.base_models.diffusion_model.models.networks.minimax_h3.triton_modulation import (
-            indexed_gate_bf16_,
+            indexed_gate_bf16,
         )
 
-        return indexed_gate_bf16_(x.clone(), gate, other, indices.to(torch.int64))
+        return indexed_gate_bf16(x, gate, other, _as_index_tensor(indices))
     return (x + gate.index_select(0, indices) * other).to(dtype)
 
 
@@ -248,6 +360,7 @@ __all__ = [
     "indexed_scale_shift",
     "make_rms_norm",
     "qk_norm_rope",
+    "rms_norm_indexed_scale_shift",
     "rope_cos_sin_cache",
     "silu_mul",
 ]

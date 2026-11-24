@@ -15,8 +15,14 @@ import torch
 import torch.nn as nn
 
 from ...config import MINIMAX_H3_ADALN_MODALITY_NUM, MiniMaxH3DiTArchConfig
-from ...dit import _FORWARD_SUPPORTED_KWARGS, MiniMaxH3DiTModel, _required_kwarg
-from ...ops import indexed_scale_shift, make_rms_norm, rope_cos_sin_cache
+from ...dit import (
+    _FORWARD_SUPPORTED_KWARGS,
+    MiniMaxH3DiTModel,
+    _compute_prefix_sink_tokens,
+    _normalize_host_bounds,
+    _required_kwarg,
+)
+from ...ops import make_rms_norm, rms_norm_indexed_scale_shift, rope_cos_sin_cache
 from ..hyperflow.conditioning import HyperFlowQKVProjection, HyperFlowSwiGLUProjection
 from .sol_dwd_head import BLOCK, FRAMES_TO_TRIM, OUT_CH, PATCH, PATCH_T, SolH3DWDHead
 
@@ -121,8 +127,8 @@ class PiH3PrunedFinalLayer(nn.Module):
         inverse_indices: torch.Tensor,
     ) -> torch.Tensor:
         shift, scale = self.adaln_proj(adaln_input)
-        h = self.norm(x.to(self.norm.weight.dtype))
-        return indexed_scale_shift(h, shift, scale, inverse_indices, dtype=x.dtype)
+        x_in = x if x.dtype == self.norm.weight.dtype else x.to(self.norm.weight.dtype)
+        return rms_norm_indexed_scale_shift(x_in, self.norm, shift, scale, inverse_indices, dtype=x.dtype)
 
     def forward(
         self,
@@ -311,11 +317,16 @@ class PiH3DiTModel(MiniMaxH3DiTModel):
         refiner_cu_seqlens: torch.Tensor,
         device: torch.device,
         refined_prompt_embeds_length: int | torch.Tensor | None = None,
+        refiner_cu_seqlens_host: tuple[int, ...] | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Embed packed text/video/audio tokens and look up pruned timestep coordinates."""
 
         if refined_prompt_embeds_length is None:
-            text_len = int(refiner_cu_seqlens[-1].item())
+            text_len = (
+                int(refiner_cu_seqlens_host[-1])
+                if refiner_cu_seqlens_host is not None
+                else int(refiner_cu_seqlens[-1].item())
+            )
         elif torch.is_tensor(refined_prompt_embeds_length):
             text_len = int(refined_prompt_embeds_length.item())
         else:
@@ -334,7 +345,12 @@ class PiH3DiTModel(MiniMaxH3DiTModel):
                     f"refined prompt embeddings must have hidden width {self.hidden_size}, got {int(text_embed.shape[-1])}"
                 )
         else:
-            text_embed = self.refine_prompt_embeds(text_embeddings_selected, refiner_cu_seqlens, device=device)
+            text_embed = self.refine_prompt_embeds(
+                text_embeddings_selected,
+                refiner_cu_seqlens,
+                device=device,
+                refiner_cu_seqlens_host=refiner_cu_seqlens_host,
+            )
 
         seq_len = int(x.shape[1])
         embeddings = torch.zeros((seq_len, self.hidden_size), device=device, dtype=dtype)
@@ -389,8 +405,13 @@ class PiH3DiTModel(MiniMaxH3DiTModel):
 
         psp = _required_kwarg(kwargs, "packed_seq_params")
         cu_seqlens = self._psp_field(psp, "packed_seq_params", "cu_seqlens_q").to(torch.int32)
+        cu_seqlens_host = _normalize_host_bounds(self._psp_optional_field(psp, "cu_seqlens_q_host"))
+        raw_max_seqlen = self._psp_optional_field(psp, "max_seqlen_q")
+        max_seqlen = None if raw_max_seqlen is None else int(raw_max_seqlen)
+        ignore_trailing_pad = bool(self._psp_optional_field(psp, "ignore_trailing_pad"))
         refiner_psp = _required_kwarg(kwargs, "refiner_packed_seq_params")
         refiner_cu = self._psp_field(refiner_psp, "refiner_packed_seq_params", "cu_seqlens_q").to(torch.int32)
+        refiner_cu_host = _normalize_host_bounds(self._psp_optional_field(refiner_psp, "cu_seqlens_q_host"))
 
         if x.dim() != 3 or x.shape[0] != 1:
             raise ValueError(f"x must be [1, S, C], got {list(x.shape)}")
@@ -426,6 +447,7 @@ class PiH3DiTModel(MiniMaxH3DiTModel):
             refiner_cu_seqlens=refiner_cu.to(device),
             device=device,
             refined_prompt_embeds_length=kwargs.get("refined_prompt_embeds_length"),
+            refiner_cu_seqlens_host=refiner_cu_host,
         )
         # Pruned table entries already encode silu(t_emb); do NOT apply an extra SiLU here.
         temb = t_emb.to(dtype)
@@ -444,14 +466,27 @@ class PiH3DiTModel(MiniMaxH3DiTModel):
             block_combined = torch.add(block_token_tags, inverse_indices, alpha=MINIMAX_H3_ADALN_MODALITY_NUM)
         cu_seqlens = cu_seqlens.to(device)
 
-        for block in self.blocks:
-            hidden = block(
-                hidden,
-                adaln_input=temb,
-                combined_indices=block_combined,
-                rope_cache=rope_cache,
-                cu_seqlens=cu_seqlens,
-            )
+        prefix_sink_tokens = _compute_prefix_sink_tokens(
+            text_pos=text_pos,
+            img_pos=img_pos,
+            infer_out_pos=infer_out_pos,
+            audio_pos=audio_pos,
+            refined_prompt_embeds_length=kwargs.get("refined_prompt_embeds_length"),
+            refiner_cu_seqlens_host=refiner_cu_host,
+        )
+        force_dense_attention = bool(kwargs.get("force_dense_attention", False))
+        hidden = self._run_transformer_blocks(
+            hidden,
+            adaln_input=temb,
+            combined_indices=block_combined,
+            rope_cache=rope_cache,
+            cu_seqlens=cu_seqlens,
+            cu_seqlens_host=cu_seqlens_host,
+            max_seqlen=max_seqlen,
+            ignore_trailing_pad=ignore_trailing_pad,
+            prefix_sink_tokens=prefix_sink_tokens,
+            force_dense_attention=force_dense_attention,
+        )
 
         norm_hidden = self.final_layer.modulate(hidden, adaln_input=temb, inverse_indices=inverse_indices)
         video_logits = self.final_layer.video_out(
