@@ -74,10 +74,9 @@ def test_deterministic_frame_selection(
 
 
 @pytest.mark.parametrize("prefix", ["", "frames_"])
-def test_amt_motion_smoothness_reads_numbered_rgb_frames(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, prefix: str
-) -> None:
-    from worldfoundry.base_models.perception_core.frame_interpolation.amt import motion_smoothness
+@pytest.mark.usefixtures("sampling")
+def test_amt_motion_smoothness_reads_numbered_rgb_frames(tmp_path: Path, prefix: str) -> None:
+    from worldfoundry.base_models.perception_core.frame_interpolation.amt.motion_smoothness import FrameProcess
 
     first = (25, 40, 70)
     last = (110, 160, 210)
@@ -85,11 +84,30 @@ def test_amt_motion_smoothness_reads_numbered_rgb_frames(
     Image.new("RGB", (3, 2), first).save(tmp_path / f"{prefix}2.png")
     Image.new("RGB", (3, 2)).save(tmp_path / "preview.png")
 
-    def read_bgr(filename: str, mode: int) -> np.ndarray:
-        assert mode == motion_smoothness.cv2.IMREAD_COLOR
-        with Image.open(filename) as image:
-            return np.array(image.convert("RGB"))[:, :, ::-1].copy()
-
-    monkeypatch.setattr(motion_smoothness.cv2, "imread", read_bgr)
-    frames = motion_smoothness.FrameProcess().get_frames_from_img_folder(tmp_path)
+    frames = FrameProcess().get_frames_from_img_folder(tmp_path)
+    assert all(frame.dtype == np.uint8 for frame in frames)
     np.testing.assert_array_equal(frames, np.broadcast_to(np.array([first, last])[:, None, None], (2, 2, 3, 3)))
+
+
+def test_amt_frame_decode_preserves_16_bit_scaling_and_exif_orientation(tmp_path: Path) -> None:
+    from worldfoundry.base_models.perception_core.frame_interpolation.amt.motion_smoothness import FrameProcess
+
+    grayscale = np.array([[0, 255, 256, 32768, 65535]], dtype=np.uint16)
+    Image.fromarray(grayscale).save(tmp_path / "0.png")
+    rgb = np.array([[[15, 31, 63], [95, 111, 127]], [[143, 159, 191], [207, 223, 255]]], dtype=np.uint8)
+    exif = Image.Exif()
+    exif[274] = 6
+    Image.fromarray(rgb).save(tmp_path / "1.png", exif=exif)
+
+    gray_frame, oriented_frame = FrameProcess().get_frames_from_img_folder(tmp_path)
+    assert gray_frame.dtype == oriented_frame.dtype == np.uint8
+    np.testing.assert_array_equal(gray_frame, np.repeat((grayscale >> 8)[..., None], 3, axis=-1))
+    np.testing.assert_array_equal(oriented_frame, np.rot90(rgb, k=3))
+
+
+def test_amt_frame_decode_reports_a_bad_png_path(tmp_path: Path) -> None:
+    from worldfoundry.base_models.perception_core.frame_interpolation.amt.motion_smoothness import FrameProcess
+
+    (tmp_path / "0.png").write_bytes(b"invalid PNG")
+    with pytest.raises(ValueError, match=r"Failed to decode image frame: .*0\.png"):
+        FrameProcess().get_frames_from_img_folder(tmp_path)

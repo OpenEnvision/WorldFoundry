@@ -12,6 +12,7 @@ import cv2
 import numpy as np
 import torch
 from omegaconf import OmegaConf
+from PIL import Image, ImageOps
 
 from worldfoundry.core.execution.inference_runtime import (
     is_accelerator_out_of_memory,
@@ -81,10 +82,18 @@ class FrameProcess:
             raise ValueError(f"No numbered PNG frames found in directory: {img_folder}")
         frame_list: list[np.ndarray] = []
         for path in paths:
-            frame = cv2.imread(str(path), cv2.IMREAD_COLOR)
-            if frame is None:
-                raise ValueError(f"Failed to decode image frame: {path}")
-            frame_list.append(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+            try:
+                with Image.open(path) as source:
+                    image = ImageOps.exif_transpose(source)
+                    if source.format == "PNG" and image.mode in {"I", "I;16", "I;16B", "I;16L"}:
+                        # Preserve the high-byte scaling of OpenCV's eight-bit color read.
+                        gray = (np.asarray(image, dtype=np.uint16) >> 8).astype(np.uint8)
+                        frame = np.repeat(gray[..., None], 3, axis=-1)
+                    else:
+                        frame = np.array(image.convert("RGB"), dtype=np.uint8)
+            except OSError as exc:
+                raise ValueError(f"Failed to decode image frame: {path}") from exc
+            frame_list.append(frame)
         return frame_list
 
     @staticmethod
