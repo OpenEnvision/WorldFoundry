@@ -328,7 +328,6 @@ def test_lyra1_provider_getitem_stops_immediately_on_eval_failure() -> None:
 @pytest.mark.parametrize("with_eval3d", [True, False])
 def test_lyra1_rasterize_rgbd_keeps_3_channels_for_eval3d(monkeypatch, with_eval3d: bool) -> None:
     torch = pytest.importorskip("torch")
-    pytest.importorskip("gsplat")
     from worldfoundry.synthesis.visual_generation.lyra_1.lyra1_runtime.src.rendering import gs_deferred_patch
 
     seen: list[dict[str, Any]] = []
@@ -376,6 +375,54 @@ def test_lyra1_rasterize_rgbd_keeps_3_channels_for_eval3d(monkeypatch, with_eval
         assert torch.allclose(rgbd[..., 3:], torch.full((1, 2, 2, 1), 8.0))
     else:
         assert [call["render_mode"] for call in seen] == ["RGB+ED"]
+
+
+def test_lyra1_gs_deferred_patch_imports_without_gsplat(monkeypatch) -> None:
+    import importlib
+
+    torch = pytest.importorskip("torch")
+    module_name = "worldfoundry.synthesis.visual_generation.lyra_1.lyra1_runtime.src.rendering.gs_deferred_patch"
+    had_module = module_name in sys.modules
+    monkeypatch.setitem(sys.modules, "gsplat", None)
+    monkeypatch.setitem(sys.modules, "gsplat.rendering", None)
+    monkeypatch.delitem(sys.modules, module_name, raising=False)
+
+    call_kwargs = {
+        "means": torch.zeros((2, 3)),
+        "quats": torch.zeros((2, 4)),
+        "scales": torch.ones((2, 3)),
+        "opacities": torch.ones((2,)),
+        "colors": torch.zeros((2, 3)),
+        "viewmats": torch.eye(4)[None],
+        "Ks": torch.eye(3)[None],
+        "width": 2,
+        "height": 2,
+        "near_plane": 0.1,
+        "far_plane": 100.0,
+        "backgrounds": torch.ones((1, 3)),
+        "raster_kwargs": {"with_eval3d": False},
+    }
+
+    try:
+        gs_deferred_patch = importlib.import_module(module_name)
+        assert gs_deferred_patch.rasterization is None
+
+        with pytest.raises(ModuleNotFoundError):
+            gs_deferred_patch.rasterize_rgbd(**call_kwargs)
+
+        expected = (torch.full((1, 2, 2, 4), 1.0), torch.full((1, 2, 2, 1), 0.5), {"depths": torch.ones((1, 2))})
+        seen: list[dict[str, Any]] = []
+
+        def stub_rasterization(**kwargs):
+            seen.append(dict(kwargs))
+            return expected
+
+        monkeypatch.setattr(gs_deferred_patch, "rasterization", stub_rasterization)
+        assert gs_deferred_patch.rasterize_rgbd(**call_kwargs) == expected
+        assert len(seen) == 1
+    finally:
+        if not had_module:
+            sys.modules.pop(module_name, None)
 
 
 def test_lyra1_denormalize_latents_preserves_btchw_layout_and_applies_ct_stats() -> None:

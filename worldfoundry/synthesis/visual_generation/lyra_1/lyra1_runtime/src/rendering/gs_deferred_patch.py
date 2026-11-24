@@ -15,9 +15,25 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import torch
-from gsplat.rendering import rasterization
 from torch.utils.checkpoint import _get_autocast_kwargs
+
+rasterization: Any
+try:
+    from gsplat.rendering import rasterization
+except ModuleNotFoundError:
+    rasterization = None
+
+
+def _get_rasterization() -> Any:
+    fn = rasterization
+    if fn is None:
+        from gsplat.rendering import rasterization as gsplat_rasterization
+
+        return gsplat_rasterization
+    return fn
 
 
 def rasterize_rgbd(
@@ -37,8 +53,9 @@ def rasterize_rgbd(
     raster_kwargs: dict,
 ) -> tuple[torch.Tensor, torch.Tensor, dict]:
     """Rasterize RGB and expected depth, keeping 3-channel passes when with_eval3d=True."""
+    rasterize_fn = _get_rasterization()
     if not raster_kwargs.get("with_eval3d", False) or colors.shape[-1] != 3:
-        return rasterization(
+        return rasterize_fn(
             means=means,
             quats=quats,
             scales=scales,
@@ -55,7 +72,7 @@ def rasterize_rgbd(
             **raster_kwargs,
         )
 
-    image, alpha, meta = rasterization(
+    image, alpha, meta = rasterize_fn(
         means=means,
         quats=quats,
         scales=scales,
@@ -75,7 +92,7 @@ def rasterize_rgbd(
     zeros = torch.zeros_like(depths)
     depth_colors = torch.stack((depths, zeros, zeros), dim=-1).contiguous()
     zero_bg = torch.zeros_like(backgrounds) if backgrounds is not None else None
-    depth_accum, _, _ = rasterization(
+    depth_accum, _, _ = rasterize_fn(
         means=means,
         quats=quats,
         scales=scales,
