@@ -57,6 +57,28 @@ class FlowMatchScheduler:
         prev_sample = sample + model_output * (sigma_ - sigma)
         return prev_sample
 
+    def _ensure_device(self, device: torch.device) -> None:
+        if self.sigmas.device != device:
+            self.sigmas = self.sigmas.to(device)
+        if self.timesteps.device != device:
+            self.timesteps = self.timesteps.to(device)
+
+    def sigma_for_timestep(self, timestep: torch.Tensor, device: torch.device) -> torch.Tensor:
+        """Resolve per-sample sigma on ``device`` with cached device buffers."""
+        if timestep.ndim == 2:
+            timestep = timestep.flatten(0, 1)
+        self._ensure_device(device)
+        timestep = timestep.to(device)
+        timestep_id = torch.argmin((self.timesteps.unsqueeze(0) - timestep.unsqueeze(1)).abs(), dim=1)
+        return self.sigmas[timestep_id].reshape(-1, 1, 1, 1)
+
+    def add_noise_with_sigma(
+        self, original_samples: torch.Tensor, noise: torch.Tensor, sigma: torch.Tensor
+    ) -> torch.Tensor:
+        """Fast noise injection when ``sigma`` is precomputed for fixed distilled steps."""
+        sample = (1 - sigma) * original_samples + sigma * noise
+        return sample.type_as(noise)
+
     def add_noise(self, original_samples, noise, timestep):
         """
         Diffusion forward corruption process.
@@ -66,14 +88,8 @@ class FlowMatchScheduler:
             - timestep: the timestep with shape [B*T]
         Output: the corrupted latent with shape [B*T, C, H, W]
         """
-        if timestep.ndim == 2:
-            timestep = timestep.flatten(0, 1)
-        self.sigmas = self.sigmas.to(noise.device)
-        self.timesteps = self.timesteps.to(noise.device)
-        timestep_id = torch.argmin((self.timesteps.unsqueeze(0) - timestep.unsqueeze(1)).abs(), dim=1)
-        sigma = self.sigmas[timestep_id].reshape(-1, 1, 1, 1)
-        sample = (1 - sigma) * original_samples + sigma * noise
-        return sample.type_as(noise)
+        sigma = self.sigma_for_timestep(timestep, noise.device)
+        return self.add_noise_with_sigma(original_samples, noise, sigma)
 
     def training_target(self, sample, noise, timestep):
         target = noise - sample

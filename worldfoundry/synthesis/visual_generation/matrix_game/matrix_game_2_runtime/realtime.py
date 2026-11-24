@@ -458,6 +458,132 @@ class MatrixGame2RealtimeSession:
             },
         }
 
+    @torch.inference_mode()
+    def stream_overlapped(
+        self,
+        actions_sequence: Sequence[Sequence[str]],
+    ):
+        """Yield uint8 video chunks while overlapping chunk ``k`` DiT with chunk ``k-1`` VAE decode + D2H.
+
+        Uses two dedicated non-blocking CUDA streams (compute vs decode) to avoid
+        implicit CUDA Stream-0 synchronization barriers, matching the pipelined
+        streaming pattern of WorldFoundry's native forcing pipelines.
+        """
+        if not self.configured or self._noise_generator is None:
+            raise RuntimeError("Matrix-Game 2 realtime session is not configured.")
+        state = getattr(self.core, "_session", None)
+        if state is None:
+            raise RuntimeError("Matrix-Game 2 causal session was unexpectedly released.")
+        spec_payload = self.realtime_spec().to_payload()
+        is_cuda = self.device.type == "cuda"
+        entry_stream = torch.cuda.current_stream(self.device) if is_cuda else None
+        compute_stream = torch.cuda.Stream(device=self.device) if is_cuda else None
+        decode_stream = torch.cuda.Stream(device=self.device) if is_cuda else None
+        if is_cuda and entry_stream is not None and compute_stream is not None and decode_stream is not None:
+            init_ev = torch.cuda.Event()
+            init_ev.record(entry_stream)
+            compute_stream.wait_event(init_ev)
+            decode_stream.wait_event(init_ev)
+
+        pending_cpu_uint8: torch.Tensor | None = None
+        pending_event: torch.cuda.Event | None = None
+        pending_meta: dict[str, Any] = {}
+
+        def _flush_pending():
+            nonlocal pending_cpu_uint8, pending_event
+            if pending_cpu_uint8 is None or pending_event is None:
+                return None
+            pending_event.synchronize()
+            frames_np = np.ascontiguousarray(pending_cpu_uint8.numpy())
+            pending_meta["wall_ms"] = (time.perf_counter() - pending_meta["chunk_t0"]) * 1000.0
+            payload = {
+                "video": frames_np,
+                "video_chunk": VideoChunk(frames=frames_np, layout="thwc", value_range="0,255"),
+                "realtime_spec": spec_payload,
+                "realtime_metrics": dict(pending_meta),
+            }
+            pending_cpu_uint8 = None
+            pending_event = None
+            return payload
+
+        try:
+            for chunk_idx, interactions in enumerate(actions_sequence):
+                if not (is_cuda and compute_stream is not None and decode_stream is not None):
+                    yield self.generate(interactions=interactions)
+                    continue
+
+                t0 = time.perf_counter()
+                start_frame = int(state.current_start_frame)
+                output_frames = self.next_output_frames()
+                with torch.cuda.stream(compute_stream):
+                    self._append_actions(
+                        self._actions_for_frames(interactions, None, num_frames=output_frames),
+                        None,
+                    )
+                    assert self._visual_context is not None
+                    assert self._condition_concat is not None
+                    assert self._keyboard_history is not None
+                    conditional_dict: dict[str, Any] = {
+                        "cond_concat": self._condition_block(start_frame),
+                        "_cond_concat_start_frame": start_frame,
+                        "visual_context": self._visual_context,
+                        "keyboard_cond": self._keyboard_history.unsqueeze(0),
+                    }
+                    if self.runtime.mode != "templerun":
+                        assert self._mouse_history is not None
+                        conditional_dict["mouse_cond"] = self._mouse_history.unsqueeze(0)
+                    state.conditional_dict = conditional_dict
+                    state.mode = self.runtime.mode
+
+                    noise = torch.randn(
+                        (
+                            1,
+                            16,
+                            self.latent_frames_per_block,
+                            self._condition_concat.shape[-2],
+                            self._condition_concat.shape[-1],
+                        ),
+                        generator=self._noise_generator,
+                        device=self.device,
+                        dtype=self.dtype,
+                    )
+                    denoised_pred, _, _ = self.core.denoise_next_block(state, noise)
+                    latent_for_decode = denoised_pred.transpose(1, 2).half().contiguous()
+                    latent_ready = torch.cuda.Event()
+                    latent_ready.record(compute_stream)
+                    latent_for_decode.record_stream(decode_stream)
+
+                prev_payload = _flush_pending()
+                if prev_payload is not None:
+                    yield prev_payload
+
+                with torch.cuda.stream(decode_stream):
+                    decode_stream.wait_event(latent_ready)
+                    video, next_vae_cache = self.core.vae_decoder(latent_for_decode, *state.vae_cache)
+                    state.vae_cache = next_vae_cache
+                    uint8_gpu = (
+                        ((video.float() + 1.0) * 127.5)
+                        .clamp_(0, 255)
+                        .to(dtype=torch.uint8)
+                        .permute(0, 1, 3, 4, 2)[0]
+                        .contiguous()
+                    )
+                    cpu_buf = torch.empty(uint8_gpu.shape, dtype=torch.uint8, pin_memory=True)
+                    cpu_buf.copy_(uint8_gpu, non_blocking=True)
+                    done_ev = torch.cuda.Event()
+                    done_ev.record(decode_stream)
+                pending_cpu_uint8 = cpu_buf
+                pending_event = done_ev
+                pending_meta = {"chunk_t0": t0, "chunk_index": chunk_idx + 1, "overlapped": True}
+
+            final_payload = _flush_pending()
+            if final_payload is not None:
+                yield final_payload
+        finally:
+            if is_cuda and entry_stream is not None and compute_stream is not None and decode_stream is not None:
+                entry_stream.wait_stream(compute_stream)
+                entry_stream.wait_stream(decode_stream)
+
     def reset(self) -> None:
         """Release rollout state while keeping all model weights resident."""
 

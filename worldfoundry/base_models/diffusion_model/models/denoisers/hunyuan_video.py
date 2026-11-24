@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from types import SimpleNamespace
+from typing import Any
 
 import torch
 
@@ -20,6 +21,11 @@ from ...optimizations import AttentionBackend
 from ..networks.hunyuan_video.h15.hunyuanvideo_1_5_transformer import HunyuanVideo_1_5_DiffusionTransformer
 from ..networks.hunyuan_video.i2v.model import HUNYUAN_VIDEO_CONFIG, HYVideoDiffusionTransformer
 from ..networks.hunyuan_video.original import HunyuanVideoDiT
+from .graph_wrapped import (
+    GraphWrappedDenoiserMixin,
+    resolve_cuda_graph_mode,
+    resolve_cuda_graph_option,
+)
 from .hunyuan_video_converter import HunyuanVideoDiTStateDictConverter
 
 
@@ -52,27 +58,65 @@ def _embedded_guidance(model_input: DenoiserInput, *, multiply: float = 1.0) -> 
     )
 
 
-class HunyuanVideoDenoiser:
-    """Original HunyuanVideo T2V denoiser with embedded guidance."""
+def _normalize_cuda_graph_arg(enabled: bool | str | None) -> bool | str:
+    """Normalize direct constructor ``enable_cuda_graph`` arguments safely."""
+    if enabled is None or enabled is False:
+        return False
+    if enabled is True:
+        return True
+    if isinstance(enabled, str):
+        normalized = enabled.strip().casefold()
+        if normalized in {"off", "none", "false", "disabled"}:
+            return False
+        if normalized in {"whole", "full", "true"}:
+            return True
+        if normalized == "piecewise":
+            return "piecewise"
+    raise ValueError(f"unsupported enable_cuda_graph mode {enabled!r}; expected bool, 'off', 'whole', or 'piecewise'")
 
-    def __init__(self, model: HunyuanVideoDiT) -> None:
+
+def _resolve_compute_dtype(model: torch.nn.Module, fallback: torch.dtype) -> torch.dtype:
+    """Resolve the model's floating compute dtype without tripping on FP8 buffers."""
+    for param in model.parameters():
+        if param.dtype in {torch.float16, torch.bfloat16, torch.float32}:
+            return param.dtype
+    return fallback
+
+
+class HunyuanVideoDenoiser(GraphWrappedDenoiserMixin):
+    """Original HunyuanVideo T2V denoiser with embedded guidance and optional CUDA Graph."""
+
+    def __init__(self, model: HunyuanVideoDiT, *, enable_cuda_graph: bool | str = False) -> None:
         self.model = model
-        self._rope: dict[tuple[int, ...], tuple[torch.Tensor, torch.Tensor]] = {}
+        self._rope: dict[tuple[tuple[int, ...], torch.device], tuple[torch.Tensor, torch.Tensor]] = {}
+        self._init_graph_runner(
+            model,
+            enabled=_normalize_cuda_graph_arg(enable_cuda_graph),
+            extra_key=f"hunyuan:{type(model).__module__}.{type(model).__qualname__}",
+        )
 
     def __call__(self, model_input: DenoiserInput) -> DenoiserOutput:
-        key = tuple(model_input.latents.shape[2:])
-        freqs = self._rope.get(key)
+        shape_key = tuple(model_input.latents.shape[2:])
+        cache_key = (shape_key, model_input.latents.device)
+        freqs = self._rope.get(cache_key)
         if freqs is None:
-            freqs = self.model.prepare_freqs(model_input.latents)
-            self._rope[key] = freqs
-        cos, sin = (value.to(device=model_input.latents.device) for value in freqs)
-        compute_dtype = next(self.model.parameters()).dtype
+            raw_cos, raw_sin = self.model.prepare_freqs(model_input.latents)
+            freqs = (
+                raw_cos.to(device=model_input.latents.device),
+                raw_sin.to(device=model_input.latents.device),
+            )
+            if len(self._rope) >= 16:
+                self._rope.clear()
+            self._rope[cache_key] = freqs
+        cos, sin = freqs
+        compute_dtype = _resolve_compute_dtype(self.model, model_input.latents.dtype)
+        extra = {"piecewise_graph": self._piecewise_graph} if self._piecewise_graph is not None else {}
         with torch.autocast(
             device_type=model_input.latents.device.type,
             dtype=compute_dtype,
             enabled=compute_dtype in {torch.float16, torch.bfloat16},
         ):
-            sample = self.model(
+            sample = self._run_network(
                 x=model_input.latents,
                 t=_batch_timestep(model_input.timestep, model_input.latents),
                 prompt_emb=_required_tensor(model_input.conditioning, "text_states"),
@@ -81,65 +125,113 @@ class HunyuanVideoDenoiser:
                 freqs_cos=cos,
                 freqs_sin=sin,
                 guidance=_embedded_guidance(model_input),
+                **extra,
             )
         return DenoiserOutput(sample=sample)
 
 
-class HunyuanVideoI2VDenoiser:
+class HunyuanVideoI2VDenoiser(GraphWrappedDenoiserMixin):
     """Original token-replacement I2V denoiser with a frozen first latent frame."""
 
-    def __init__(self, model: HYVideoDiffusionTransformer, *, rope_theta: float = 256.0) -> None:
+    def __init__(
+        self,
+        model: HYVideoDiffusionTransformer,
+        *,
+        rope_theta: float = 256.0,
+        enable_cuda_graph: bool | str = False,
+    ) -> None:
         self.model = model
         self.rope_theta = float(rope_theta)
-        self._rope: dict[tuple[int, ...], tuple[torch.Tensor, torch.Tensor]] = {}
+        self._rope: dict[tuple[tuple[int, ...], torch.device], tuple[torch.Tensor, torch.Tensor]] = {}
+        self._init_graph_runner(
+            model,
+            enabled=_normalize_cuda_graph_arg(enable_cuda_graph),
+            extra_key=f"hunyuan_i2v:{type(model).__module__}.{type(model).__qualname__}",
+        )
 
     def _freqs(self, latents: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        key = tuple(latents.shape[2:])
-        values = self._rope.get(key)
+        shape_key = tuple(latents.shape[2:])
+        cache_key = (shape_key, latents.device)
+        values = self._rope.get(cache_key)
         if values is None:
             from worldfoundry.core.attention import get_nd_rotary_pos_embed
 
-            sizes = tuple(size // patch for size, patch in zip(key, self.model.patch_size, strict=False))
-            values = get_nd_rotary_pos_embed(
+            sizes = tuple(size // patch for size, patch in zip(shape_key, self.model.patch_size, strict=False))
+            raw_cos, raw_sin = get_nd_rotary_pos_embed(
                 self.model.rope_dim_list,
                 sizes,
                 theta=self.rope_theta,
                 use_real=True,
                 theta_rescale_factor=1.0,
             )
-            self._rope[key] = values
-        return tuple(value.to(device=latents.device) for value in values)  # type: ignore[return-value]
+            values = (raw_cos.to(device=latents.device), raw_sin.to(device=latents.device))
+            if len(self._rope) >= 16:
+                self._rope.clear()
+            self._rope[cache_key] = values
+        return values
 
     def __call__(self, model_input: DenoiserInput) -> DenoiserOutput:
         cos, sin = self._freqs(model_input.latents)
-        compute_dtype = next(self.model.parameters()).dtype
-        with torch.autocast(
-            device_type=model_input.latents.device.type,
-            dtype=compute_dtype,
-            enabled=compute_dtype in {torch.float16, torch.bfloat16},
-        ):
-            output = self.model(
-                x=model_input.latents,
-                t=_batch_timestep(model_input.timestep, model_input.latents),
-                text_states=_required_tensor(model_input.conditioning, "text_states"),
-                text_mask=_required_tensor(model_input.conditioning, "text_mask"),
-                text_states_2=_required_tensor(model_input.conditioning, "text_states_2"),
-                freqs_cos=cos,
-                freqs_sin=sin,
-                guidance=_embedded_guidance(model_input, multiply=1000.0),
-                return_dict=False,
-            )
+        compute_dtype = _resolve_compute_dtype(self.model, model_input.latents.dtype)
+        self.model._active_piecewise_graph = self._piecewise_graph
+        try:
+            with torch.autocast(
+                device_type=model_input.latents.device.type,
+                dtype=compute_dtype,
+                enabled=compute_dtype in {torch.float16, torch.bfloat16},
+            ):
+                output = self._run_network(
+                    x=model_input.latents,
+                    t=_batch_timestep(model_input.timestep, model_input.latents),
+                    text_states=_required_tensor(model_input.conditioning, "text_states"),
+                    text_mask=_required_tensor(model_input.conditioning, "text_mask"),
+                    text_states_2=_required_tensor(model_input.conditioning, "text_states_2"),
+                    freqs_cos=cos,
+                    freqs_sin=sin,
+                    guidance=_embedded_guidance(model_input, multiply=1000.0),
+                    return_dict=False,
+                )
+        finally:
+            model_any: Any = self.model
+            model_any._active_piecewise_graph = None
         sample = output.clone()
         sample[:, :, :1] = 0
         return DenoiserOutput(sample=sample)
 
 
-class HunyuanVideo15Denoiser:
+class HunyuanVideo15Denoiser(GraphWrappedDenoiserMixin):
     """HunyuanVideo 1.5 denoiser using native concat-condition inputs."""
 
-    def __init__(self, model: HunyuanVideo_1_5_DiffusionTransformer, *, image_to_video: bool) -> None:
+    def __init__(
+        self,
+        model: HunyuanVideo_1_5_DiffusionTransformer,
+        *,
+        image_to_video: bool,
+        enable_cuda_graph: bool | str = False,
+    ) -> None:
         self.model = model
         self.image_to_video = bool(image_to_video)
+        self._rope: dict[tuple[int, int, int, torch.device], tuple[torch.Tensor, torch.Tensor]] = {}
+        self._init_graph_runner(
+            model,
+            enabled=_normalize_cuda_graph_arg(enable_cuda_graph),
+            extra_key=f"hunyuan15:{type(model).__module__}.{type(model).__qualname__}",
+        )
+
+    def _freqs(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        _, _, ot, oh, ow = hidden_states.shape
+        tt = ot // self.model.patch_size[0]
+        th = oh // self.model.patch_size[1]
+        tw = ow // self.model.patch_size[2]
+        key = (tt, th, tw, hidden_states.device)
+        values = self._rope.get(key)
+        if values is None:
+            cos, sin = self.model.get_rotary_pos_embed((tt, th, tw))
+            values = (cos.to(device=hidden_states.device), sin.to(device=hidden_states.device))
+            if len(self._rope) >= 16:
+                self._rope.clear()
+            self._rope[key] = values
+        return values
 
     def __call__(self, model_input: DenoiserInput) -> DenoiserOutput:
         condition = _required_tensor(model_input.conditioning, "condition_latents").to(model_input.latents)
@@ -165,30 +257,45 @@ class HunyuanVideo15Denoiser:
         timestep_r = None
         if bool(self.model.config.use_meanflow):
             timestep_r = _batch_timestep(model_input.next_timestep, model_input.latents)
-        compute_dtype = next(self.model.parameters()).dtype
-        with torch.autocast(
-            device_type=hidden_states.device.type,
-            dtype=compute_dtype,
-            enabled=compute_dtype in {torch.float16, torch.bfloat16},
-        ):
-            output, _ = self.model(
-                hidden_states=hidden_states,
-                timestep=timestep,
-                timestep_r=timestep_r,
-                text_states=_required_tensor(model_input.conditioning, "text_states"),
-                text_states_2=model_input.conditioning.get("text_states_2"),
-                encoder_attention_mask=_required_tensor(model_input.conditioning, "text_mask"),
-                vision_states=vision.to(device=hidden_states.device, dtype=hidden_states.dtype),
-                guidance=_embedded_guidance(model_input, multiply=1000.0),
-                mask_type="i2v" if self.image_to_video else "t2v",
-                extra_kwargs=extra_kwargs,
-                return_dict=False,
-            )
+        freqs_cos, freqs_sin = self._freqs(hidden_states)
+        compute_dtype = _resolve_compute_dtype(self.model, hidden_states.dtype)
+        self.model._active_piecewise_graph = self._piecewise_graph
+        try:
+            with torch.autocast(
+                device_type=hidden_states.device.type,
+                dtype=compute_dtype,
+                enabled=compute_dtype in {torch.float16, torch.bfloat16},
+            ):
+                output, _ = self._run_network(
+                    hidden_states=hidden_states,
+                    timestep=timestep,
+                    timestep_r=timestep_r,
+                    text_states=_required_tensor(model_input.conditioning, "text_states"),
+                    text_states_2=model_input.conditioning.get("text_states_2"),
+                    encoder_attention_mask=_required_tensor(model_input.conditioning, "text_mask"),
+                    vision_states=vision.to(device=hidden_states.device, dtype=hidden_states.dtype),
+                    guidance=_embedded_guidance(model_input, multiply=1000.0),
+                    freqs_cos=freqs_cos,
+                    freqs_sin=freqs_sin,
+                    mask_type="i2v" if self.image_to_video else "t2v",
+                    extra_kwargs=extra_kwargs,
+                    return_dict=False,
+                )
+        finally:
+            model_any: Any = self.model
+            model_any._active_piecewise_graph = None
         return DenoiserOutput(sample=output)
 
 
 def _original_state_dict(state_dict: Mapping[str, object]) -> Mapping[str, object]:
     return HunyuanVideoDiTStateDictConverter().from_civitai(state_dict)
+
+
+def _resolve_graph_arg(context: ComponentBuildContext) -> bool | str:
+    mode = resolve_cuda_graph_mode(context)
+    if mode == "piecewise":
+        return "piecewise"
+    return resolve_cuda_graph_option(context)
 
 
 def build_hunyuan_video_denoiser(context: ComponentBuildContext) -> HunyuanVideoDenoiser:
@@ -197,13 +304,14 @@ def build_hunyuan_video_denoiser(context: ComponentBuildContext) -> HunyuanVideo
             module_class=HunyuanVideoDiT,
             state_dict_converter=_original_state_dict,
             layer_container="double_blocks",
+            compile_regions=("double_blocks", "single_blocks"),
         ),
         context.require_checkpoint("weights"),
         context.policy,
     )
     if not isinstance(model, HunyuanVideoDiT):
         raise TypeError(f"expected HunyuanVideoDiT, got {type(model).__name__}")
-    return HunyuanVideoDenoiser(model)
+    return HunyuanVideoDenoiser(model, enable_cuda_graph=_resolve_graph_arg(context))
 
 
 def build_hunyuan_video_i2v_denoiser(context: ComponentBuildContext) -> HunyuanVideoI2VDenoiser:
@@ -221,13 +329,14 @@ def build_hunyuan_video_i2v_denoiser(context: ComponentBuildContext) -> HunyuanV
             module_class=HYVideoDiffusionTransformer,
             config=config,
             layer_container="double_blocks",
+            compile_regions=("double_blocks", "single_blocks"),
         ),
         context.require_checkpoint("weights"),
         context.policy,
     )
     if not isinstance(model, HYVideoDiffusionTransformer):
         raise TypeError(f"expected HYVideoDiffusionTransformer, got {type(model).__name__}")
-    return HunyuanVideoI2VDenoiser(model)
+    return HunyuanVideoI2VDenoiser(model, enable_cuda_graph=_resolve_graph_arg(context))
 
 
 def _h15_config(checkpoint, relative_path: str, attention: AttentionBackend) -> Mapping[str, object]:
@@ -240,11 +349,19 @@ def _h15_config(checkpoint, relative_path: str, attention: AttentionBackend) -> 
 
 def build_hunyuan_video15_denoiser(context: ComponentBuildContext) -> HunyuanVideo15Denoiser:
     config_path = str(context.component_options.get("config_path", "transformer/480p_t2v_distilled/config.json"))
+    want_fuse_qkv = bool(context.component_options.get("fuse_qkv", context.policy.options.get("fuse_qkv", False)))
+
+    def _fuse_h15_qkv(loaded: torch.nn.Module) -> None:
+        if isinstance(loaded, HunyuanVideo_1_5_DiffusionTransformer):
+            loaded.fuse_qkv()
+
     model = NativeModuleLoader().load(
         ModuleLoadSpec(
             module_class=HunyuanVideo_1_5_DiffusionTransformer,
             config_resolver=lambda checkpoint: _h15_config(checkpoint, config_path, context.policy.attention),
             layer_container="double_blocks",
+            compile_regions=("double_blocks", "single_blocks"),
+            post_load_hook=_fuse_h15_qkv if want_fuse_qkv else None,
         ),
         context.require_checkpoint("weights"),
         context.policy,
@@ -254,6 +371,7 @@ def build_hunyuan_video15_denoiser(context: ComponentBuildContext) -> HunyuanVid
     return HunyuanVideo15Denoiser(
         model,
         image_to_video=bool(context.component_options.get("image_to_video", False)),
+        enable_cuda_graph=_resolve_graph_arg(context),
     )
 
 

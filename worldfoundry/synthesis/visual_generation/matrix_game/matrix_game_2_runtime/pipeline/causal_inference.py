@@ -250,6 +250,11 @@ class CausalInferencePipeline(torch.nn.Module):
         # Calls on one pipeline are serialized by its resident session owner.
         # The optional stream belongs to this pipeline, never to a global pool.
         self.overlap_vae_decode = False
+        self.reuse_session_caches = False
+        self._persistent_caches: dict[tuple[Any, ...], tuple[Any, Any, Any, Any]] = {}
+        self._step_schedule_cache: dict[
+            tuple[Any, ...], tuple[list[torch.Tensor], list[torch.Tensor | None], torch.Tensor]
+        ] = {}
         self._decode_stream = None
         self._decode_stream_device = None
         self._decode_complete = None
@@ -349,21 +354,69 @@ class CausalInferencePipeline(torch.nn.Module):
         # A replacement session releases recurrent caches only after its owned
         # decoder stream finishes. It does not synchronize unrelated streams.
         self.reset_session()
-        self._initialize_kv_cache(
-            batch_size=batch_size,
-            dtype=reference.dtype,
-            device=reference.device,
+        cache_key = (
+            batch_size,
+            reference.dtype,
+            reference.device,
+            self.num_transformer_blocks,
+            self.frame_seq_length,
+            self.local_attn_size,
         )
-        self._initialize_kv_cache_mouse_and_keyboard(
-            batch_size=batch_size,
-            dtype=reference.dtype,
-            device=reference.device,
-        )
-        self._initialize_crossattn_cache(
-            batch_size=batch_size,
-            dtype=reference.dtype,
-            device=reference.device,
-        )
+        reused = self._persistent_caches.get(cache_key) if self.reuse_session_caches else None
+        if reused is not None:
+            kv1, kv_m, kv_k, xkv = reused
+            for slot in kv1:
+                slot["k"].zero_()
+                slot["v"].zero_()
+                slot["global_end_index"].zero_()
+                slot["local_end_index"].zero_()
+                slot["_host_global_end_index"] = 0
+                slot["_host_local_end_index"] = 0
+            for slot in kv_m:
+                slot["k"].zero_()
+                slot["v"].zero_()
+                slot["global_end_index"].zero_()
+                slot["local_end_index"].zero_()
+                slot["_host_global_end_index"] = 0
+                slot["_host_local_end_index"] = 0
+            for slot in kv_k:
+                slot["k"].zero_()
+                slot["v"].zero_()
+                slot["global_end_index"].zero_()
+                slot["local_end_index"].zero_()
+                slot["_host_global_end_index"] = 0
+                slot["_host_local_end_index"] = 0
+            for slot in xkv:
+                slot["k"].zero_()
+                slot["v"].zero_()
+                slot["is_init"] = False
+            self.kv_cache1 = kv1
+            self.kv_cache_mouse = kv_m
+            self.kv_cache_keyboard = kv_k
+            self.crossattn_cache = xkv
+        else:
+            self._initialize_kv_cache(
+                batch_size=batch_size,
+                dtype=reference.dtype,
+                device=reference.device,
+            )
+            self._initialize_kv_cache_mouse_and_keyboard(
+                batch_size=batch_size,
+                dtype=reference.dtype,
+                device=reference.device,
+            )
+            self._initialize_crossattn_cache(
+                batch_size=batch_size,
+                dtype=reference.dtype,
+                device=reference.device,
+            )
+            if self.reuse_session_caches:
+                self._persistent_caches[cache_key] = (
+                    self.kv_cache1,
+                    self.kv_cache_mouse,
+                    self.kv_cache_keyboard,
+                    self.crossattn_cache,
+                )
 
         session = CausalInferenceSession(
             conditional_dict=(conditional_dict if isinstance(conditional_dict, dict) else dict(conditional_dict)),
@@ -450,6 +503,161 @@ class CausalInferencePipeline(torch.nn.Module):
         )
         return block.video
 
+    def _get_step_schedule_tensors(
+        self,
+        batch_size: int,
+        device: torch.device,
+    ) -> tuple[list[torch.Tensor], list[torch.Tensor | None], torch.Tensor]:
+        """Preallocate per-step timestep and next-step sigma tensors on ``device``."""
+        step_vals = tuple(self.denoising_step_list.tolist())
+        key = (batch_size, self.num_frame_per_block, device, step_vals, self.args.context_noise)
+        cached = self._step_schedule_cache.get(key)
+        if cached is not None:
+            return cached
+        step_timesteps: list[torch.Tensor] = []
+        next_sigmas: list[torch.Tensor | None] = []
+        num_steps = len(self.denoising_step_list)
+        has_fast_sigma = callable(getattr(self.scheduler, "sigma_for_timestep", None))
+        for idx in range(num_steps):
+            val = self.denoising_step_list[idx]
+            ts = torch.full(
+                (batch_size, self.num_frame_per_block),
+                val,
+                device=device,
+                dtype=torch.int64,
+            )
+            step_timesteps.append(ts)
+            if idx < num_steps - 1 and has_fast_sigma:
+                next_ts = torch.full(
+                    (batch_size * self.num_frame_per_block,),
+                    self.denoising_step_list[idx + 1],
+                    device=device,
+                    dtype=torch.long,
+                )
+                next_sigmas.append(self.scheduler.sigma_for_timestep(next_ts, device))
+            else:
+                next_sigmas.append(None)
+        context_ts = torch.full(
+            (batch_size, self.num_frame_per_block),
+            self.args.context_noise,
+            device=device,
+            dtype=torch.int64,
+        )
+        cached = (step_timesteps, next_sigmas, context_ts)
+        self._step_schedule_cache[key] = cached
+        return cached
+
+    def _run_denoise_steps(
+        self,
+        session: CausalInferenceSession,
+        noise: torch.Tensor,
+        current_condition: dict[str, Any],
+        start_frame: int,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Execute all distilled denoising steps for one block, returning ``(denoised_pred, context_timestep)``."""
+        step_timesteps, next_sigmas, context_timestep = self._get_step_schedule_tensors(
+            session.batch_size, session.device
+        )
+        noisy_input = noise
+        denoised_pred: torch.Tensor | None = None
+        num_steps = len(step_timesteps)
+        current_start = start_frame * self.frame_seq_length
+        for index in range(num_steps):
+            _, denoised_pred = self.generator(
+                noisy_image_or_video=noisy_input,
+                conditional_dict=current_condition,
+                timestep=step_timesteps[index],
+                kv_cache=session.kv_cache,
+                kv_cache_mouse=session.mouse_kv_cache,
+                kv_cache_keyboard=session.keyboard_kv_cache,
+                crossattn_cache=session.crossattn_cache,
+                current_start=current_start,
+            )
+            if index < num_steps - 1:
+                flat_prediction = rearrange(denoised_pred, "b c f h w -> (b f) c h w")
+                sigma = next_sigmas[index]
+                if sigma is not None and callable(getattr(self.scheduler, "add_noise_with_sigma", None)):
+                    noisy_input = self.scheduler.add_noise_with_sigma(
+                        flat_prediction,
+                        torch.randn_like(flat_prediction),
+                        sigma,
+                    )
+                else:
+                    next_timestep = self.denoising_step_list[index + 1]
+                    noisy_input = self.scheduler.add_noise(
+                        flat_prediction,
+                        torch.randn_like(flat_prediction),
+                        next_timestep
+                        * torch.ones(
+                            [session.batch_size * self.num_frame_per_block],
+                            device=session.device,
+                            dtype=torch.long,
+                        ),
+                    )
+                noisy_input = rearrange(
+                    noisy_input,
+                    "(b f) c h w -> b c f h w",
+                    b=denoised_pred.shape[0],
+                )
+        assert denoised_pred is not None
+        return denoised_pred, context_timestep
+
+    def denoise_next_block(
+        self,
+        session: CausalInferenceSession,
+        noise: torch.Tensor,
+        *,
+        action: Mapping[str, torch.Tensor] | None = None,
+    ) -> tuple[torch.Tensor, int, int]:
+        """Run DiT denoising + clean-context KV refresh for one block without VAE decode.
+
+        Used by cross-block overlapped streaming so chunk ``k`` DiT overlaps
+        completely with chunk ``k-1`` causal VAE decode + async D2H transfer.
+        """
+        if session.invalidated:
+            raise RuntimeError("session was invalidated by a failed overlapped block; start a new session")
+        expected_prefix = (session.batch_size, 16, self.num_frame_per_block)
+        if noise.ndim != 5 or tuple(noise.shape[:3]) != expected_prefix:
+            raise ValueError(
+                f"noise must have shape [B, 16, {self.num_frame_per_block}, H, W]; got {tuple(noise.shape)}"
+            )
+        if noise.device != session.device or noise.dtype != session.dtype:
+            raise ValueError("noise device and dtype must match the session")
+        if self.denoising_step_list.numel() == 0:
+            raise RuntimeError("denoising_step_list must not be empty")
+
+        start_frame = session.current_start_frame
+        if action is None:
+            current_condition = cond_current(
+                session.conditional_dict,
+                start_frame,
+                self.num_frame_per_block,
+                mode=session.mode,
+            )
+        else:
+            current_condition, updated_condition = cond_current(
+                session.conditional_dict,
+                start_frame,
+                self.num_frame_per_block,
+                replace=action,
+                mode=session.mode,
+            )
+            session.conditional_dict = updated_condition
+
+        denoised_pred, context_timestep = self._run_denoise_steps(session, noise, current_condition, start_frame)
+        self.generator(
+            noisy_image_or_video=denoised_pred,
+            conditional_dict=current_condition,
+            timestep=context_timestep,
+            kv_cache=session.kv_cache,
+            kv_cache_mouse=session.mouse_kv_cache,
+            kv_cache_keyboard=session.keyboard_kv_cache,
+            crossattn_cache=session.crossattn_cache,
+            current_start=start_frame * self.frame_seq_length,
+        )
+        session.current_start_frame += self.num_frame_per_block
+        return denoised_pred, start_frame, session.current_start_frame
+
     def generate_next_block(
         self,
         session: CausalInferenceSession,
@@ -505,50 +713,7 @@ class CausalInferencePipeline(torch.nn.Module):
             decode_end = torch.cuda.Event(enable_timing=True)
             model_start.record(timing_stream)
 
-        noisy_input = noise
-        denoised_pred: torch.Tensor | None = None
-        timestep: torch.Tensor | None = None
-        for index, current_timestep in enumerate(self.denoising_step_list):
-            timestep = (
-                torch.ones(
-                    [session.batch_size, self.num_frame_per_block],
-                    device=session.device,
-                    dtype=torch.int64,
-                )
-                * current_timestep
-            )
-            _, denoised_pred = self.generator(
-                noisy_image_or_video=noisy_input,
-                conditional_dict=current_condition,
-                timestep=timestep,
-                kv_cache=session.kv_cache,
-                kv_cache_mouse=session.mouse_kv_cache,
-                kv_cache_keyboard=session.keyboard_kv_cache,
-                crossattn_cache=session.crossattn_cache,
-                current_start=start_frame * self.frame_seq_length,
-            )
-
-            if index < len(self.denoising_step_list) - 1:
-                next_timestep = self.denoising_step_list[index + 1]
-                flat_prediction = rearrange(denoised_pred, "b c f h w -> (b f) c h w")
-                noisy_input = self.scheduler.add_noise(
-                    flat_prediction,
-                    torch.randn_like(flat_prediction),
-                    next_timestep
-                    * torch.ones(
-                        [session.batch_size * self.num_frame_per_block],
-                        device=session.device,
-                        dtype=torch.long,
-                    ),
-                )
-                noisy_input = rearrange(
-                    noisy_input,
-                    "(b f) c h w -> b c f h w",
-                    b=denoised_pred.shape[0],
-                )
-
-        assert denoised_pred is not None and timestep is not None
-        context_timestep = torch.ones_like(timestep) * self.args.context_noise
+        denoised_pred, context_timestep = self._run_denoise_steps(session, noise, current_condition, start_frame)
         overlap = self.overlap_vae_decode and noise.is_cuda
         decode_start = block_end = None
         caller_stream = torch.cuda.current_stream(session.device) if overlap else None

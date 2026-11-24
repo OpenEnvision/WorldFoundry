@@ -27,7 +27,6 @@ from typing import Any
 
 import torch
 import torch.nn as nn
-from einops import rearrange
 
 from worldfoundry.core.attention import apply_nd_rotary_embedding as apply_rotary_emb
 from worldfoundry.core.attention import get_nd_rotary_pos_embed
@@ -66,6 +65,61 @@ from worldfoundry.core.nn import (
 
 from .modules.embed_layers import ByT5Mapper, PatchEmbed, VisionProjection
 from .modules.token_refiner import SingleTokenRefiner
+
+
+def _run_hy15_mlp(mlp: nn.Module, x: torch.Tensor) -> torch.Tensor:
+    """Execute TransformerMLP with optional fused GELU + rowwise FP8 quantization."""
+    fc1 = getattr(mlp, "fc1", None)
+    act = getattr(mlp, "act", None)
+    fc2 = getattr(mlp, "fc2", None)
+    drop1 = getattr(mlp, "drop1", None)
+    norm = getattr(mlp, "norm", None)
+    if (
+        fc1 is not None
+        and fc2 is not None
+        and isinstance(act, nn.GELU)
+        and (drop1 is None or getattr(drop1, "p", 0.0) == 0.0)
+        and (norm is None or isinstance(norm, nn.Identity))
+        and getattr(fc2, "low_precision_enabled", False)
+        and getattr(fc2, "scaling", None) == "rowwise"
+        and hasattr(fc2, "_forward_quantized")
+    ):
+        from worldfoundry.core.acceleration.quantization.linear import _fp8_linear_eligible
+
+        hidden = fc1(x)
+        if _fp8_linear_eligible(
+            hidden,
+            fc2.out_features,
+            fc2._hardware_eligible,
+            min_gemm_work=0 if fc2.weight is None else None,
+        ):
+            try:
+                from worldfoundry.core.acceleration.quantization.triton_fp8 import quantize_rowwise_fp8_triton
+            except ImportError:
+                return mlp(x)
+            mode = "gelu_tanh" if act.approximate == "tanh" else "gelu"
+            codes, scales = quantize_rowwise_fp8_triton(
+                hidden.reshape(-1, fc2.in_features), fc2.fp8_dtype, activation=mode
+            )
+            return fc2._forward_quantized(codes, scales, hidden.shape, hidden.dtype)
+    return mlp(x)
+
+
+def _fuse_three_linears(q: nn.Linear, k: nn.Linear, v: nn.Linear) -> nn.Linear:
+    """Merge three identical-shape Linear layers into one ``[3*out, in]`` Linear."""
+    has_bias = q.bias is not None and k.bias is not None and v.bias is not None
+    fused = nn.Linear(
+        q.in_features,
+        q.out_features * 3,
+        bias=has_bias,
+        device=q.weight.device,
+        dtype=q.weight.dtype,
+    )
+    with torch.no_grad():
+        fused.weight.copy_(torch.cat((q.weight.data, k.weight.data, v.weight.data), dim=0))
+        if has_bias:
+            fused.bias.copy_(torch.cat((q.bias.data, k.bias.data, v.bias.data), dim=0))
+    return fused
 
 
 class MMDoubleStreamBlock(nn.Module):
@@ -135,6 +189,30 @@ class MMDoubleStreamBlock(nn.Module):
         )
 
         self.hybrid_seq_parallel_attn = None
+        self.attention_backend: str | None = attn_mode or "torch"
+
+    def set_attention_backend(self, backend: str | None) -> None:
+        """Bind the request-scoped attention backend on this dual-stream block."""
+        resolved = "torch" if backend is None else normalize_attention_backend(str(backend))
+        self.attention_backend = resolved
+        self.attn_mode = resolved
+
+    def fuse_qkv(self) -> int:
+        """Merge separate image and text Q/K/V linear projections in place."""
+        fused_count = 0
+        if not hasattr(self, "img_attn_qkv") and all(
+            isinstance(getattr(self, name, None), nn.Linear) for name in ("img_attn_q", "img_attn_k", "img_attn_v")
+        ):
+            self.img_attn_qkv = _fuse_three_linears(self.img_attn_q, self.img_attn_k, self.img_attn_v)
+            del self.img_attn_q, self.img_attn_k, self.img_attn_v
+            fused_count += 1
+        if not hasattr(self, "txt_attn_qkv") and all(
+            isinstance(getattr(self, name, None), nn.Linear) for name in ("txt_attn_q", "txt_attn_k", "txt_attn_v")
+        ):
+            self.txt_attn_qkv = _fuse_three_linears(self.txt_attn_q, self.txt_attn_k, self.txt_attn_v)
+            del self.txt_attn_q, self.txt_attn_k, self.txt_attn_v
+            fused_count += 1
+        return fused_count
 
     def enable_deterministic(self):
         """Prefer a bitwise-stable attention kernel when the backend allows it."""
@@ -180,12 +258,16 @@ class MMDoubleStreamBlock(nn.Module):
         img_modulated = self.img_norm1(img)
         img_modulated = modulate(img_modulated, shift=img_mod1_shift, scale=img_mod1_scale)
 
-        img_q = self.img_attn_q(img_modulated)
-        img_k = self.img_attn_k(img_modulated)
-        img_v = self.img_attn_v(img_modulated)
-        img_q = rearrange(img_q, "B L (H D) -> B L H D", H=self.heads_num)
-        img_k = rearrange(img_k, "B L (H D) -> B L H D", H=self.heads_num)
-        img_v = rearrange(img_v, "B L (H D) -> B L H D", H=self.heads_num)
+        if hasattr(self, "img_attn_qkv"):
+            img_q, img_k, img_v = self.img_attn_qkv(img_modulated).chunk(3, dim=-1)
+        else:
+            img_q = self.img_attn_q(img_modulated)
+            img_k = self.img_attn_k(img_modulated)
+            img_v = self.img_attn_v(img_modulated)
+        head_dim = img_q.shape[-1] // self.heads_num
+        img_q = img_q.view(img_q.shape[0], img_q.shape[1], self.heads_num, head_dim)
+        img_k = img_k.view(img_k.shape[0], img_k.shape[1], self.heads_num, head_dim)
+        img_v = img_v.view(img_v.shape[0], img_v.shape[1], self.heads_num, head_dim)
         img_q = self.img_attn_q_norm(img_q).to(img_v)
         img_k = self.img_attn_k_norm(img_k).to(img_v)
 
@@ -198,39 +280,54 @@ class MMDoubleStreamBlock(nn.Module):
 
         txt_modulated = self.txt_norm1(txt)
         txt_modulated = modulate(txt_modulated, shift=txt_mod1_shift, scale=txt_mod1_scale)
-        txt_q = self.txt_attn_q(txt_modulated)
-        txt_k = self.txt_attn_k(txt_modulated)
-        txt_v = self.txt_attn_v(txt_modulated)
-        txt_q = rearrange(txt_q, "B L (H D) -> B L H D", H=self.heads_num)
-        txt_k = rearrange(txt_k, "B L (H D) -> B L H D", H=self.heads_num)
-        txt_v = rearrange(txt_v, "B L (H D) -> B L H D", H=self.heads_num)
+        if hasattr(self, "txt_attn_qkv"):
+            txt_q, txt_k, txt_v = self.txt_attn_qkv(txt_modulated).chunk(3, dim=-1)
+        else:
+            txt_q = self.txt_attn_q(txt_modulated)
+            txt_k = self.txt_attn_k(txt_modulated)
+            txt_v = self.txt_attn_v(txt_modulated)
+        txt_q = txt_q.view(txt_q.shape[0], txt_q.shape[1], self.heads_num, head_dim)
+        txt_k = txt_k.view(txt_k.shape[0], txt_k.shape[1], self.heads_num, head_dim)
+        txt_v = txt_v.view(txt_v.shape[0], txt_v.shape[1], self.heads_num, head_dim)
         txt_q = self.txt_attn_q_norm(txt_q).to(txt_v)
         txt_k = self.txt_attn_k_norm(txt_k).to(txt_v)
 
-        attn_mode = "flash" if is_flash else self.attn_mode
-        attn = parallel_attention(
-            (img_q, txt_q),
-            (img_k, txt_k),
-            (img_v, txt_v),
-            img_q_len=img_q.shape[1],
-            img_kv_len=img_k.shape[1],
-            text_mask=text_mask,
-            attn_mode=attn_mode,
-            attn_param=attn_param,
-            block_idx=block_idx,
-        )
+        attn_mode = "flash" if is_flash else (self.attention_backend or self.attn_mode)
+        if attn_mode == "cudnn_fp8" and text_mask is None:
+            from .camera_attention import sequence_parallel_attention_bi_fp8
+
+            attn = sequence_parallel_attention_bi_fp8(
+                (img_q, txt_q),
+                (img_k, txt_k),
+                (img_v, txt_v),
+                block_idx=block_idx,
+                stream_tag="h15_double",
+            )
+        else:
+            eff_attn_mode = "torch" if attn_mode == "cudnn_fp8" else attn_mode
+            attn = parallel_attention(
+                (img_q, txt_q),
+                (img_k, txt_k),
+                (img_v, txt_v),
+                img_q_len=img_q.shape[1],
+                img_kv_len=img_k.shape[1],
+                text_mask=text_mask,
+                attn_mode=eff_attn_mode,
+                attn_param=attn_param,
+                block_idx=block_idx,
+            )
 
         img_attn, txt_attn = attn[:, : img_q.shape[1]].contiguous(), attn[:, img_q.shape[1] :].contiguous()
 
         img = img + apply_gate(self.img_attn_proj(img_attn), gate=img_mod1_gate)
         img = img + apply_gate(
-            self.img_mlp(modulate(self.img_norm2(img), shift=img_mod2_shift, scale=img_mod2_scale)),
+            _run_hy15_mlp(self.img_mlp, modulate(self.img_norm2(img), shift=img_mod2_shift, scale=img_mod2_scale)),
             gate=img_mod2_gate,
         )
 
         txt = txt + apply_gate(self.txt_attn_proj(txt_attn), gate=txt_mod1_gate)
         txt = txt + apply_gate(
-            self.txt_mlp(modulate(self.txt_norm2(txt), shift=txt_mod2_shift, scale=txt_mod2_scale)),
+            _run_hy15_mlp(self.txt_mlp, modulate(self.txt_norm2(txt), shift=txt_mod2_shift, scale=txt_mod2_scale)),
             gate=txt_mod2_gate,
         )
 
@@ -284,6 +381,23 @@ class MMSingleStreamBlock(nn.Module):
         self.pre_norm = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6, **factory_kwargs)
         self.modulation = ModulateDiT(hidden_size, factor=3, act_layer=get_activation_layer("silu"), **factory_kwargs)
         self.hybrid_seq_parallel_attn = None
+        self.attention_backend: str | None = attn_mode or "torch"
+
+    def set_attention_backend(self, backend: str | None) -> None:
+        """Bind the request-scoped attention backend on this single-stream block."""
+        resolved = "torch" if backend is None else normalize_attention_backend(str(backend))
+        self.attention_backend = resolved
+        self.attn_mode = resolved
+
+    def fuse_qkv(self) -> int:
+        """Merge separate single-stream Q/K/V linear projections in place."""
+        if not hasattr(self, "linear1_qkv") and all(
+            isinstance(getattr(self, name, None), nn.Linear) for name in ("linear1_q", "linear1_k", "linear1_v")
+        ):
+            self.linear1_qkv = _fuse_three_linears(self.linear1_q, self.linear1_k, self.linear1_v)
+            del self.linear1_q, self.linear1_k, self.linear1_v
+            return 1
+        return 0
 
     def enable_deterministic(self):
         """Force the attention backend onto a deterministic path when available."""
@@ -307,13 +421,17 @@ class MMSingleStreamBlock(nn.Module):
         mod_shift, mod_scale, mod_gate = self.modulation(vec).chunk(3, dim=-1)
         x_mod = modulate(self.pre_norm(x), shift=mod_shift, scale=mod_scale)
 
-        q = self.linear1_q(x_mod)
-        k = self.linear1_k(x_mod)
-        v = self.linear1_v(x_mod)
+        if hasattr(self, "linear1_qkv"):
+            q, k, v = self.linear1_qkv(x_mod).chunk(3, dim=-1)
+        else:
+            q = self.linear1_q(x_mod)
+            k = self.linear1_k(x_mod)
+            v = self.linear1_v(x_mod)
 
-        q = rearrange(q, "B L (H D) -> B L H D", H=self.heads_num)
-        k = rearrange(k, "B L (H D) -> B L H D", H=self.heads_num)
-        v = rearrange(v, "B L (H D) -> B L H D", H=self.heads_num)
+        head_dim = q.shape[-1] // self.heads_num
+        q = q.view(q.shape[0], q.shape[1], self.heads_num, head_dim)
+        k = k.view(k.shape[0], k.shape[1], self.heads_num, head_dim)
+        v = v.view(v.shape[0], v.shape[1], self.heads_num, head_dim)
 
         mlp = self.linear1_mlp(x_mod)
 
@@ -330,17 +448,28 @@ class MMSingleStreamBlock(nn.Module):
         )
         img_q, img_k = img_qq, img_kk
 
-        attn_mode = "flash" if is_flash else self.attn_mode
-        attn = parallel_attention(
-            (img_q, txt_q),
-            (img_k, txt_k),
-            (img_v, txt_v),
-            img_q_len=img_q.shape[1],
-            img_kv_len=img_k.shape[1],
-            text_mask=text_mask,
-            attn_mode=attn_mode,
-            attn_param=attn_param,
-        )
+        attn_mode = "flash" if is_flash else (self.attention_backend or self.attn_mode)
+        if attn_mode == "cudnn_fp8" and text_mask is None:
+            from .camera_attention import sequence_parallel_attention_bi_fp8
+
+            attn = sequence_parallel_attention_bi_fp8(
+                (img_q, txt_q),
+                (img_k, txt_k),
+                (img_v, txt_v),
+                stream_tag="h15_single",
+            )
+        else:
+            eff_attn_mode = "torch" if attn_mode == "cudnn_fp8" else attn_mode
+            attn = parallel_attention(
+                (img_q, txt_q),
+                (img_k, txt_k),
+                (img_v, txt_v),
+                img_q_len=img_q.shape[1],
+                img_kv_len=img_k.shape[1],
+                text_mask=text_mask,
+                attn_mode=eff_attn_mode,
+                attn_param=attn_param,
+            )
         output = self.linear2(attn, self.mlp_act(mlp))
 
         return x + apply_gate(output, gate=mod_gate)
@@ -579,6 +708,63 @@ class HunyuanVideo_1_5_DiffusionTransformer(nn.Module, NativeConfigMixin):
             # 2: vision_encoder feature
         else:
             self.cond_type_embedding = None
+        self.attention_backend: str | None = attn_mode
+        self._rope_cache: dict[tuple[int, int, int, torch.device], tuple[torch.Tensor, torch.Tensor]] = {}
+
+    def fuse_qkv(self) -> int:
+        """Fuse Q/K/V projections across all double and single stream blocks."""
+        total = 0
+        for block in self.double_blocks:
+            total += block.fuse_qkv()
+        for block in self.single_blocks:
+            total += block.fuse_qkv()
+        return total
+
+    def enable_fp8(
+        self,
+        *,
+        exclude_edge_blocks: bool = True,
+        scaling: str = "rowwise",
+        use_fast_accum: bool = True,
+        min_features: int = 1024,
+        keep_dense_fallback: bool = False,
+    ) -> int:
+        """Apply Hopper/Blackwell FP8 W8A8 quantization to eligible transformer linears."""
+        from worldfoundry.core.acceleration.quantization.linear import replace_linear_with_float8
+
+        excludes = [
+            "img_in",
+            "txt_in",
+            "time_in",
+            "vector_in",
+            "guidance_in",
+            "time_r_in",
+            "byt5_in",
+            "vision_in",
+            "final_layer",
+            "img_mod",
+            "txt_mod",
+            "modulation",
+        ]
+        if exclude_edge_blocks:
+            if len(self.double_blocks) > 0:
+                excludes.append("double_blocks.0.")
+            if len(self.single_blocks) > 0:
+                excludes.append(f"single_blocks.{len(self.single_blocks) - 1}.")
+            elif len(self.double_blocks) >= 2:
+                excludes.append(f"double_blocks.{len(self.double_blocks) - 1}.")
+        return replace_linear_with_float8(
+            self,
+            exclude=tuple(excludes),
+            min_features=min_features,
+            scaling=scaling,
+            use_fast_accum=use_fast_accum,
+            keep_dense_fallback=keep_dense_fallback,
+        )
+
+    def set_attention_backend(self, backend: str | None) -> None:
+        """Bind the request-scoped attention provider across all double and single blocks."""
+        self.set_attn_mode("torch" if backend is None else str(backend))
 
     def enable_deterministic(self):
         """Propagate deterministic attention to every dual/single-stream block."""
@@ -699,7 +885,15 @@ class HunyuanVideo_1_5_DiffusionTransformer(nn.Module, NativeConfigMixin):
         )
         self.attn_param["thw"] = [tt, th, tw]
         if freqs_cos is None and freqs_sin is None:
-            freqs_cos, freqs_sin = self.get_rotary_pos_embed((tt, th, tw))
+            rope_key = (tt, th, tw, hidden_states.device)
+            cached_rope = self._rope_cache.get(rope_key)
+            if cached_rope is None:
+                c_cos, c_sin = self.get_rotary_pos_embed((tt, th, tw))
+                cached_rope = (c_cos.to(device=hidden_states.device), c_sin.to(device=hidden_states.device))
+                if len(self._rope_cache) >= 16:
+                    self._rope_cache.clear()
+                self._rope_cache[rope_key] = cached_rope
+            freqs_cos, freqs_sin = cached_rope
 
         img = self.img_in(img)
         parallel_dims = get_parallel_state()
@@ -785,53 +979,141 @@ class HunyuanVideo_1_5_DiffusionTransformer(nn.Module, NativeConfigMixin):
             txt, text_mask = self.reorder_txt_token(extra_encoder_hidden_states, txt, extra_attention_mask, text_mask)
 
         freqs_cis = (freqs_cos, freqs_sin) if freqs_cos is not None else None
+        block_text_mask = text_mask
+        if block_text_mask is not None and self.attn_mode in {
+            "torch",
+            "sol_attn",
+            "cudnn_fp8",
+            "triton_tma",
+            "scaled_int8_fp8",
+        }:
+            # Validate once outside the block stack and pass torch.bool (or None if all-valid)
+            # so parallel_attention skips per-block .max()/.min()/.all() host syncs
+            # and captures cleanly inside piecewise CUDA Graphs.
+            if not torch.cuda.is_current_stream_capturing():
+                if block_text_mask.dtype in {torch.int64, torch.int32}:
+                    assert block_text_mask.max() <= 1 and block_text_mask.min() >= 0, (
+                        "Integer attention mask must be between 0 and 1 for torch attention."
+                    )
+                    block_text_mask = block_text_mask.to(torch.bool)
+                if block_text_mask.dtype == torch.bool:
+                    if bool(block_text_mask.all()):
+                        block_text_mask = None
+                    elif (
+                        block_text_mask.ndim == 2
+                        and block_text_mask.shape[1] == txt.shape[1]
+                        and (block_text_mask.shape[0] == 1 or bool((block_text_mask == block_text_mask[:1]).all()))
+                    ):
+                        valid_idx = block_text_mask[0].nonzero(as_tuple=False).squeeze(-1)
+                        if valid_idx.numel() > 0:
+                            txt = txt.index_select(1, valid_idx).contiguous()
+                            block_text_mask = None
+            elif block_text_mask.dtype in {torch.int64, torch.int32}:
+                block_text_mask = block_text_mask.to(torch.bool)
+        piecewise_graph = getattr(self, "_active_piecewise_graph", None)
+        if piecewise_graph is not None and not output_features and not self.training:
 
-        # Pass through double-stream blocks
-        for index, block in enumerate(self.double_blocks):
-            force_full_attn = (
-                self.attn_mode in ["flex_block_attention"]
-                and self.attn_param["win_type"] == "hybrid"
-                and self.attn_param["win_ratio"] > 0
-                and ((index + 1) % self.attn_param["win_ratio"] == 0 or (index + 1) == len(self.double_blocks))
+            def _run_double_stack(img_in, txt_in, vec_in, cos_in, sin_in, mask_in):
+                f_cis = (cos_in, sin_in) if cos_in is not None else None
+                for idx, blk in enumerate(self.double_blocks):
+                    force_full = (
+                        self.attn_mode in ["flex_block_attention"]
+                        and self.attn_param["win_type"] == "hybrid"
+                        and self.attn_param["win_ratio"] > 0
+                        and ((idx + 1) % self.attn_param["win_ratio"] == 0 or (idx + 1) == len(self.double_blocks))
+                    )
+                    img_in, txt_in = blk(
+                        img=img_in,
+                        txt=txt_in,
+                        vec=vec_in,
+                        freqs_cis=f_cis,
+                        text_mask=mask_in,
+                        attn_param=self.attn_param,
+                        is_flash=force_full,
+                        block_idx=idx,
+                    )
+                return img_in, txt_in
+
+            piecewise_graph.get_or_register_segment("double_blocks", _run_double_stack)
+            img, txt = piecewise_graph.run_segment(
+                "double_blocks", img, txt, vec, freqs_cos, freqs_sin, block_text_mask
             )
-            self.attn_param["layer-name"] = f"double_block_{index + 1}"
-            img, txt = block(
-                img=img,
-                txt=txt,
-                vec=vec,
-                freqs_cis=freqs_cis,
-                text_mask=text_mask,
-                attn_param=self.attn_param,
-                is_flash=force_full_attn,
-                block_idx=index,
-            )
+            txt_seq_len = txt.shape[1]
+            img_seq_len = img.shape[1]
+            x = torch.cat((img, txt), 1)
+            features_list = None
+            if len(self.single_blocks) > 0:
 
-        txt_seq_len = txt.shape[1]
-        img_seq_len = img.shape[1]
+                def _run_single_stack(x_in, vec_in, cos_in, sin_in, mask_in, txt_seq_len_val):
+                    for idx, blk in enumerate(self.single_blocks):
+                        force_full = (
+                            self.attn_mode in ["flex_block_attention"]
+                            and self.attn_param["win_type"] == "hybrid"
+                            and self.attn_param["win_ratio"] > 0
+                            and ((idx + 1) % self.attn_param["win_ratio"] == 0 or (idx + 1) == len(self.single_blocks))
+                        )
+                        x_in = blk(
+                            x=x_in,
+                            vec=vec_in,
+                            txt_len=txt_seq_len_val,
+                            freqs_cis=(cos_in, sin_in),
+                            text_mask=mask_in,
+                            attn_param=self.attn_param,
+                            is_flash=force_full,
+                        )
+                    return x_in
 
-        # Merge image and text for single-stream blocks
-        x = torch.cat((img, txt), 1)
-        features_list = [] if output_features else None
-        if len(self.single_blocks) > 0:
-            for index, block in enumerate(self.single_blocks):
+                piecewise_graph.get_or_register_segment("single_blocks", _run_single_stack)
+                x = piecewise_graph.run_segment(
+                    "single_blocks", x, vec, freqs_cos, freqs_sin, block_text_mask, txt_seq_len
+                )
+        else:
+            # Pass through double-stream blocks
+            for index, block in enumerate(self.double_blocks):
                 force_full_attn = (
                     self.attn_mode in ["flex_block_attention"]
                     and self.attn_param["win_type"] == "hybrid"
                     and self.attn_param["win_ratio"] > 0
-                    and ((index + 1) % self.attn_param["win_ratio"] == 0 or (index + 1) == len(self.single_blocks))
+                    and ((index + 1) % self.attn_param["win_ratio"] == 0 or (index + 1) == len(self.double_blocks))
                 )
-                self.attn_param["layer-name"] = f"single_block_{index + 1}"
-                x = block(
-                    x=x,
+                self.attn_param["layer-name"] = f"double_block_{index + 1}"
+                img, txt = block(
+                    img=img,
+                    txt=txt,
                     vec=vec,
-                    txt_len=txt_seq_len,
-                    freqs_cis=(freqs_cos, freqs_sin),
-                    text_mask=text_mask,
+                    freqs_cis=freqs_cis,
+                    text_mask=block_text_mask,
                     attn_param=self.attn_param,
                     is_flash=force_full_attn,
+                    block_idx=index,
                 )
-                if output_features and index % output_features_stride == 0:
-                    features_list.append(x[:, :img_seq_len, ...])
+
+            txt_seq_len = txt.shape[1]
+            img_seq_len = img.shape[1]
+
+            # Merge image and text for single-stream blocks
+            x = torch.cat((img, txt), 1)
+            features_list = [] if output_features else None
+            if len(self.single_blocks) > 0:
+                for index, block in enumerate(self.single_blocks):
+                    force_full_attn = (
+                        self.attn_mode in ["flex_block_attention"]
+                        and self.attn_param["win_type"] == "hybrid"
+                        and self.attn_param["win_ratio"] > 0
+                        and ((index + 1) % self.attn_param["win_ratio"] == 0 or (index + 1) == len(self.single_blocks))
+                    )
+                    self.attn_param["layer-name"] = f"single_block_{index + 1}"
+                    x = block(
+                        x=x,
+                        vec=vec,
+                        txt_len=txt_seq_len,
+                        freqs_cis=(freqs_cos, freqs_sin),
+                        text_mask=block_text_mask,
+                        attn_param=self.attn_param,
+                        is_flash=force_full_attn,
+                    )
+                    if output_features and index % output_features_stride == 0:
+                        features_list.append(x[:, :img_seq_len, ...])
         img = x[:, :img_seq_len, ...]
 
         # Final Layer
@@ -871,16 +1153,20 @@ class HunyuanVideo_1_5_DiffusionTransformer(nn.Module, NativeConfigMixin):
 
     def set_attn_mode(self, attn_mode: str):
         normalized_attn_mode = normalize_attention_backend(attn_mode)
+        device = next(self.parameters()).device
         attn_mode = resolve_attention_backend(
             normalized_attn_mode,
-            next(self.parameters()).device,
+            device,
             # Hunyuan's multimodal attention facade owns the SSTA/FlexBlock
             # mask and block-geometry planner. Other model-specific names must
             # retain generic fail-fast behavior.
             allow_model_specific=normalized_attn_mode == "flex_block_attention",
         )
         self.attn_mode = attn_mode
+        self.attention_backend = attn_mode
         for block in self.double_blocks:
             block.attn_mode = attn_mode
+            block.attention_backend = attn_mode
         for block in self.single_blocks:
             block.attn_mode = attn_mode
+            block.attention_backend = attn_mode

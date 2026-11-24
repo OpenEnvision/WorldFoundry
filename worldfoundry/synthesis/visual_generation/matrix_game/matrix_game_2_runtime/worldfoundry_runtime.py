@@ -106,6 +106,9 @@ _MATRIX_GAME2_OPTIMIZATION_KEYS = {
     "vae_channels_last",
     "vae_channels_last_3d",
     "overlap_vae_decode",
+    "block_cuda_graph",
+    "vae_cuda_graph",
+    "vae_compile",
 }
 _MATRIX_GAME2_UNSUPPORTED_OPTIONS = {
     "adacache",
@@ -177,10 +180,21 @@ def _matrix_game2_runtime_policy(kwargs, *, device, dtype):
         if not disabled:
             raise ValueError(f"Matrix-Game-2 does not support requested optimization {key!r}")
 
-    for key in ("fuse_qkv", "compile", "vae_channels_last", "vae_channels_last_3d", "overlap_vae_decode"):
+    for key in (
+        "fuse_qkv",
+        "compile",
+        "vae_channels_last",
+        "vae_channels_last_3d",
+        "overlap_vae_decode",
+        "block_cuda_graph",
+        "vae_cuda_graph",
+        "vae_compile",
+    ):
         value = options.get(key, False)
         if not isinstance(value, bool):
             raise TypeError(f"Matrix-Game-2 {key} must be a bool")
+    if options.get("vae_compile", False) and options.get("vae_cuda_graph", False):
+        raise ValueError("Matrix-Game-2 vae_compile and vae_cuda_graph are mutually exclusive")
     strategy = str(options.get("qkv_strategy", "packed")).strip().lower()
     if strategy not in {"auto", "packed", "split"}:
         raise ValueError("Matrix-Game-2 qkv_strategy must be 'auto', 'packed', or 'split'")
@@ -368,8 +382,14 @@ class MatrixGame2Runtime:
                 conv3d=runtime_policy.options.get("vae_channels_last_3d", False),
             )
             current_vae_decoder._worldfoundry_convolution_layout = vae_layout
-        if _enable_torch_compile():
-            current_vae_decoder.compile(mode="max-autotune-no-cudagraphs")
+        if _enable_torch_compile() or runtime_policy.options.get("vae_compile", False):
+            current_vae_decoder.compile(mode="default")
+        elif (
+            runtime_policy.options.get("vae_cuda_graph", False)
+            and runtime_policy.device.type == "cuda"
+            and hasattr(current_vae_decoder, "enable_cuda_graph")
+        ):
+            current_vae_decoder.enable_cuda_graph(warmup=1)
         pipeline = CausalInferencePipeline(config, generator=generator, vae_decoder=current_vae_decoder)
 
         resolved_checkpoint_path = cls._resolve_checkpoint_path(
@@ -386,6 +406,29 @@ class MatrixGame2Runtime:
         pipeline = pipeline.to(device=device)
         pipeline.generator.to(dtype=weight_dtype)
         applied = _apply_matrix_game2_optimizations(pipeline.generator.model, runtime_policy)
+        block_cuda_graph = runtime_policy.options.get("block_cuda_graph", False)
+        applied.requested["block_cuda_graph"] = block_cuda_graph
+        if block_cuda_graph:
+            if runtime_policy.device.type == "cuda" and hasattr(pipeline.generator, "enable_block_cuda_graph"):
+                pipeline.generator.enable_block_cuda_graph(warmup=1)
+                pipeline.reuse_session_caches = True
+                applied.effective["block_cuda_graph"] = "virtual-window-block-graph-enabled"
+            else:
+                applied.effective["block_cuda_graph"] = "eager (non-CUDA fallback)"
+                applied.fallbacks.append("block_cuda_graph: CUDA tensors are required; effective=eager")
+        applied.requested["vae_cuda_graph"] = runtime_policy.options.get("vae_cuda_graph", False)
+        if applied.requested["vae_cuda_graph"]:
+            if getattr(current_vae_decoder, "_cuda_graph_enabled", False):
+                applied.effective["vae_cuda_graph"] = "steady-vae-graph-enabled"
+            elif runtime_policy.device.type != "cuda":
+                applied.effective["vae_cuda_graph"] = "eager (non-CUDA fallback)"
+                applied.fallbacks.append("vae_cuda_graph: CUDA tensors are required; effective=eager")
+            else:
+                applied.effective["vae_cuda_graph"] = "disabled (superseded by torch.compile)"
+                applied.fallbacks.append("vae_cuda_graph: superseded by WORLDFOUNDRY_ENABLE_TORCH_COMPILE")
+        applied.requested["vae_compile"] = runtime_policy.options.get("vae_compile", False)
+        if applied.requested["vae_compile"]:
+            applied.effective["vae_compile"] = "compiled (default)"
         pipeline.generator._worldfoundry_applied_optimizations = applied
         pipeline._worldfoundry_applied_optimizations = applied
         pipeline.overlap_vae_decode = runtime_policy.options.get("overlap_vae_decode", False)

@@ -131,6 +131,11 @@ class MMDoubleStreamBlock(nn.Module):
             **factory_kwargs,
         )
         self.hybrid_seq_parallel_attn = None
+        self.attention_backend: str | None = "torch"
+
+    def set_attention_backend(self, backend: str | None) -> None:
+        """Bind the request-scoped attention backend for dual-stream attention."""
+        self.attention_backend = "torch" if backend is None else str(backend)
 
     def enable_deterministic(self):
         self.deterministic = True
@@ -235,6 +240,7 @@ class MMDoubleStreamBlock(nn.Module):
                 q,
                 k,
                 v,
+                mode=self.attention_backend or "torch",
                 cu_seqlens_q=cu_seqlens_q,
                 cu_seqlens_kv=cu_seqlens_kv,
                 max_seqlen_q=max_seqlen_q,
@@ -351,6 +357,11 @@ class MMSingleStreamBlock(nn.Module):
             **factory_kwargs,
         )
         self.hybrid_seq_parallel_attn = None
+        self.attention_backend: str | None = "torch"
+
+    def set_attention_backend(self, backend: str | None) -> None:
+        """Bind the request-scoped attention backend for dual-stream attention."""
+        self.attention_backend = "torch" if backend is None else str(backend)
 
     def enable_deterministic(self):
         self.deterministic = True
@@ -421,6 +432,7 @@ class MMSingleStreamBlock(nn.Module):
                 q,
                 k,
                 v,
+                mode=self.attention_backend or "torch",
                 cu_seqlens_q=cu_seqlens_q,
                 cu_seqlens_kv=cu_seqlens_kv,
                 max_seqlen_q=max_seqlen_q,
@@ -633,6 +645,16 @@ class HYVideoDiffusionTransformer(nn.Module):
             get_activation_layer("silu"),
             **factory_kwargs,
         )
+        self.attention_backend: str | None = "torch"
+
+    def set_attention_backend(self, backend: str | None) -> None:
+        """Bind the request-scoped attention provider on all double and single blocks."""
+        resolved = "torch" if backend is None else str(backend)
+        self.attention_backend = resolved
+        for block in self.double_blocks:
+            block.set_attention_backend(resolved)
+        for block in self.single_blocks:
+            block.set_attention_backend(resolved)
 
     def enable_deterministic(self):
         for block in self.double_blocks:
@@ -713,48 +735,129 @@ class HYVideoDiffusionTransformer(nn.Module):
         max_seqlen_kv = max_seqlen_q
 
         freqs_cis = (freqs_cos, freqs_sin) if freqs_cos is not None else None
+        piecewise_graph = None
+        if isinstance(return_dict, bool):
+            piecewise_graph = getattr(self, "_active_piecewise_graph", None)
         # --------------------- Pass through DiT blocks ------------------------
-        for layer_num, block in enumerate(self.double_blocks):
-            double_block_args = [
+        if piecewise_graph is not None and not self.training:
+            use_cpu_cu = self.attention_backend in (None, "torch")
+            cu_q_tuple = tuple(int(v) for v in cu_seqlens_q.tolist()) if use_cpu_cu else None
+            cu_kv_tuple = tuple(int(v) for v in cu_seqlens_kv.tolist()) if use_cpu_cu else None
+
+            def _run_double_stack(
+                img_in,
+                txt_in,
+                vec_in,
+                cu_q_dev,
+                cu_kv_dev,
+                cu_q_host,
+                cu_kv_host,
+                cos_in,
+                sin_in,
+                tr_vec,
+                max_q_val,
+                max_kv_val,
+                first_frame_tokens_val,
+            ):
+                cu_q_eff = torch.tensor(cu_q_host, dtype=torch.int32) if cu_q_host is not None else cu_q_dev
+                cu_kv_eff = torch.tensor(cu_kv_host, dtype=torch.int32) if cu_kv_host is not None else cu_kv_dev
+                f_cis = (cos_in, sin_in) if cos_in is not None else None
+                for block in self.double_blocks:
+                    img_in, txt_in = block(
+                        img_in,
+                        txt_in,
+                        vec_in,
+                        cu_q_eff,
+                        cu_kv_eff,
+                        max_q_val,
+                        max_kv_val,
+                        f_cis,
+                        self.i2v_condition_type,
+                        tr_vec,
+                        first_frame_tokens_val,
+                    )
+                return img_in, txt_in
+
+            def _run_single_stack(
+                x_in,
+                vec_in,
+                cu_q_dev,
+                cu_kv_dev,
+                cu_q_host,
+                cu_kv_host,
+                cos_in,
+                sin_in,
+                tr_vec,
+                txt_len_val,
+                max_q_val,
+                max_kv_val,
+                first_frame_tokens_val,
+            ):
+                cu_q_eff = torch.tensor(cu_q_host, dtype=torch.int32) if cu_q_host is not None else cu_q_dev
+                cu_kv_eff = torch.tensor(cu_kv_host, dtype=torch.int32) if cu_kv_host is not None else cu_kv_dev
+                for block in self.single_blocks:
+                    x_in = block(
+                        x_in,
+                        vec_in,
+                        txt_len_val,
+                        cu_q_eff,
+                        cu_kv_eff,
+                        max_q_val,
+                        max_kv_val,
+                        (cos_in, sin_in),
+                        self.i2v_condition_type,
+                        tr_vec,
+                        first_frame_tokens_val,
+                    )
+                return x_in
+
+            piecewise_graph.get_or_register_segment("double_blocks", _run_double_stack)
+            img, txt = piecewise_graph.run_segment(
+                "double_blocks",
                 img,
                 txt,
                 vec,
                 cu_seqlens_q,
                 cu_seqlens_kv,
+                cu_q_tuple,
+                cu_kv_tuple,
+                freqs_cos,
+                freqs_sin,
+                token_replace_vec,
                 max_seqlen_q,
                 max_seqlen_kv,
-                freqs_cis,
-                self.i2v_condition_type,
-                token_replace_vec,
                 frist_frame_token_num,
-            ]
-
-            use_checkpoint = (
-                self.training
-                and self.gradient_checkpoint
-                and (self.gradient_checkpoint_layers == -1 or layer_num < self.gradient_checkpoint_layers)
             )
-            img, txt = gradient_checkpoint_forward(
-                block,
-                use_checkpoint,
-                False,
-                *double_block_args,
-            )
-
-        # Merge txt and img to pass through single stream blocks.
-        x = torch.cat((img, txt), 1)
-
-        if len(self.single_blocks) > 0:
-            for _, block in enumerate(self.single_blocks):
-                single_block_args = [
+            x = torch.cat((img, txt), 1)
+            if len(self.single_blocks) > 0:
+                piecewise_graph.get_or_register_segment("single_blocks", _run_single_stack)
+                x = piecewise_graph.run_segment(
+                    "single_blocks",
                     x,
                     vec,
+                    cu_seqlens_q,
+                    cu_seqlens_kv,
+                    cu_q_tuple,
+                    cu_kv_tuple,
+                    freqs_cos,
+                    freqs_sin,
+                    token_replace_vec,
                     txt_seq_len,
+                    max_seqlen_q,
+                    max_seqlen_kv,
+                    frist_frame_token_num,
+                )
+        else:
+            for layer_num, block in enumerate(self.double_blocks):
+                double_block_args = [
+                    img,
+                    txt,
+                    vec,
                     cu_seqlens_q,
                     cu_seqlens_kv,
                     max_seqlen_q,
                     max_seqlen_kv,
-                    (freqs_cos, freqs_sin),
+                    freqs_cis,
                     self.i2v_condition_type,
                     token_replace_vec,
                     frist_frame_token_num,
@@ -763,17 +866,48 @@ class HYVideoDiffusionTransformer(nn.Module):
                 use_checkpoint = (
                     self.training
                     and self.gradient_checkpoint
-                    and (
-                        self.gradient_checkpoint_layers == -1
-                        or layer_num + len(self.double_blocks) < self.gradient_checkpoint_layers
-                    )
+                    and (self.gradient_checkpoint_layers == -1 or layer_num < self.gradient_checkpoint_layers)
                 )
-                x = gradient_checkpoint_forward(
+                img, txt = gradient_checkpoint_forward(
                     block,
                     use_checkpoint,
                     False,
-                    *single_block_args,
+                    *double_block_args,
                 )
+
+            # Merge txt and img to pass through single stream blocks.
+            x = torch.cat((img, txt), 1)
+
+            if len(self.single_blocks) > 0:
+                for _, block in enumerate(self.single_blocks):
+                    single_block_args = [
+                        x,
+                        vec,
+                        txt_seq_len,
+                        cu_seqlens_q,
+                        cu_seqlens_kv,
+                        max_seqlen_q,
+                        max_seqlen_kv,
+                        (freqs_cos, freqs_sin),
+                        self.i2v_condition_type,
+                        token_replace_vec,
+                        frist_frame_token_num,
+                    ]
+
+                    use_checkpoint = (
+                        self.training
+                        and self.gradient_checkpoint
+                        and (
+                            self.gradient_checkpoint_layers == -1
+                            or layer_num + len(self.double_blocks) < self.gradient_checkpoint_layers
+                        )
+                    )
+                    x = gradient_checkpoint_forward(
+                        block,
+                        use_checkpoint,
+                        False,
+                        *single_block_args,
+                    )
 
         img = x[:, :img_seq_len, ...]
 

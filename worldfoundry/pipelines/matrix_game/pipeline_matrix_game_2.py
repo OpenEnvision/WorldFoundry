@@ -362,6 +362,17 @@ class MatrixGame2Pipeline(PipelineABC):
             realtime_axes=realtime_axes,
         )
 
+    def stream_realtime_overlapped(
+        self,
+        images: Any,
+        actions_sequence: Sequence[Sequence[str]],
+        *,
+        seed: int = 42,
+    ):
+        """Configure and stream chunks while overlapping chunk ``k`` DiT with chunk ``k-1`` VAE decode."""
+        self.configure_realtime(images=images, seed=seed)
+        yield from self._ensure_realtime_session().stream_overlapped(actions_sequence)
+
     def realtime_next_output_frames(self) -> int:
         return int(self._ensure_realtime_session().next_output_frames())
 

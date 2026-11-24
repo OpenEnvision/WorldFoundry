@@ -1,4 +1,5 @@
 import itertools
+from typing import Any
 
 import torch
 import torch.nn as nn
@@ -152,35 +153,93 @@ class VAEDecoderWrapper(nn.Module):
         self.std = torch.tensor(std, dtype=torch.float32)
         self.z_dim = 16
         self.conv2 = CausalConv3d(self.z_dim, self.z_dim, 1)
+        self._scale_cache: dict[tuple[torch.device, torch.dtype], tuple[torch.Tensor, torch.Tensor]] = {}
+        self._cuda_graph_enabled: bool = False
+        self._steady_graph_runner: Any = None
+        self._steady_graph_key: tuple[Any, ...] | None = None
 
-    def forward(self, z: torch.Tensor, *feat_cache: list[torch.Tensor]):
+    def enable_cuda_graph(self, *, warmup: int = 1) -> None:
+        """Capture and replay steady-state causal VAE decode chunks via CUDA Graph."""
+        self._cuda_graph_enabled = True
+        self._cuda_graph_warmup = int(warmup)
+
+    def disable_cuda_graph(self) -> None:
+        """Disable VAE CUDA Graph capture and release cached graphs."""
+        self._cuda_graph_enabled = False
+        self.invalidate_cuda_graphs()
+
+    def invalidate_cuda_graphs(self) -> None:
+        if self._steady_graph_runner is not None:
+            self._steady_graph_runner.invalidate()
+        self._steady_graph_runner = None
+        self._steady_graph_key = None
+
+    def graph_report(self) -> dict[str, Any] | None:
+        if not self._cuda_graph_enabled and self._steady_graph_runner is None:
+            return None
+        if self._steady_graph_runner is None:
+            return {"enabled": self._cuda_graph_enabled, "capture": 0, "replay": 0, "eager": 0}
+        return self._steady_graph_runner.report()
+
+    def _get_scale_tensors(self, device: torch.device, dtype: torch.dtype) -> tuple[torch.Tensor, torch.Tensor]:
+        key = (device, dtype)
+        cached = self._scale_cache.get(key)
+        if cached is None:
+            mean_t = self.mean.to(device=device, dtype=dtype).view(1, self.z_dim, 1, 1, 1)
+            std_t = self.std.to(device=device, dtype=dtype).view(1, self.z_dim, 1, 1, 1)
+            cached = (mean_t, std_t)
+            self._scale_cache[key] = cached
+        return cached
+
+    def _decode_eager(self, z: torch.Tensor, feat_cache: list[torch.Tensor | None]):
         # from [batch_size, num_frames, num_channels, height, width]
         # to [batch_size, num_channels, num_frames, height, width]
         z = z.permute(0, 2, 1, 3, 4)
-        feat_cache = list(feat_cache)
-        # print("Length of feat_cache: ", len(feat_cache))
-
-        device, dtype = z.device, z.dtype
-        scale = [self.mean.to(device=device, dtype=dtype), 1.0 / self.std.to(device=device, dtype=dtype)]
-
-        if isinstance(scale[0], torch.Tensor):
-            z = z / scale[1].view(1, self.z_dim, 1, 1, 1) + scale[0].view(1, self.z_dim, 1, 1, 1)
-        else:
-            z = z / scale[1] + scale[0]
+        mean_t, std_t = self._get_scale_tensors(z.device, z.dtype)
+        z = z * std_t + mean_t
         iter_ = z.shape[2]
         x = self.conv2(z)
+        outs: list[torch.Tensor] = []
         for i in range(iter_):
-            if i == 0:
-                out, feat_cache = self.decoder(x[:, :, i : i + 1, :, :], feat_cache=feat_cache)
-            else:
-                out_, feat_cache = self.decoder(x[:, :, i : i + 1, :, :], feat_cache=feat_cache)
-                out = torch.cat([out, out_], 2)
-
+            out_i, feat_cache = self.decoder(x[:, :, i : i + 1, :, :], feat_cache=feat_cache)
+            outs.append(out_i)
+        out = outs[0] if len(outs) == 1 else torch.cat(outs, dim=2)
         out = out.float().clamp_(-1, 1)
-        # from [batch_size, num_channels, num_frames, height, width]
-        # to [batch_size, num_frames, num_channels, height, width]
         out = out.permute(0, 2, 1, 3, 4)
         return out, feat_cache
+
+    def forward(self, z: torch.Tensor, *feat_cache: list[torch.Tensor]):
+        cache_list = list(feat_cache)
+        if (
+            self._cuda_graph_enabled
+            and z.is_cuda
+            and not self.training
+            and len(cache_list) > 0
+            and all(isinstance(item, torch.Tensor) for item in cache_list)
+        ):
+            z_contig = z.contiguous()
+            cache_contig = [t.contiguous() for t in cache_list]
+            sig = (tuple(z_contig.shape), z_contig.dtype, z_contig.device, tuple(tuple(t.shape) for t in cache_contig))
+            if self._steady_graph_runner is None or self._steady_graph_key != sig:
+                if self._steady_graph_runner is not None:
+                    self._steady_graph_runner.invalidate()
+                from worldfoundry.core.execution.graphs.inference_graph import InferenceCUDAGraphRunner
+
+                def _steady_decode(z_in: torch.Tensor, *cache_in: torch.Tensor):
+                    out_t, next_cache = self._decode_eager(z_in, list(cache_in))
+                    return (out_t, *next_cache)
+
+                self._steady_graph_runner = InferenceCUDAGraphRunner(
+                    _steady_decode,
+                    warmup=getattr(self, "_cuda_graph_warmup", 1),
+                    max_graphs=4,
+                    clone_outputs=True,
+                    extra_key=f"mg2_vae_steady:{sig[:3]}",
+                )
+                self._steady_graph_key = sig
+            packed = self._steady_graph_runner(z_contig, *cache_contig)
+            return packed[0], list(packed[1:])
+        return self._decode_eager(z, cache_list)
 
 
 class VAEDecoder3d(nn.Module):

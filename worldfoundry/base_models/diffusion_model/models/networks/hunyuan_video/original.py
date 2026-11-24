@@ -219,6 +219,11 @@ class MMDoubleStreamBlock(torch.nn.Module):
         super().__init__()
         self.component_a = MMDoubleStreamBlockComponent(hidden_size, heads_num, mlp_width_ratio)
         self.component_b = MMDoubleStreamBlockComponent(hidden_size, heads_num, mlp_width_ratio)
+        self.attention_backend: str | None = "torch"
+
+    def set_attention_backend(self, backend: str | None) -> None:
+        """Bind the request-scoped attention backend for joint MM-DiT attention."""
+        self.attention_backend = "torch" if backend is None else str(backend)
 
     def forward(
         self,
@@ -243,15 +248,27 @@ class MMDoubleStreamBlock(torch.nn.Module):
         q = torch.cat((q_a, q_b), dim=1)
         k = torch.cat((k_a, k_b), dim=1)
         v = torch.cat((v_a, v_b), dim=1)
-        attn_output = attention(
-            q,
-            k,
-            v,
-            cu_seqlens_q=cu_seqlens_q,
-            cu_seqlens_k=cu_seqlens_kv,
-            max_seqlen_q=max_seqlen_q,
-            max_seqlen_k=max_seqlen_kv,
-        )
+        if self.attention_backend in (None, "torch"):
+            attn_output = attention(
+                q,
+                k,
+                v,
+                cu_seqlens_q=cu_seqlens_q,
+                cu_seqlens_k=cu_seqlens_kv,
+                max_seqlen_q=max_seqlen_q,
+                max_seqlen_k=max_seqlen_kv,
+            )
+        else:
+            attn_output = flattened_attention(
+                q,
+                k,
+                v,
+                cu_seqlens_q=cu_seqlens_q,
+                cu_seqlens_k=cu_seqlens_kv,
+                max_seqlen_q=max_seqlen_q,
+                max_seqlen_k=max_seqlen_kv,
+                backend=self.attention_backend,
+            )
         attn_output_a = attn_output[:, :image_length]
         attn_output_b = attn_output[:, image_length:]
 
@@ -323,6 +340,11 @@ class MMSingleStreamBlock(torch.nn.Module):
             torch.nn.GELU(approximate="tanh"),
             torch.nn.Linear(hidden_size * mlp_width_ratio, hidden_size, bias=False),
         )
+        self.attention_backend: str | None = "torch"
+
+    def set_attention_backend(self, backend: str | None) -> None:
+        """Bind the request-scoped attention backend for single-stream MM-DiT attention."""
+        self.attention_backend = "torch" if backend is None else str(backend)
 
     def forward(
         self,
@@ -367,15 +389,27 @@ class MMSingleStreamBlock(torch.nn.Module):
             q_a, k_a = apply_rotary_emb(q_a, k_a, freqs_cis, head_first=False)
             q = torch.cat((q_a, q_b), dim=1)
             k = torch.cat((k_a, k_b), dim=1)
-        attn_output = attention(
-            q,
-            k,
-            v,
-            cu_seqlens_q=cu_seqlens_q,
-            cu_seqlens_k=cu_seqlens_kv,
-            max_seqlen_q=max_seqlen_q,
-            max_seqlen_k=max_seqlen_kv,
-        )
+        if self.attention_backend in (None, "torch"):
+            attn_output = attention(
+                q,
+                k,
+                v,
+                cu_seqlens_q=cu_seqlens_q,
+                cu_seqlens_k=cu_seqlens_kv,
+                max_seqlen_q=max_seqlen_q,
+                max_seqlen_k=max_seqlen_kv,
+            )
+        else:
+            attn_output = flattened_attention(
+                q,
+                k,
+                v,
+                cu_seqlens_q=cu_seqlens_q,
+                cu_seqlens_k=cu_seqlens_kv,
+                max_seqlen_q=max_seqlen_q,
+                max_seqlen_k=max_seqlen_kv,
+                backend=self.attention_backend,
+            )
 
         hidden_states = hidden_states + apply_gate(self.to_out(attn_output), mod_gate, tr_mod_gate, tr_token)
         hidden_states = hidden_states + apply_gate(self.ff(norm_hidden_states), mod_gate, tr_mod_gate, tr_token)
@@ -431,6 +465,16 @@ class HunyuanVideoDiT(torch.nn.Module):
         self.hidden_size = 3072
         self.heads_num = 24
         self.rope_dim_list = [16, 56, 56]
+        self.attention_backend: str | None = "torch"
+
+    def set_attention_backend(self, backend: str | None) -> None:
+        """Bind the request-scoped attention provider on all double and single blocks."""
+        resolved = "torch" if backend is None else str(backend)
+        self.attention_backend = resolved
+        for block in self.double_blocks:
+            block.set_attention_backend(resolved)
+        for block in self.single_blocks:
+            block.set_attention_backend(resolved)
 
     def unpatchify(self, x, T, H, W):
         """Fold ``B (T'H'W') (C·1·2·2)`` tokens back to ``B C T H W`` (patch ``(1,2,2)``)."""
@@ -473,30 +517,78 @@ class HunyuanVideoDiT(torch.nn.Module):
         cu_seqlens = get_cu_seqlens(text_mask, img_seq_len)
         max_seqlen = img_seq_len + txt_seq_len
 
-        for block in self.double_blocks:
-            img, txt = block(
-                img,
-                txt,
-                vec,
-                (freqs_cos, freqs_sin),
-                cu_seqlens_q=cu_seqlens,
-                cu_seqlens_kv=cu_seqlens,
-                max_seqlen_q=max_seqlen,
-                max_seqlen_kv=max_seqlen,
-            )
+        piecewise_graph = kwargs.get("piecewise_graph")
+        if piecewise_graph is not None and not self.training:
+            # Resolve cumulative sequence offsets once on host outside graph capture so
+            # PyTorch varlen SDPA never triggers a GPU->CPU .tolist() sync inside capture.
+            use_cpu_cu = self.attention_backend in (None, "torch")
+            cu_tuple = tuple(int(v) for v in cu_seqlens.tolist()) if use_cpu_cu else None
 
-        x = torch.concat([img, txt], dim=1)
-        for block in self.single_blocks:
-            x = block(
-                x,
-                vec,
-                (freqs_cos, freqs_sin),
-                txt_len=txt_seq_len,
-                cu_seqlens_q=cu_seqlens,
-                cu_seqlens_kv=cu_seqlens,
-                max_seqlen_q=max_seqlen,
-                max_seqlen_kv=max_seqlen,
+            def _run_double_stack(img_in, txt_in, vec_in, cos_in, sin_in, cu_dev, cu_host_tuple, max_seqlen_val):
+                cu_eff = torch.tensor(cu_host_tuple, dtype=torch.int32) if cu_host_tuple is not None else cu_dev
+                for block in self.double_blocks:
+                    img_in, txt_in = block(
+                        img_in,
+                        txt_in,
+                        vec_in,
+                        (cos_in, sin_in),
+                        cu_seqlens_q=cu_eff,
+                        cu_seqlens_kv=cu_eff,
+                        max_seqlen_q=max_seqlen_val,
+                        max_seqlen_kv=max_seqlen_val,
+                    )
+                return img_in, txt_in
+
+            def _run_single_stack(x_in, vec_in, cos_in, sin_in, cu_dev, cu_host_tuple, txt_seq_len_val, max_seqlen_val):
+                cu_eff = torch.tensor(cu_host_tuple, dtype=torch.int32) if cu_host_tuple is not None else cu_dev
+                for block in self.single_blocks:
+                    x_in = block(
+                        x_in,
+                        vec_in,
+                        (cos_in, sin_in),
+                        txt_len=txt_seq_len_val,
+                        cu_seqlens_q=cu_eff,
+                        cu_seqlens_kv=cu_eff,
+                        max_seqlen_q=max_seqlen_val,
+                        max_seqlen_kv=max_seqlen_val,
+                    )
+                return x_in
+
+            piecewise_graph.get_or_register_segment("double_blocks", _run_double_stack)
+            img, txt = piecewise_graph.run_segment(
+                "double_blocks", img, txt, vec, freqs_cos, freqs_sin, cu_seqlens, cu_tuple, max_seqlen
             )
+            x = torch.concat([img, txt], dim=1)
+            if len(self.single_blocks) > 0:
+                piecewise_graph.get_or_register_segment("single_blocks", _run_single_stack)
+                x = piecewise_graph.run_segment(
+                    "single_blocks", x, vec, freqs_cos, freqs_sin, cu_seqlens, cu_tuple, txt_seq_len, max_seqlen
+                )
+        else:
+            for block in self.double_blocks:
+                img, txt = block(
+                    img,
+                    txt,
+                    vec,
+                    (freqs_cos, freqs_sin),
+                    cu_seqlens_q=cu_seqlens,
+                    cu_seqlens_kv=cu_seqlens,
+                    max_seqlen_q=max_seqlen,
+                    max_seqlen_kv=max_seqlen,
+                )
+
+            x = torch.concat([img, txt], dim=1)
+            for block in self.single_blocks:
+                x = block(
+                    x,
+                    vec,
+                    (freqs_cos, freqs_sin),
+                    txt_len=txt_seq_len,
+                    cu_seqlens_q=cu_seqlens,
+                    cu_seqlens_kv=cu_seqlens,
+                    max_seqlen_q=max_seqlen,
+                    max_seqlen_kv=max_seqlen,
+                )
 
         img = x[:, :img_seq_len]
         img = self.final_layer(img, vec)

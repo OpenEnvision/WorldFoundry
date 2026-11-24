@@ -27,6 +27,7 @@ from einops import rearrange, repeat
 from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.minwm.prope import prope_qkv
 from worldfoundry.core.attention import apply_nd_rotary_embedding as apply_rotary_emb
 from worldfoundry.core.attention import get_nd_rotary_pos_embed
+from worldfoundry.core.attention.backends.probe import normalize_attention_backend
 from worldfoundry.core.attention.sequence.multimodal_sequence import parallel_attention
 from worldfoundry.core.distributed.model_parallel.sequence_mesh_state import get_parallel_state
 from worldfoundry.core.distributed.sequence_parallel.communication_op import sequence_model_parallel_all_gather
@@ -38,10 +39,158 @@ from worldfoundry.core.nn import TransformerMLP as MLP
 from worldfoundry.core.nn import activation_layer as get_activation_layer
 from worldfoundry.core.nn import normalization_layer as get_norm_layer
 
-from .camera_attention import sequence_parallel_attention_txt, sequence_parallel_attention_vision
+from .camera_attention import (
+    prepare_static_fp8_kv_arena,
+    prepare_static_kv_arena,
+    sequence_parallel_attention_bi_fp8,
+    sequence_parallel_attention_txt,
+    sequence_parallel_attention_vision,
+)
 from .camera_modulation import FinalLayer, apply_gate, modulate
+from .hunyuanvideo_1_5_transformer import _fuse_three_linears, _run_hy15_mlp
 from .modules.embed_layers import ByT5Mapper, PatchEmbed, VisionProjection
 from .modules.token_refiner import SingleTokenRefiner
+
+
+def _precompute_prope_mats(
+    viewmats: torch.Tensor,
+    Ks: torch.Tensor | None,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Compute ``(P, P_inv^T, P^T)`` once per forward pass over unique cameras ``[B, C, 4, 4]``."""
+    # Invert SE(3) in float32 for precision then cast back to viewmats.dtype.
+    vm = viewmats.float()
+    r_inv = vm[..., :3, :3].transpose(-1, -2)
+    vm_inv = torch.zeros_like(vm)
+    vm_inv[..., :3, :3] = r_inv
+    vm_inv[..., :3, 3] = -torch.matmul(r_inv, vm[..., :3, 3].unsqueeze(-1)).squeeze(-1)
+    vm_inv[..., 3, 3] = 1.0
+
+    if Ks is not None:
+        ks_f = Ks.float()
+        fx = ks_f[..., 0, 0]
+        fy = ks_f[..., 1, 1]
+        ones = torch.ones_like(fx)
+        zeros = torch.zeros_like(fx)
+        lift_k = torch.zeros_like(vm)
+        lift_k[..., 0, 0] = fx
+        lift_k[..., 1, 1] = fy
+        lift_k[..., 2, 2] = ones
+        lift_k[..., 3, 3] = ones
+        p = torch.matmul(lift_k, vm)
+
+        lift_inv_k = torch.zeros_like(vm)
+        lift_inv_k[..., 0, 0] = ones / fx
+        lift_inv_k[..., 1, 1] = ones / fy
+        lift_inv_k[..., 2, 2] = ones
+        lift_inv_k[..., 3, 3] = ones
+        del zeros
+        p_inv = torch.matmul(vm_inv, lift_inv_k)
+    else:
+        p = vm
+        p_inv = vm_inv
+
+    target_dtype = viewmats.dtype
+    p = p.to(dtype=target_dtype).contiguous()
+    p_inv_t = p_inv.transpose(-1, -2).to(dtype=target_dtype).contiguous()
+    p_t = p.transpose(-1, -2).contiguous()
+    return p, p_inv_t, p_t
+
+
+def _apply_fast_interleaved_rope(
+    q: torch.Tensor,
+    k: torch.Tensor,
+    freqs_cis: tuple[torch.Tensor, torch.Tensor],
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Apply interleaved real-valued 3D RoPE using core's fused Triton kernel on CUDA."""
+    cos, sin = freqs_cis
+    if (
+        q.is_cuda
+        and q.ndim == 4
+        and cos.ndim == 2
+        and cos.shape[0] == q.shape[1]
+        and cos.shape[1] == q.shape[-1]
+        and not torch.is_grad_enabled()
+    ):
+        from worldfoundry.core.kernels.diffusion import apply_real_rope_bshd
+
+        cos_half = cos[:, 0::2].unsqueeze(0).unsqueeze(2)
+        sin_half = sin[:, 0::2].unsqueeze(0).unsqueeze(2)
+        return apply_real_rope_bshd(q, cos_half, sin_half), apply_real_rope_bshd(k, cos_half, sin_half)
+    return apply_rotary_emb(q, k, freqs_cis, head_first=False)
+
+
+try:
+    import triton
+    import triton.language as tl
+
+    @triton.jit
+    def _prope_mat4_kernel(
+        x_ptr,
+        m_ptr,
+        out_ptr,
+        vecs_per_cam,
+        BLOCK_VECS: tl.constexpr,
+    ):
+        cam_id = tl.program_id(0)
+        pid_v = tl.program_id(1)
+        vec_off = pid_v * BLOCK_VECS + tl.arange(0, BLOCK_VECS)
+        mask = vec_off < vecs_per_cam
+        base = (cam_id * vecs_per_cam + vec_off) * 4
+        x0 = tl.load(x_ptr + base + 0, mask=mask, other=0.0).to(tl.float32)
+        x1 = tl.load(x_ptr + base + 1, mask=mask, other=0.0).to(tl.float32)
+        x2 = tl.load(x_ptr + base + 2, mask=mask, other=0.0).to(tl.float32)
+        x3 = tl.load(x_ptr + base + 3, mask=mask, other=0.0).to(tl.float32)
+
+        bm = cam_id * 16
+        m00 = tl.load(m_ptr + bm + 0)
+        m01 = tl.load(m_ptr + bm + 1)
+        m02 = tl.load(m_ptr + bm + 2)
+        m03 = tl.load(m_ptr + bm + 3)
+        m10 = tl.load(m_ptr + bm + 4)
+        m11 = tl.load(m_ptr + bm + 5)
+        m12 = tl.load(m_ptr + bm + 6)
+        m13 = tl.load(m_ptr + bm + 7)
+        m20 = tl.load(m_ptr + bm + 8)
+        m21 = tl.load(m_ptr + bm + 9)
+        m22 = tl.load(m_ptr + bm + 10)
+        m23 = tl.load(m_ptr + bm + 11)
+        m30 = tl.load(m_ptr + bm + 12)
+        m31 = tl.load(m_ptr + bm + 13)
+        m32 = tl.load(m_ptr + bm + 14)
+        m33 = tl.load(m_ptr + bm + 15)
+
+        y0 = x0 * m00 + x1 * m10 + x2 * m20 + x3 * m30
+        y1 = x0 * m01 + x1 * m11 + x2 * m21 + x3 * m31
+        y2 = x0 * m02 + x1 * m12 + x2 * m22 + x3 * m32
+        y3 = x0 * m03 + x1 * m13 + x2 * m23 + x3 * m33
+
+        tl.store(out_ptr + base + 0, y0, mask=mask)
+        tl.store(out_ptr + base + 1, y1, mask=mask)
+        tl.store(out_ptr + base + 2, y2, mask=mask)
+        tl.store(out_ptr + base + 3, y3, mask=mask)
+
+    _TRITON_PROPE_AVAILABLE = True
+except Exception:
+    _TRITON_PROPE_AVAILABLE = False
+
+
+def _apply_prope_mat(tensor: torch.Tensor, mat_t: torch.Tensor) -> torch.Tensor:
+    """Apply block-diagonal 4x4 camera transform ``mat_t`` to ``[B, L, ...]`` at full HBM bandwidth."""
+    batch = tensor.shape[0]
+    cams = mat_t.shape[1]
+    if _TRITON_PROPE_AVAILABLE and tensor.is_cuda and not torch.is_grad_enabled():
+        x_flat = tensor.contiguous()
+        m_f32 = mat_t.to(device=tensor.device, dtype=torch.float32).contiguous()
+        out = torch.empty_like(x_flat)
+        total_cams = batch * cams
+        vecs_per_cam = x_flat.numel() // (total_cams * 4)
+        block_vecs = 256
+        grid = (total_cams, triton.cdiv(vecs_per_cam, block_vecs))
+        _prope_mat4_kernel[grid](x_flat, m_f32, out, vecs_per_cam, BLOCK_VECS=block_vecs, num_warps=4)
+        return out
+    reshaped = tensor.reshape(batch, cams, -1, 4)
+    out = torch.matmul(reshaped, mat_t.to(dtype=tensor.dtype))
+    return out.reshape(tensor.shape)
 
 
 class MMDoubleStreamBlock(nn.Module):
@@ -102,6 +251,30 @@ class MMDoubleStreamBlock(nn.Module):
             hidden_size, mlp_hidden_dim, act_layer=get_activation_layer(mlp_act_type), bias=True, **factory_kwargs
         )
         self.hybrid_seq_parallel_attn = None
+        self.attention_backend: str | None = attn_mode or "torch"
+
+    def set_attention_backend(self, backend: str | None) -> None:
+        """Bind the request-scoped attention provider on this action-camera block."""
+        resolved = "torch" if backend is None else normalize_attention_backend(str(backend))
+        self.attention_backend = resolved
+        self.attn_mode = resolved
+
+    def fuse_qkv(self) -> int:
+        """Fuse separate image and text Q/K/V linear projections in place."""
+        fused_count = 0
+        if not hasattr(self, "img_attn_qkv") and all(
+            isinstance(getattr(self, name, None), nn.Linear) for name in ("img_attn_q", "img_attn_k", "img_attn_v")
+        ):
+            self.img_attn_qkv = _fuse_three_linears(self.img_attn_q, self.img_attn_k, self.img_attn_v)
+            del self.img_attn_q, self.img_attn_k, self.img_attn_v
+            fused_count += 1
+        if not hasattr(self, "txt_attn_qkv") and all(
+            isinstance(getattr(self, name, None), nn.Linear) for name in ("txt_attn_q", "txt_attn_k", "txt_attn_v")
+        ):
+            self.txt_attn_qkv = _fuse_three_linears(self.txt_attn_q, self.txt_attn_k, self.txt_attn_v)
+            del self.txt_attn_q, self.txt_attn_k, self.txt_attn_v
+            fused_count += 1
+        return fused_count
 
     def enable_deterministic(self):
         self.deterministic = True
@@ -115,12 +288,16 @@ class MMDoubleStreamBlock(nn.Module):
         ).chunk(6, dim=-1)
         txt_modulated = self.txt_norm1(txt)
         txt_modulated = modulate(txt_modulated, shift=txt_mod1_shift, scale=txt_mod1_scale)
-        txt_q = self.txt_attn_q(txt_modulated)
-        txt_k = self.txt_attn_k(txt_modulated)
-        txt_v = self.txt_attn_v(txt_modulated)
-        txt_q = rearrange(txt_q, "B L (H D) -> B L H D", H=self.heads_num)
-        txt_k = rearrange(txt_k, "B L (H D) -> B L H D", H=self.heads_num)
-        txt_v = rearrange(txt_v, "B L (H D) -> B L H D", H=self.heads_num)
+        if hasattr(self, "txt_attn_qkv"):
+            txt_q, txt_k, txt_v = self.txt_attn_qkv(txt_modulated).chunk(3, dim=-1)
+        else:
+            txt_q = self.txt_attn_q(txt_modulated)
+            txt_k = self.txt_attn_k(txt_modulated)
+            txt_v = self.txt_attn_v(txt_modulated)
+        head_dim = txt_q.shape[-1] // self.heads_num
+        txt_q = txt_q.view(txt_q.shape[0], txt_q.shape[1], self.heads_num, head_dim)
+        txt_k = txt_k.view(txt_k.shape[0], txt_k.shape[1], self.heads_num, head_dim)
+        txt_v = txt_v.view(txt_v.shape[0], txt_v.shape[1], self.heads_num, head_dim)
         txt_q = self.txt_attn_q_norm(txt_q).to(txt_v)
         txt_k = self.txt_attn_k_norm(txt_k).to(txt_v)
         return (txt_q, txt_k, txt_v, txt_mod1_gate, txt_mod2_shift, txt_mod2_scale, txt_mod2_gate)
@@ -131,12 +308,16 @@ class MMDoubleStreamBlock(nn.Module):
         ).chunk(6, dim=-1)
         img_modulated = self.img_norm1(img)
         img_modulated = modulate(img_modulated, shift=img_mod1_shift, scale=img_mod1_scale)
-        img_q = self.img_attn_q(img_modulated)
-        img_k = self.img_attn_k(img_modulated)
-        img_v = self.img_attn_v(img_modulated)
-        img_q = rearrange(img_q, "B L (H D) -> B L H D", H=self.heads_num)
-        img_k = rearrange(img_k, "B L (H D) -> B L H D", H=self.heads_num)
-        img_v = rearrange(img_v, "B L (H D) -> B L H D", H=self.heads_num)
+        if hasattr(self, "img_attn_qkv"):
+            img_q, img_k, img_v = self.img_attn_qkv(img_modulated).chunk(3, dim=-1)
+        else:
+            img_q = self.img_attn_q(img_modulated)
+            img_k = self.img_attn_k(img_modulated)
+            img_v = self.img_attn_v(img_modulated)
+        head_dim = img_q.shape[-1] // self.heads_num
+        img_q = img_q.view(img_q.shape[0], img_q.shape[1], self.heads_num, head_dim)
+        img_k = img_k.view(img_k.shape[0], img_k.shape[1], self.heads_num, head_dim)
+        img_v = img_v.view(img_v.shape[0], img_v.shape[1], self.heads_num, head_dim)
         img_q = self.img_attn_q_norm(img_q).to(img_v)
         img_k = self.img_attn_k_norm(img_k).to(img_v)
         return (img_q, img_k, img_v, img_mod1_gate, img_mod2_shift, img_mod2_scale, img_mod2_gate)
@@ -155,7 +336,7 @@ class MMDoubleStreamBlock(nn.Module):
         (txt_q, txt_k, txt_v, txt_mod1_gate, txt_mod2_shift, txt_mod2_scale, txt_mod2_gate) = self.modulate_txt(
             vec_txt, txt
         )
-        attn_mode = "torch_causal"
+        attn_mode = self.attention_backend or "torch_causal"
         (txt_attn, t_kv) = sequence_parallel_attention_txt(
             txt_q,
             txt_k,
@@ -171,7 +352,8 @@ class MMDoubleStreamBlock(nn.Module):
         )
         txt = txt + apply_gate(self.txt_attn_proj(txt_attn), gate=txt_mod1_gate)
         txt = txt + apply_gate(
-            self.txt_mlp(modulate(self.txt_norm2(txt), shift=txt_mod2_shift, scale=txt_mod2_scale)), gate=txt_mod2_gate
+            _run_hy15_mlp(self.txt_mlp, modulate(self.txt_norm2(txt), shift=txt_mod2_shift, scale=txt_mod2_scale)),
+            gate=txt_mod2_gate,
         )
         return (txt, t_kv)
 
@@ -186,36 +368,77 @@ class MMDoubleStreamBlock(nn.Module):
         Ks: torch.Tensor | None = None,
         kv_cache: dict | None = None,
         cache_vision: bool = False,
+        prope_mats: tuple[torch.Tensor, torch.Tensor, torch.Tensor] | None = None,
+        static_kv_buffer: tuple[torch.Tensor, torch.Tensor] | None = None,
+        static_prefix_len: int | None = None,
+        static_fp8_rope_buffer: tuple[torch.Tensor, torch.Tensor] | None = None,
+        static_fp8_prope_buffer: tuple[torch.Tensor, torch.Tensor] | None = None,
+        num_blocks: int | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         (img_q, img_k, img_v, img_mod1_gate, img_mod2_shift, img_mod2_scale, img_mod2_gate) = self.modulate_img(
             vec, img
         )
-        (img_q_prope, img_k_prope, img_v_prope, apply_fn_o) = prope_qkv(
-            img_q.permute(0, 2, 1, 3), img_k.permute(0, 2, 1, 3), img_v.permute(0, 2, 1, 3), viewmats=viewmats, Ks=Ks
-        )
-        img_q_prope = img_q_prope.permute(0, 2, 1, 3)
-        img_k_prope = img_k_prope.permute(0, 2, 1, 3)
-        img_v_prope = img_v_prope.permute(0, 2, 1, 3)
-        if freqs_cis is not None:
-            (img_qq, img_kk) = apply_rotary_emb(img_q, img_k, freqs_cis, head_first=False)
-            assert img_qq.shape == img_q.shape and img_kk.shape == img_k.shape, (
-                f"img_kk: {img_qq.shape}, img_q: {img_q.shape}, img_kk: {img_kk.shape}, img_k: {img_k.shape}"
+        if prope_mats is not None:
+            p_mat, p_inv_t, p_t = prope_mats
+            img_q_prope = _apply_prope_mat(img_q, p_mat)
+            img_k_prope = _apply_prope_mat(img_k, p_inv_t)
+            img_v_prope = _apply_prope_mat(img_v, p_inv_t)
+            apply_fn_o = None
+        else:
+            (img_q_prope, img_k_prope, img_v_prope, apply_fn_o) = prope_qkv(
+                img_q.permute(0, 2, 1, 3),
+                img_k.permute(0, 2, 1, 3),
+                img_v.permute(0, 2, 1, 3),
+                viewmats=viewmats,
+                Ks=Ks,
             )
-            (img_q, img_k) = (img_qq, img_kk)
+            img_q_prope = img_q_prope.permute(0, 2, 1, 3)
+            img_k_prope = img_k_prope.permute(0, 2, 1, 3)
+            img_v_prope = img_v_prope.permute(0, 2, 1, 3)
+            p_t = None
+        if freqs_cis is not None:
+            (img_q, img_k) = _apply_fast_interleaved_rope(img_q, img_k, freqs_cis)
+        attn_mode = self.attention_backend or self.attn_mode
         (img_attn, vision_kv) = sequence_parallel_attention_vision(
-            img_q, img_k, img_v, block_idx=block_idx, kv_cache=kv_cache, cache_vision=cache_vision
+            img_q,
+            img_k,
+            img_v,
+            block_idx=block_idx,
+            kv_cache=kv_cache,
+            cache_vision=cache_vision,
+            attn_mode=attn_mode,
+            static_kv_buffer=static_kv_buffer,
+            static_prefix_len=static_prefix_len,
+            static_fp8_kv_buffer=static_fp8_rope_buffer,
+            stream_tag="rope",
+            num_blocks=num_blocks,
         )
         (img_attn_prope, _) = sequence_parallel_attention_vision(
-            img_q_prope, img_k_prope, img_v_prope, block_idx=block_idx, kv_cache=kv_cache, cache_vision=False
+            img_q_prope,
+            img_k_prope,
+            img_v_prope,
+            block_idx=block_idx,
+            kv_cache=kv_cache,
+            cache_vision=False,
+            attn_mode=attn_mode,
+            static_kv_buffer=static_kv_buffer,
+            static_prefix_len=static_prefix_len,
+            static_fp8_kv_buffer=static_fp8_prope_buffer,
+            stream_tag="prope",
+            num_blocks=num_blocks,
         )
-        img_attn_prope = rearrange(img_attn_prope, "B L (H D) -> B H L D", H=self.heads_num)
-        img_attn_prope = apply_fn_o(img_attn_prope)
-        img_attn_prope = rearrange(img_attn_prope, "B H L D -> B L (H D)")
+        if p_t is not None:
+            img_attn_prope = _apply_prope_mat(img_attn_prope, p_t)
+        else:
+            img_attn_prope = rearrange(img_attn_prope, "B L (H D) -> B H L D", H=self.heads_num)
+            img_attn_prope = apply_fn_o(img_attn_prope)
+            img_attn_prope = rearrange(img_attn_prope, "B H L D -> B L (H D)")
         img = img + apply_gate(
             self.img_attn_proj(img_attn) + self.img_attn_prope_proj(img_attn_prope), gate=img_mod1_gate
         )
         img = img + apply_gate(
-            self.img_mlp(modulate(self.img_norm2(img), shift=img_mod2_shift, scale=img_mod2_scale)), gate=img_mod2_gate
+            _run_hy15_mlp(self.img_mlp, modulate(self.img_norm2(img), shift=img_mod2_shift, scale=img_mod2_scale)),
+            gate=img_mod2_gate,
         )
         return (img, vision_kv)
 
@@ -232,6 +455,8 @@ class MMDoubleStreamBlock(nn.Module):
         block_idx=None,
         viewmats: torch.Tensor | None = None,
         Ks: torch.Tensor | None = None,
+        prope_mats: tuple[torch.Tensor, torch.Tensor, torch.Tensor] | None = None,
+        num_blocks: int | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         (txt_q, txt_k, txt_v, txt_mod1_gate, txt_mod2_shift, txt_mod2_scale, txt_mod2_gate) = self.modulate_txt(
             vec_txt, txt
@@ -239,55 +464,88 @@ class MMDoubleStreamBlock(nn.Module):
         (img_q, img_k, img_v, img_mod1_gate, img_mod2_shift, img_mod2_scale, img_mod2_gate) = self.modulate_img(
             vec, img
         )
-        (img_q_prope, img_k_prope, img_v_prope, apply_fn_o) = prope_qkv(
-            img_q.permute(0, 2, 1, 3), img_k.permute(0, 2, 1, 3), img_v.permute(0, 2, 1, 3), viewmats=viewmats, Ks=Ks
-        )
-        img_q_prope = img_q_prope.permute(0, 2, 1, 3)
-        img_k_prope = img_k_prope.permute(0, 2, 1, 3)
-        img_v_prope = img_v_prope.permute(0, 2, 1, 3)
-        if freqs_cis is not None:
-            (img_qq, img_kk) = apply_rotary_emb(img_q, img_k, freqs_cis, head_first=False)
-            assert img_qq.shape == img_q.shape and img_kk.shape == img_k.shape, (
-                f"img_kk: {img_qq.shape}, img_q: {img_q.shape}, img_kk: {img_kk.shape}, img_k: {img_k.shape}"
+        if prope_mats is not None:
+            p_mat, p_inv_t, p_t = prope_mats
+            img_q_prope = _apply_prope_mat(img_q, p_mat)
+            img_k_prope = _apply_prope_mat(img_k, p_inv_t)
+            img_v_prope = _apply_prope_mat(img_v, p_inv_t)
+            apply_fn_o = None
+        else:
+            (img_q_prope, img_k_prope, img_v_prope, apply_fn_o) = prope_qkv(
+                img_q.permute(0, 2, 1, 3),
+                img_k.permute(0, 2, 1, 3),
+                img_v.permute(0, 2, 1, 3),
+                viewmats=viewmats,
+                Ks=Ks,
             )
-            (img_q, img_k) = (img_qq, img_kk)
-        attn_mode = "flash" if is_flash else self.attn_mode
-        attn = parallel_attention(
-            (img_q, txt_q),
-            (img_k, txt_k),
-            (img_v, txt_v),
-            img_q_len=img_q.shape[1],
-            img_kv_len=img_k.shape[1],
-            text_mask=text_mask,
-            attn_mode=attn_mode,
-            attn_param=attn_param,
-            block_idx=block_idx,
-        )
-        (img_attn, txt_attn) = (attn[:, : img_q.shape[1]].contiguous(), attn[:, img_q.shape[1] :].contiguous())
-        attn_prope = parallel_attention(
-            (img_q_prope, txt_q),
-            (img_k_prope, txt_k),
-            (img_v_prope, txt_v),
-            img_q_len=img_q_prope.shape[1],
-            img_kv_len=img_k_prope.shape[1],
-            text_mask=text_mask,
-            attn_mode=attn_mode,
-            attn_param=attn_param,
-            block_idx=block_idx,
-        )
+            img_q_prope = img_q_prope.permute(0, 2, 1, 3)
+            img_k_prope = img_k_prope.permute(0, 2, 1, 3)
+            img_v_prope = img_v_prope.permute(0, 2, 1, 3)
+            p_t = None
+        if freqs_cis is not None:
+            (img_q, img_k) = _apply_fast_interleaved_rope(img_q, img_k, freqs_cis)
+        attn_mode = "flash" if is_flash else (self.attention_backend or self.attn_mode)
+        if attn_mode == "cudnn_fp8" and text_mask is None:
+            attn = sequence_parallel_attention_bi_fp8(
+                (img_q, txt_q),
+                (img_k, txt_k),
+                (img_v, txt_v),
+                block_idx=block_idx,
+                num_blocks=num_blocks,
+                stream_tag="rope",
+            )
+            (img_attn, txt_attn) = (attn[:, : img_q.shape[1]].contiguous(), attn[:, img_q.shape[1] :].contiguous())
+            attn_prope = sequence_parallel_attention_bi_fp8(
+                (img_q_prope, txt_q),
+                (img_k_prope, txt_k),
+                (img_v_prope, txt_v),
+                block_idx=block_idx,
+                num_blocks=num_blocks,
+                stream_tag="prope",
+            )
+        else:
+            eff_attn_mode = "torch" if attn_mode == "cudnn_fp8" else attn_mode
+            attn = parallel_attention(
+                (img_q, txt_q),
+                (img_k, txt_k),
+                (img_v, txt_v),
+                img_q_len=img_q.shape[1],
+                img_kv_len=img_k.shape[1],
+                text_mask=text_mask,
+                attn_mode=eff_attn_mode,
+                attn_param=attn_param,
+                block_idx=block_idx,
+            )
+            (img_attn, txt_attn) = (attn[:, : img_q.shape[1]].contiguous(), attn[:, img_q.shape[1] :].contiguous())
+            attn_prope = parallel_attention(
+                (img_q_prope, txt_q),
+                (img_k_prope, txt_k),
+                (img_v_prope, txt_v),
+                img_q_len=img_q_prope.shape[1],
+                img_kv_len=img_k_prope.shape[1],
+                text_mask=text_mask,
+                attn_mode=eff_attn_mode,
+                attn_param=attn_param,
+                block_idx=block_idx,
+            )
         img_attn_prope = attn_prope[:, : img_q_prope.shape[1]].contiguous()
-        img_attn_prope = rearrange(img_attn_prope, "B L (H D) -> B H L D", H=self.heads_num)
-        img_attn_prope = apply_fn_o(img_attn_prope)
-        img_attn_prope = rearrange(img_attn_prope, "B H L D -> B L (H D)")
+        if p_t is not None:
+            img_attn_prope = _apply_prope_mat(img_attn_prope, p_t)
+        else:
+            img_attn_prope = rearrange(img_attn_prope, "B L (H D) -> B H L D", H=self.heads_num)
+            img_attn_prope = apply_fn_o(img_attn_prope)
+            img_attn_prope = rearrange(img_attn_prope, "B H L D -> B L (H D)")
         img = img + apply_gate(
             self.img_attn_proj(img_attn) + self.img_attn_prope_proj(img_attn_prope), gate=img_mod1_gate
         )
         img = img + apply_gate(
-            self.img_mlp(modulate(self.img_norm2(img), shift=img_mod2_shift, scale=img_mod2_scale)), gate=img_mod2_gate
+            _run_hy15_mlp(self.img_mlp, modulate(self.img_norm2(img), shift=img_mod2_shift, scale=img_mod2_scale)),
+            gate=img_mod2_gate,
         )
         txt = txt + apply_gate(self.txt_attn_proj(txt_attn), gate=txt_mod1_gate)
         txt = txt + apply_gate(
-            self.txt_mlp(modulate(self.txt_norm2(txt), shift=txt_mod2_shift, scale=txt_mod2_scale)), gate=txt_mod2_gate
+            _run_hy15_mlp(self.txt_mlp, modulate(self.txt_norm2(txt), shift=txt_mod2_shift, scale=txt_mod2_scale)),
+            gate=txt_mod2_gate,
         )
         return (img, txt)
 
@@ -521,6 +779,121 @@ class ARHunyuanVideo_1_5_DiffusionTransformer(ModelMixin, ConfigMixin):
             assert vision_projection is not None, "text type embedding is only used when vision_projection is not None"
         else:
             self.cond_type_embedding = None
+        self.attention_backend: str | None = normalize_attention_backend(attn_mode) if attn_mode else "torch"
+        self._rope_cache: dict[tuple[Any, ...], tuple[torch.Tensor, torch.Tensor]] = {}
+        self._static_kv_arena: dict[tuple[Any, ...], list[tuple[torch.Tensor, torch.Tensor]]] = {}
+        self._static_fp8_kv_arena: dict[tuple[Any, ...], dict[str, list[tuple[torch.Tensor, torch.Tensor] | None]]] = {}
+        self._last_arena_source_key: tuple[Any, ...] | None = None
+        self._last_arena_src_refs: tuple[Any, ...] | None = None
+        self._last_arena_src_vers: tuple[Any, ...] | None = None
+        self._last_arena_entry: tuple[list[tuple[torch.Tensor, torch.Tensor]], int, tuple[Any, ...]] | None = None
+        self._last_fp8_arena_entry: (
+            tuple[dict[str, list[tuple[torch.Tensor, torch.Tensor] | None]], int, tuple[Any, ...]] | None
+        ) = None
+        self._vision_graph_enabled: bool = False
+        self._vision_graph_warmup: int = 1
+        self._vision_graph_max_graphs: int = 8
+        self._vision_graph_runners: dict[tuple[Any, ...], Any] = {}
+
+    def fuse_qkv(self) -> int:
+        """Fuse separate Q/K/V projections across all 54 double-stream blocks."""
+        total = 0
+        for block in self.double_blocks:
+            total += block.fuse_qkv()
+        self.invalidate_cuda_graphs()
+        return total
+
+    def enable_fp8(
+        self,
+        *,
+        exclude_edge_blocks: bool = True,
+        scaling: str = "rowwise",
+        use_fast_accum: bool = True,
+        min_features: int = 1024,
+        keep_dense_fallback: bool = False,
+    ) -> int:
+        """Apply Hopper/Blackwell FP8 W8A8 quantization to eligible transformer linears."""
+        from worldfoundry.core.acceleration.quantization.linear import replace_linear_with_float8
+
+        excludes = [
+            "img_in",
+            "txt_in",
+            "time_in",
+            "action_in",
+            "vector_in",
+            "byt5_in",
+            "vision_in",
+            "final_layer",
+            "img_mod",
+            "txt_mod",
+        ]
+        if exclude_edge_blocks and len(self.double_blocks) >= 2:
+            excludes.extend(["double_blocks.0.", f"double_blocks.{len(self.double_blocks) - 1}."])
+        replaced = replace_linear_with_float8(
+            self,
+            exclude=tuple(excludes),
+            min_features=min_features,
+            scaling=scaling,
+            use_fast_accum=use_fast_accum,
+            keep_dense_fallback=keep_dense_fallback,
+        )
+        self.invalidate_cuda_graphs()
+        return replaced
+
+    def enable_cuda_graph(self, *, warmup: int = 1, max_graphs: int = 8) -> None:
+        """Enable persistent-arena chunk-step CUDA Graph replay for ``forward_vision``."""
+        self._vision_graph_enabled = True
+        self._vision_graph_warmup = int(warmup)
+        self._vision_graph_max_graphs = int(max_graphs)
+
+    def disable_cuda_graph(self) -> None:
+        """Disable ``forward_vision`` CUDA Graph replay and release captured graphs."""
+        self._vision_graph_enabled = False
+        self.invalidate_cuda_graphs()
+
+    def invalidate_cuda_graphs(self) -> None:
+        """Drop captured vision graphs and static KV arena bindings."""
+        for runner in self._vision_graph_runners.values():
+            runner.invalidate()
+        self._vision_graph_runners.clear()
+        self._static_kv_arena.clear()
+        self._static_fp8_kv_arena.clear()
+        self._last_arena_source_key = None
+        self._last_arena_src_refs = None
+        self._last_arena_src_vers = None
+        self._last_arena_entry = None
+        self._last_fp8_arena_entry = None
+
+    def graph_report(self) -> dict[str, Any] | None:
+        """Return aggregate capture/replay telemetry for ``forward_vision`` CUDA Graphs."""
+        if not self._vision_graph_enabled and not self._vision_graph_runners:
+            return None
+        captures = replays = eager = failures = 0
+        for runner in self._vision_graph_runners.values():
+            rep = runner.report()
+            captures += int(rep.get("capture", 0))
+            replays += int(rep.get("replay", 0))
+            eager += int(rep.get("eager", 0))
+            failures += int(rep.get("capture_failed", 0))
+        return {
+            "enabled": self._vision_graph_enabled,
+            "runner_count": len(self._vision_graph_runners),
+            "capture": captures,
+            "replay": replays,
+            "eager": eager,
+            "capture_failed": failures,
+        }
+
+    def set_attention_backend(self, backend: str | None) -> None:
+        """Bind the request-scoped attention backend on all double-stream blocks."""
+        resolved = "torch" if backend is None else normalize_attention_backend(str(backend))
+        changed = resolved != self.attention_backend
+        self.attention_backend = resolved
+        self.attn_mode = resolved
+        for block in self.double_blocks:
+            block.set_attention_backend(resolved)
+        if changed:
+            self.invalidate_cuda_graphs()
 
     def enable_deterministic(self):
         for block in self.double_blocks:
@@ -706,6 +1079,159 @@ class ARHunyuanVideo_1_5_DiffusionTransformer(ModelMixin, ConfigMixin):
         if cache_txt:
             return _kv_cache_new
 
+    def _get_cached_rope(
+        self,
+        rope_temporal_size: int,
+        th: int,
+        tw: int,
+        start_rope_start_idx: int,
+        tt: int,
+        device: torch.device,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        key = (rope_temporal_size, th, tw, start_rope_start_idx, tt, device)
+        cached = self._rope_cache.get(key)
+        if cached is not None:
+            return cached
+        base_key = (rope_temporal_size, th, tw, "full", device)
+        full = self._rope_cache.get(base_key)
+        if full is None:
+            f_cos, f_sin = self.get_rotary_pos_embed((rope_temporal_size, th, tw))
+            full = (f_cos.to(device=device), f_sin.to(device=device))
+            if len(self._rope_cache) >= 32:
+                self._rope_cache.clear()
+            self._rope_cache[base_key] = full
+        per_latent_size = th * tw
+        start_index = start_rope_start_idx * per_latent_size
+        end_index = (start_rope_start_idx + tt) * per_latent_size
+        sliced = (
+            full[0][start_index:end_index, ...].contiguous(),
+            full[1][start_index:end_index, ...].contiguous(),
+        )
+        self._rope_cache[key] = sliced
+        return sliced
+
+    def _run_vision_core(
+        self,
+        hidden_states: torch.Tensor,
+        timestep: torch.Tensor,
+        action: torch.Tensor | None,
+        viewmats: torch.Tensor | None,
+        Ks: torch.Tensor | None,
+        freqs_cos: torch.Tensor | None,
+        freqs_sin: torch.Tensor | None,
+        *,
+        kv_cache: list[dict[str, Any]] | None,
+        static_buffers: list[tuple[torch.Tensor, torch.Tensor]] | None,
+        static_prefix_len: int | None,
+        static_fp8_buffers: dict[str, list[tuple[torch.Tensor, torch.Tensor] | None]] | None = None,
+        cache_vision: bool,
+    ) -> tuple[torch.Tensor, list[dict[str, Any]] | None]:
+        img = hidden_states
+        t = timestep
+        (bs, _, ot, oh, ow) = img.shape
+        (tt, th, tw) = (ot // self.patch_size[0], oh // self.patch_size[1], ow // self.patch_size[2])
+        img = self.img_in(img)
+        t = t.reshape(-1)
+        vec = self.time_in(t)
+        if action is not None and hasattr(self, "action_in"):
+            vec = vec + self.action_in(action.reshape(-1))
+        parallel_dims = get_parallel_state()
+        sp_enabled = parallel_dims.sp_enabled
+        prope_mats = None
+        if sp_enabled:
+            sp_size = parallel_dims.sp
+            sp_rank = parallel_dims.sp_rank
+            if img.shape[1] % sp_size != 0:
+                n_token = img.shape[1]
+                assert n_token > (n_token // sp_size + 1) * (sp_size - 1), f"Too short context length for SP {sp_size}"
+            img = torch.chunk(img, sp_size, dim=1)[sp_rank]
+            if freqs_cos is not None and freqs_sin is not None:
+                freqs_cos = torch.chunk(freqs_cos, sp_size, dim=0)[sp_rank]
+                freqs_sin = torch.chunk(freqs_sin, sp_size, dim=0)[sp_rank]
+            if tt % sp_size == 0:
+                vec = torch.chunk(vec.reshape(bs, tt, -1), sp_size, dim=1)[sp_rank].reshape(-1, vec.shape[-1])
+                if viewmats is not None:
+                    vm_local = torch.chunk(viewmats, sp_size, dim=1)[sp_rank]
+                    ks_local = None if Ks is None else torch.chunk(Ks, sp_size, dim=1)[sp_rank]
+                    prope_mats = _precompute_prope_mats(vm_local, ks_local)
+            else:
+                vec = repeat(vec, "(B T) C->B (T H W) C", B=bs, H=th, W=tw)
+                vec = torch.chunk(vec, sp_size, dim=1)[sp_rank]
+                vec = rearrange(vec, "B S C->(B S) C")
+                if viewmats is not None:
+                    vm_rep = repeat(viewmats, "B T M N->B (T H W) M N", H=th, W=tw)
+                    ks_rep = None if Ks is None else repeat(Ks, "B T M N->B (T H W) M N", H=th, W=tw)
+                    vm_local = torch.chunk(vm_rep, sp_size, dim=1)[sp_rank]
+                    ks_local = None if ks_rep is None else torch.chunk(ks_rep, sp_size, dim=1)[sp_rank]
+                    prope_mats = _precompute_prope_mats(vm_local, ks_local)
+        else:
+            if viewmats is not None:
+                prope_mats = _precompute_prope_mats(viewmats, Ks)
+
+        kv_cache_new = None
+        if cache_vision:
+            assert kv_cache is not None
+            kv_cache_new = [
+                {"k_vision": None, "v_vision": None, "k_txt": kv_cache[i]["k_txt"], "v_txt": kv_cache[i]["v_txt"]}
+                for i in range(len(self.double_blocks))
+            ]
+
+        freqs_cis = (freqs_cos, freqs_sin) if freqs_cos is not None else None
+        num_blocks = len(self.double_blocks)
+        fp8_rope_list = None if static_fp8_buffers is None else static_fp8_buffers.get("rope")
+        fp8_prope_list = None if static_fp8_buffers is None else static_fp8_buffers.get("prope")
+        for index, block in enumerate(self.double_blocks):
+            static_pair = None if static_buffers is None else static_buffers[index]
+            fp8_rope_pair = None if fp8_rope_list is None else fp8_rope_list[index]
+            fp8_prope_pair = None if fp8_prope_list is None else fp8_prope_list[index]
+            (img, vision_kv) = block.forward_vision(
+                img=img,
+                vec=vec,
+                freqs_cis=freqs_cis,
+                attn_param=self.attn_param,
+                block_idx=index,
+                viewmats=None if prope_mats is not None else viewmats,
+                Ks=None if prope_mats is not None else Ks,
+                kv_cache=kv_cache,
+                cache_vision=cache_vision,
+                prope_mats=prope_mats,
+                static_kv_buffer=static_pair,
+                static_prefix_len=static_prefix_len,
+                static_fp8_rope_buffer=fp8_rope_pair,
+                static_fp8_prope_buffer=fp8_prope_pair,
+                num_blocks=num_blocks,
+            )
+            if kv_cache_new is not None:
+                kv_cache_new[index]["k_vision"] = vision_kv["k_vision"]
+                kv_cache_new[index]["v_vision"] = vision_kv["v_vision"]
+
+        if kv_cache_new is not None:
+            return img, kv_cache_new
+        img = self.final_layer(img, vec)
+        if sp_enabled:
+            img = sequence_model_parallel_all_gather(img, dim=1)
+        img = self.unpatchify(img, tt, th, tw)
+        return img, None
+
+    @staticmethod
+    def _kv_cache_identity(kv_cache: list[dict[str, Any]]) -> tuple[tuple[Any, ...], tuple[Any, ...]]:
+        """Capture source tensor object references and mutation versions for arena freshness."""
+        first = kv_cache[0]
+        last = kv_cache[-1]
+        refs = (
+            kv_cache,
+            first["k_txt"],
+            first["v_txt"],
+            first.get("k_vision"),
+            first.get("v_vision"),
+            last["k_txt"],
+            last["v_txt"],
+            last.get("k_vision"),
+            last.get("v_vision"),
+        )
+        vers = tuple(None if (t is None or t.is_inference()) else t._version for t in refs[1:])
+        return refs, vers
+
     def forward_vision(
         self,
         hidden_states: torch.Tensor,
@@ -724,82 +1250,174 @@ class ARHunyuanVideo_1_5_DiffusionTransformer(ModelMixin, ConfigMixin):
         start_rope_start_idx=0,
         action: torch.Tensor | None = None,
     ) -> torch.Tensor | dict[str, torch.Tensor]:
-        if cache_vision:
-            _kv_cache_new = []
-            transformer_num_layers = len(self.double_blocks)
-            for i in range(transformer_num_layers):
-                _kv_cache_new.append(
-                    {"k_vision": None, "v_vision": None, "k_txt": kv_cache[i]["k_txt"], "v_txt": kv_cache[i]["v_txt"]}
-                )
-        img = x = hidden_states
-        t = timestep
-        (bs, _, ot, oh, ow) = x.shape
+        del timestep_r, mask_type, extra_kwargs
+        (_, _, ot, oh, ow) = hidden_states.shape
         (tt, th, tw) = (ot // self.patch_size[0], oh // self.patch_size[1], ow // self.patch_size[2])
         self.attn_param["thw"] = [tt, th, tw]
         rope_temporal_size = rope_temporal_size // self.patch_size[0]
         if freqs_cos is None and freqs_sin is None:
-            (freqs_cos, freqs_sin) = self.get_rotary_pos_embed((rope_temporal_size, th, tw))
-            per_latent_size = th * tw
-            start_index = start_rope_start_idx * per_latent_size
-            end_index = (start_rope_start_idx + tt) * per_latent_size
-            freqs_cos = freqs_cos[start_index:end_index, ...]
-            freqs_sin = freqs_sin[start_index:end_index, ...]
-        img = self.img_in(img)
-        t = t.reshape(-1)
-        vec = self.time_in(t)
-        if action is not None and hasattr(self, "action_in"):
-            vec = vec + self.action_in(action.reshape(-1))
-        vec = repeat(vec, "(B T) C->B (T H W) C", B=img.shape[0], H=th, W=tw)
-        if viewmats is not None:
-            viewmats = repeat(viewmats, "B T M N->B (T H W) M N", H=th, W=tw)
-            Ks = repeat(Ks, "B T M N->B (T H W) M N", H=th, W=tw)
-        parallel_dims = get_parallel_state()
-        sp_enabled = parallel_dims.sp_enabled
-        if sp_enabled:
-            sp_size = parallel_dims.sp
-            sp_rank = parallel_dims.sp_rank
-            if img.shape[1] % sp_size != 0:
-                n_token = img.shape[1]
-                assert n_token > (n_token // sp_size + 1) * (sp_size - 1), f"Too short context length for SP {sp_size}"
-            img = torch.chunk(img, sp_size, dim=1)[sp_rank]
-            freqs_cos = torch.chunk(freqs_cos, sp_size, dim=0)[sp_rank]
-            freqs_sin = torch.chunk(freqs_sin, sp_size, dim=0)[sp_rank]
-            vec = torch.chunk(vec, sp_size, dim=1)[sp_rank]
-            vec = rearrange(vec, "B S C->(B S) C")
-            if viewmats is not None:
-                viewmats = torch.chunk(viewmats, sp_size, dim=1)[sp_rank]
-                Ks = torch.chunk(Ks, sp_size, dim=1)[sp_rank]
-        else:
-            vec = rearrange(vec, "B S C->(B S) C")
-        freqs_cis = (freqs_cos, freqs_sin) if freqs_cos is not None else None
-        for index, block in enumerate(self.double_blocks):
-            self.attn_param["layer-name"] = f"double_block_{index + 1}"
-            (img, vision_kv) = block(
-                bi_inference=False,
-                ar_txt_inference=False,
-                ar_vision_inference=True,
-                img=img,
-                vec=vec,
-                freqs_cis=freqs_cis,
-                attn_param=self.attn_param,
-                block_idx=index,
-                viewmats=viewmats,
-                Ks=Ks,
-                kv_cache=kv_cache,
-                cache_vision=cache_vision,
+            freqs_cos, freqs_sin = self._get_cached_rope(
+                rope_temporal_size, th, tw, start_rope_start_idx, tt, hidden_states.device
             )
-            if cache_vision:
-                _kv_cache_new[index]["k_vision"] = vision_kv["k_vision"]
-                _kv_cache_new[index]["v_vision"] = vision_kv["v_vision"]
+
+        sp_enabled = get_parallel_state().sp_enabled
+        if (
+            self._vision_graph_enabled
+            and not cache_vision
+            and not sp_enabled
+            and not self.training
+            and hidden_states.is_cuda
+            and kv_cache is not None
+        ):
+            chunk_tokens = tt * th * tw
+            head_dim = self.hidden_size // self.heads_num
+            want_fp8_arena = (
+                self.attention_backend == "cudnn_fp8" and len(self.double_blocks) > 2 and head_dim in {64, 128}
+            )
+            k_vis0 = kv_cache[0].get("k_vision")
+            src_refs, src_vers = self._kv_cache_identity(kv_cache)
+            source_key = (
+                tuple(kv_cache[0]["k_txt"].shape),
+                None if k_vis0 is None else tuple(k_vis0.shape),
+                chunk_tokens,
+                hidden_states.dtype,
+                self.attention_backend,
+            )
+            same_sources = (
+                self._last_arena_source_key == source_key
+                and self._last_arena_src_refs is not None
+                and self._last_arena_src_vers == src_vers
+                and all(a is b for a, b in zip(self._last_arena_src_refs, src_refs, strict=True))
+            )
+
+            fp8_buffers: dict[str, list[tuple[torch.Tensor, torch.Tensor] | None]] | None = None
+            fp8_key: tuple[Any, ...] | None = None
+            if same_sources and self._last_arena_entry is not None:
+                buffers, prefix_len, arena_key = self._last_arena_entry
+                if want_fp8_arena:
+                    if self._last_fp8_arena_entry is not None:
+                        fp8_buffers, _, fp8_key = self._last_fp8_arena_entry
+                    else:
+                        fp8_buffers, _, fp8_key = prepare_static_fp8_kv_arena(
+                            kv_cache, chunk_tokens, arena=self._static_fp8_kv_arena
+                        )
+                        if fp8_buffers is not None and fp8_key is not None:
+                            self._last_fp8_arena_entry = (fp8_buffers, prefix_len, fp8_key)
+            else:
+                buffers, prefix_len, arena_key = prepare_static_kv_arena(
+                    kv_cache,
+                    chunk_tokens,
+                    arena=self._static_kv_arena,
+                    dtype=hidden_states.dtype,
+                )
+                self._last_arena_source_key = source_key
+                self._last_arena_src_refs = src_refs
+                self._last_arena_src_vers = src_vers
+                self._last_arena_entry = (buffers, prefix_len, arena_key)
+                self._last_fp8_arena_entry = None
+                if want_fp8_arena:
+                    fp8_buffers, _, fp8_key = prepare_static_fp8_kv_arena(
+                        kv_cache, chunk_tokens, arena=self._static_fp8_kv_arena
+                    )
+                    if fp8_buffers is not None and fp8_key is not None:
+                        self._last_fp8_arena_entry = (fp8_buffers, prefix_len, fp8_key)
+
+            # On the very first cudnn_fp8 call before scales are calibrated, run one eager
+            # calibration pass so CUDA Graph captures with the pre-quantized FP8 KV arena.
+            if want_fp8_arena and fp8_buffers is None:
+                img, _ = self._run_vision_core(
+                    hidden_states,
+                    timestep,
+                    action,
+                    viewmats,
+                    Ks,
+                    freqs_cos,
+                    freqs_sin,
+                    kv_cache=None,
+                    static_buffers=buffers,
+                    static_prefix_len=prefix_len,
+                    static_fp8_buffers=None,
+                    cache_vision=False,
+                )
+                assert return_dict is False, "return_dict is not supported."
+                return (img, None)
+
+            runner_key = (
+                arena_key,
+                fp8_key,
+                self.attention_backend,
+                action is not None,
+                viewmats is not None,
+                Ks is not None,
+            )
+            runner = self._vision_graph_runners.get(runner_key)
+            if runner is None:
+                from worldfoundry.core.execution.graphs.inference_graph import InferenceCUDAGraphRunner
+
+                has_action = action is not None
+                has_vm = viewmats is not None
+                has_ks = Ks is not None
+                bound_buffers = buffers
+                bound_prefix_len = prefix_len
+                bound_fp8_buffers = fp8_buffers
+
+                def _graphed_step(h_in, t_in, act_in, vm_in, ks_in, cos_in, sin_in):
+                    out_img, _ = self._run_vision_core(
+                        h_in,
+                        t_in,
+                        act_in if has_action else None,
+                        vm_in if has_vm else None,
+                        ks_in if has_ks else None,
+                        cos_in,
+                        sin_in,
+                        kv_cache=None,
+                        static_buffers=bound_buffers,
+                        static_prefix_len=bound_prefix_len,
+                        static_fp8_buffers=bound_fp8_buffers,
+                        cache_vision=False,
+                    )
+                    return out_img
+
+                runner = InferenceCUDAGraphRunner(
+                    _graphed_step,
+                    warmup=self._vision_graph_warmup,
+                    max_graphs=self._vision_graph_max_graphs,
+                    clone_outputs=True,
+                    extra_key=f"hy_worldplay_vision:{runner_key}",
+                )
+                self._vision_graph_runners[runner_key] = runner
+
+            dummy = hidden_states.new_empty(0)
+            img = runner(
+                hidden_states,
+                timestep,
+                action if action is not None else dummy,
+                viewmats if viewmats is not None else dummy,
+                Ks if Ks is not None else dummy,
+                freqs_cos,
+                freqs_sin,
+            )
+            assert return_dict is False, "return_dict is not supported."
+            return (img, None)
+
+        img, kv_cache_new = self._run_vision_core(
+            hidden_states,
+            timestep,
+            action,
+            viewmats,
+            Ks,
+            freqs_cos,
+            freqs_sin,
+            kv_cache=kv_cache,
+            static_buffers=None,
+            static_prefix_len=None,
+            static_fp8_buffers=None,
+            cache_vision=cache_vision,
+        )
         if cache_vision:
-            return _kv_cache_new
-        img = self.final_layer(img, vec)
-        if sp_enabled:
-            img = sequence_model_parallel_all_gather(img, dim=1)
-        img = self.unpatchify(img, tt, th, tw)
+            return kv_cache_new
         assert return_dict is False, "return_dict is not supported."
-        features_list = None
-        return (img, features_list)
+        return (img, None)
 
     def forward_bi(
         self,
@@ -832,17 +1450,14 @@ class ARHunyuanVideo_1_5_DiffusionTransformer(ModelMixin, ConfigMixin):
         (tt, th, tw) = (ot // self.patch_size[0], oh // self.patch_size[1], ow // self.patch_size[2])
         self.attn_param["thw"] = [tt, th, tw]
         if freqs_cos is None and freqs_sin is None:
-            (freqs_cos, freqs_sin) = self.get_rotary_pos_embed((tt, th, tw))
+            freqs_cos, freqs_sin = self._get_cached_rope(tt, th, tw, 0, tt, hidden_states.device)
         img = self.img_in(img)
         vec = self.time_in(t)
         if action is not None and hasattr(self, "action_in"):
             vec = vec + self.action_in(action.reshape(-1))
-        vec = repeat(vec, "(B T) C->B (T H W) C", B=img.shape[0], H=th, W=tw)
-        if viewmats is not None:
-            viewmats = repeat(viewmats, "B T M N->B (T H W) M N", H=th, W=tw)
-            Ks = repeat(Ks, "B T M N->B (T H W) M N", H=th, W=tw)
         parallel_dims = get_parallel_state()
         sp_enabled = parallel_dims.sp_enabled
+        prope_mats = None
         if sp_enabled:
             sp_size = parallel_dims.sp
             sp_rank = parallel_dims.sp_rank
@@ -852,13 +1467,25 @@ class ARHunyuanVideo_1_5_DiffusionTransformer(ModelMixin, ConfigMixin):
             img = torch.chunk(img, sp_size, dim=1)[sp_rank]
             freqs_cos = torch.chunk(freqs_cos, sp_size, dim=0)[sp_rank]
             freqs_sin = torch.chunk(freqs_sin, sp_size, dim=0)[sp_rank]
-            vec = torch.chunk(vec, sp_size, dim=1)[sp_rank]
-            vec = rearrange(vec, "B S C->(B S) C")
-            if viewmats is not None:
-                viewmats = torch.chunk(viewmats, sp_size, dim=1)[sp_rank]
-                Ks = torch.chunk(Ks, sp_size, dim=1)[sp_rank]
+            if tt % sp_size == 0:
+                vec = torch.chunk(vec.reshape(bs, tt, -1), sp_size, dim=1)[sp_rank].reshape(-1, vec.shape[-1])
+                if viewmats is not None:
+                    vm_local = torch.chunk(viewmats, sp_size, dim=1)[sp_rank]
+                    ks_local = None if Ks is None else torch.chunk(Ks, sp_size, dim=1)[sp_rank]
+                    prope_mats = _precompute_prope_mats(vm_local, ks_local)
+            else:
+                vec = repeat(vec, "(B T) C->B (T H W) C", B=bs, H=th, W=tw)
+                vec = torch.chunk(vec, sp_size, dim=1)[sp_rank]
+                vec = rearrange(vec, "B S C->(B S) C")
+                if viewmats is not None:
+                    vm_rep = repeat(viewmats, "B T M N->B (T H W) M N", H=th, W=tw)
+                    ks_rep = None if Ks is None else repeat(Ks, "B T M N->B (T H W) M N", H=th, W=tw)
+                    vm_local = torch.chunk(vm_rep, sp_size, dim=1)[sp_rank]
+                    ks_local = None if ks_rep is None else torch.chunk(ks_rep, sp_size, dim=1)[sp_rank]
+                    prope_mats = _precompute_prope_mats(vm_local, ks_local)
         else:
-            vec = rearrange(vec, "B S C->(B S) C")
+            if viewmats is not None:
+                prope_mats = _precompute_prope_mats(viewmats, Ks)
         assert text_states_2 is None, (
             "text_states_2 is not None, but handling of text_states_2 is not implemented in forward_bi yet."
         )
@@ -871,30 +1498,58 @@ class ARHunyuanVideo_1_5_DiffusionTransformer(ModelMixin, ConfigMixin):
         (txt, text_mask, vec_txt) = self.get_text_and_mask(
             encoder_attention_mask, text_states, timestep_txt, extra_kwargs, vision_states, mask_type
         )
+        block_text_mask = text_mask
+        resolved_bi_mode = self.attention_backend or self.attn_mode
+        if (
+            block_text_mask is not None
+            and resolved_bi_mode in {None, "torch", "flash", "sdpa", "cudnn", "sol_attn", "cudnn_fp8"}
+            and not torch.cuda.is_current_stream_capturing()
+        ):
+            if block_text_mask.dtype in {torch.int64, torch.int32}:
+                assert block_text_mask.max() <= 1 and block_text_mask.min() >= 0, (
+                    "Integer attention mask must be between 0 and 1 for torch attention."
+                )
+                block_text_mask = block_text_mask.to(torch.bool)
+            if block_text_mask.dtype == torch.bool:
+                if bool(block_text_mask.all()):
+                    block_text_mask = None
+                elif (
+                    block_text_mask.ndim == 2
+                    and block_text_mask.shape[1] == txt.shape[1]
+                    and (block_text_mask.shape[0] == 1 or bool((block_text_mask == block_text_mask[:1]).all()))
+                ):
+                    # Compact uniform padded text tokens once before the block stack so SDPA
+                    # takes the maskless Flash/cuDNN kernel instead of materializing 108 dense
+                    # (B, 1, L_img+L_txt, L_img+L_txt) pair_mask tensors. Masked txt positions
+                    # never affect img or valid txt tokens and txt is not returned.
+                    valid_idx = block_text_mask[0].nonzero(as_tuple=False).squeeze(-1)
+                    if valid_idx.numel() > 0:
+                        txt = txt.index_select(1, valid_idx).contiguous()
+                        block_text_mask = None
         freqs_cis = (freqs_cos, freqs_sin) if freqs_cos is not None else None
+        num_bi_blocks = len(self.double_blocks)
         for index, block in enumerate(self.double_blocks):
             force_full_attn = (
                 self.attn_mode in ["flex-block-attn"]
                 and self.attn_param["win_type"] == "hybrid"
                 and (self.attn_param["win_ratio"] > 0)
-                and ((index + 1) % self.attn_param["win_ratio"] == 0 or index + 1 == len(self.double_blocks))
+                and ((index + 1) % self.attn_param["win_ratio"] == 0 or index + 1 == num_bi_blocks)
             )
             self.attn_param["layer-name"] = f"double_block_{index + 1}"
-            (img, txt) = block(
-                bi_inference=True,
-                ar_txt_inference=False,
-                ar_vision_inference=False,
+            (img, txt) = block.forward_bi(
                 img=img,
                 txt=txt,
                 vec_txt=vec_txt,
                 vec=vec,
                 freqs_cis=freqs_cis,
-                text_mask=text_mask,
+                text_mask=block_text_mask,
                 attn_param=self.attn_param,
                 is_flash=force_full_attn,
                 block_idx=index,
-                viewmats=viewmats,
-                Ks=Ks,
+                viewmats=None if prope_mats is not None else viewmats,
+                Ks=None if prope_mats is not None else Ks,
+                prope_mats=prope_mats,
+                num_blocks=num_bi_blocks,
             )
         img = self.final_layer(img, vec)
         if sp_enabled:
@@ -937,6 +1592,4 @@ class ARHunyuanVideo_1_5_DiffusionTransformer(ModelMixin, ConfigMixin):
         return imgs
 
     def set_attn_mode(self, attn_mode: str):
-        self.attn_mode = attn_mode
-        for block in self.double_blocks:
-            block.attn_mode = attn_mode
+        self.set_attention_backend(attn_mode)
