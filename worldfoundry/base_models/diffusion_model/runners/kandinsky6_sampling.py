@@ -347,8 +347,8 @@ class Kandinsky6Sampler:
 
         piflow_enabled = bool(getattr(self.piflow_conf, "enabled", False))
         if piflow_enabled:
-            if not do_audio:
-                raise ValueError("piflow.enabled requires sample_audio=True")
+            if not getattr(dit, "is_multimodal", False):
+                raise ValueError("piflow.enabled requires a multimodal transformer")
             if abs(guidance_weight - 1.0) > 1e-6:
                 raise ValueError("piflow.enabled requires guidance_weight=1.0")
 
@@ -506,7 +506,7 @@ class Kandinsky6Sampler:
             pass  # first_frames injected inside denoise_loop via visual_cond_scheme
 
         audio_len = None
-        if do_audio:
+        if do_audio or piflow_enabled:
             downsample = int(getattr(self.audio_vae, "downsample_factor", 1024))
             # Audio length follows generated frames only (exclude tail reference).
             audio_dur = audio_latent_duration(
