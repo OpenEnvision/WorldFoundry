@@ -46,6 +46,7 @@ from worldfoundry.synthesis.visual_generation.vmem.vmem_runtime.utils.util impor
     Octree,
     Surfel,
     average_camera_pose,
+    camera_outlier_filtered_center,
     do_sample,
     encode_image,
     encode_vae_image,
@@ -1044,16 +1045,7 @@ class VMemPipeline:
         Returns:
             translation_scaling_factor: translation scaling factor
         """
-        ref_c2ws = c2ws
-        camera_dist_2med = torch.norm(
-            ref_c2ws[:, :3, 3] - ref_c2ws[:, :3, 3].median(0, keepdim=True).values,
-            dim=-1,
-        )
-        valid_mask = camera_dist_2med <= torch.clamp(
-            torch.quantile(camera_dist_2med.float(), 0.97) * 10,
-            max=1e6,
-        )
-        c2ws[:, :3, 3] -= ref_c2ws[valid_mask, :3, 3].mean(0, keepdim=True)
+        c2ws[:, :3, 3] -= camera_outlier_filtered_center(c2ws)
 
         # camera normalization
         camera_dists = c2ws[:, :3, 3].clone()

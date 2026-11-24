@@ -908,9 +908,6 @@ class PointCloudViewer:
             time.sleep(10.0)
 
 
-from sklearn.decomposition import PCA  # noqa: E402 - Follows module-level definitions, as upstream.
-
-
 def colorize_feature_map(x):
     """
     Args:
@@ -934,6 +931,8 @@ def colorize_feature_map_np(x):
     Args:
         x: np.ndarray, [H, W, D]
     """
+    from sklearn.decomposition import PCA
+
     pca = PCA(n_components=3)
     pca_features = pca.fit_transform(x.reshape(-1, x.shape[-1]))
 

@@ -77,3 +77,31 @@ def test_default_config_path_keeps_fallback_when_data_config_is_absent(
     assert runtime_env.default_config_path(tmp_path) == default
     monkeypatch.setenv("VMEM_RUNTIME_ROOT", str(tmp_path))
     assert runtime_env.default_config_path() == default
+
+
+def test_camera_outlier_filtered_center_deterministic_mode() -> None:
+    from worldfoundry.synthesis.visual_generation.vmem.vmem_runtime.utils.util import (
+        camera_outlier_filtered_center,
+    )
+
+    c2ws = torch.eye(4, dtype=torch.float32).unsqueeze(0).repeat(5, 1, 1)
+    c2ws[:, :3, 3] = torch.tensor(
+        [
+            [0.0, 0.0, 0.0],
+            [1.0, 2.0, 3.0],
+            [2.0, 4.0, 6.0],
+            [3.0, 6.0, 9.0],
+            [4.0, 8.0, 12.0],
+        ],
+        dtype=torch.float32,
+    )
+    prev = torch.are_deterministic_algorithms_enabled()
+    try:
+        torch.use_deterministic_algorithms(True)
+        cpu_center = camera_outlier_filtered_center(c2ws)
+        torch.testing.assert_close(cpu_center, torch.tensor([[2.0, 4.0, 6.0]]))
+        if torch.cuda.is_available():
+            cuda_center = camera_outlier_filtered_center(c2ws.cuda())
+            torch.testing.assert_close(cuda_center.cpu(), cpu_center)
+    finally:
+        torch.use_deterministic_algorithms(prev)

@@ -161,6 +161,21 @@ def get_plucker_coordinates(
     return plucker
 
 
+def camera_outlier_filtered_center(ref_c2ws: torch.Tensor) -> torch.Tensor:
+    """Compute outlier-filtered camera translation center deterministically."""
+    positions = ref_c2ws[:, :3, 3]
+    # CUDA median with dim= lacks a deterministic kernel; compute median over the small camera axis on CPU.
+    median_pos = (
+        positions.detach().cpu().median(0, keepdim=True).values.to(device=positions.device, dtype=positions.dtype)
+    )
+    camera_dist_2med = torch.norm(positions - median_pos, dim=-1)
+    valid_mask = camera_dist_2med <= torch.clamp(
+        torch.quantile(camera_dist_2med.float(), 0.97) * 10,
+        max=1e6,
+    )
+    return positions[valid_mask].mean(0, keepdim=True)
+
+
 def get_value_dict(
     curr_imgs,
     curr_imgs_clip,
@@ -185,16 +200,7 @@ def get_value_dict(
     w2c = torch.linalg.inv(c2w)
 
     # camera centering
-    ref_c2ws = all_c2ws
-    camera_dist_2med = torch.norm(
-        ref_c2ws[:, :3, 3] - ref_c2ws[:, :3, 3].median(0, keepdim=True).values,
-        dim=-1,
-    )
-    valid_mask = camera_dist_2med <= torch.clamp(
-        torch.quantile(camera_dist_2med, 0.97) * 10,
-        max=1e6,
-    )
-    c2w[:, :3, 3] -= ref_c2ws[valid_mask, :3, 3].mean(0, keepdim=True)
+    c2w[:, :3, 3] -= camera_outlier_filtered_center(all_c2ws)
     w2c = torch.linalg.inv(c2w)
 
     # camera normalization
