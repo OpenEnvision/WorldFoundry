@@ -5,7 +5,7 @@ description: Score generated artifacts with benchmarks, metrics, and reproducibl
 
 Evaluation turns model outputs into reviewable evidence: prepare inputs, generate or import results, score them, and write a scorecard. Model launch details stay in runners; benchmarks consume normalized `GenerationResult` rows. Scoring and leaderboard claims are separate — a successful framework import is not the same as an official leaderboard run.
 
-For a first end-to-end path, use [Quickstart](/docs/quickstart). For flags and discovery commands, see [CLI](/docs/reference/cli). For per-benchmark layouts, see [Benchmark Hub](/docs/evaluation/benchmark-hub). For metric recipes, see [Metrics](/docs/evaluation/metrics).
+For a first end-to-end path, use [Quickstart](/docs/quickstart). For flags and discovery commands, see [CLI](/docs/reference/cli). For per-benchmark layouts, see [Benchmark Hub](/docs/evaluation/benchmark-hub). For metric recipes, see [Metrics](/docs/evaluation/metrics). For 15-model H200 inference speedups and quality verification, see [VideoGen & World Model Acceleration Benchmarks](/docs/guides/videogen-acceleration-benchmarks).
 
 ## What to run
 
@@ -186,5 +186,6 @@ Subsystem ownership and data flow: [Evaluation core](/docs/maintainers/architect
 
 - [Benchmark Hub](/docs/evaluation/benchmark-hub) — per-benchmark setup and run notes
 - [Metrics](/docs/evaluation/metrics) — in-tree scorers and compute APIs
+- [VideoGen & World Model Acceleration Benchmarks](/docs/guides/videogen-acceleration-benchmarks) — 15-model H200 speedup & quality benchmark report
 - [Supported models](/docs/guides/supported-models) — catalog status
 - [Embodied official runtime](/docs/evaluation/embodied-official-runtime) — Docker / simulator path

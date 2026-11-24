@@ -1,6 +1,6 @@
 {
   "title": "Guides",
-  "defaultOpen": false,
+  "defaultOpen": true,
   "pages": [
     "local-assets",
     "tui",

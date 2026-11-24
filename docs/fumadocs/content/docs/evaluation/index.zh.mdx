@@ -5,7 +5,7 @@ description: 用 benchmark、metric 与可复现 scorecard 对生成产物打分
 
 评测把模型输出变成可审查证据：准备输入、生成或导入结果、打分、写出 scorecard。模型启动细节留在 runner；benchmark 消费归一化的 `GenerationResult`。打分与 leaderboard 声明是分开的——framework 导入成功不等于官方榜单跑通。
 
-首次端到端流程见[快速开始](/zh/docs/quickstart)。Flag 与 discovery 命令见 [CLI](/zh/docs/reference/cli)。各 benchmark 布局见 [Benchmark Hub](/zh/docs/evaluation/benchmark-hub)。Metric 配方见[指标](/zh/docs/evaluation/metrics)。
+首次端到端流程见[快速开始](/zh/docs/quickstart)。Flag 与 discovery 命令见 [CLI](/zh/docs/reference/cli)。各 benchmark 布局见 [Benchmark Hub](/zh/docs/evaluation/benchmark-hub)。Metric 配方见[指标](/zh/docs/evaluation/metrics)。15 款视频生成与世界模型在 H200 上的完整加速基准与质量验证见[视频生成与世界模型加速基准](/zh/docs/guides/videogen-acceleration-benchmarks)。
 
 ## 该跑什么
 
@@ -186,5 +186,6 @@ Framework 的导入证据使用 `official-validation`；数据集、checkpoint�
 
 - [Benchmark Hub](/zh/docs/evaluation/benchmark-hub) — 各 benchmark 准备与运行说明
 - [指标](/zh/docs/evaluation/metrics) — 仓内 scorer 与 compute API
+- [视频生成与世界模型加速基准](/zh/docs/guides/videogen-acceleration-benchmarks) — 15 款模型在 H200 上的加速与质量实测报告
 - [支持的模型](/zh/docs/guides/supported-models) — catalog 状态
 - [Embodied official runtime](/zh/docs/evaluation/embodied-official-runtime) — Docker / 仿真器路径

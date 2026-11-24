@@ -1,6 +1,6 @@
 {
   "title": "指南",
-  "defaultOpen": false,
+  "defaultOpen": true,
   "pages": [
     "local-assets",
     "tui",
