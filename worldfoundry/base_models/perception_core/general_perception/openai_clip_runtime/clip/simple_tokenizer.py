@@ -1,15 +1,38 @@
 import gzip
 import html
-import os
 from functools import lru_cache
+from importlib.metadata import PackageNotFoundError, distribution
+from os import PathLike
+from pathlib import Path
 
 import ftfy
 import regex as re
 
+from worldfoundry.core.io.filesystem.file_utils import file_sha256
+
+_BPE_FILENAME = "bpe_simple_vocab_16e6.txt.gz"
+# Official OpenAI CLIP vocabulary at d05afc436d78f1c48dc0dbf8e5980a9d471f35f6.
+_OPENAI_BPE_SHA256 = "924691ac288e54409236115652ad4aa250f48203de50a9e4722a6ecd48d6804a"
+
 
 @lru_cache
-def default_bpe():
-    return os.path.join(os.path.dirname(os.path.abspath(__file__)), "bpe_simple_vocab_16e6.txt.gz")
+def default_bpe() -> str:
+    """Resolve the local OpenAI vocabulary or its identical OpenCLIP copy."""
+    bundled = Path(__file__).resolve().with_name(_BPE_FILENAME)
+    if bundled.is_file():
+        return str(bundled)
+    try:
+        packaged = Path(distribution("open-clip-torch").locate_file(f"open_clip/{_BPE_FILENAME}"))
+    except PackageNotFoundError:
+        packaged = None
+    if packaged is not None and packaged.is_file():
+        if file_sha256(packaged) != _OPENAI_BPE_SHA256:
+            raise ValueError(f"Installed OpenAI CLIP BPE vocabulary differs from the official file: {packaged}")
+        return str(packaged)
+    raise FileNotFoundError(
+        f"OpenAI CLIP BPE vocabulary is missing: {bundled}. "
+        "Stage the official vocabulary locally or install open-clip-torch to provide it."
+    )
 
 
 @lru_cache
@@ -60,10 +83,11 @@ def whitespace_clean(text):
 
 
 class SimpleTokenizer:
-    def __init__(self, bpe_path: str = default_bpe()):
+    def __init__(self, bpe_path: str | PathLike[str] | None = None):
         self.byte_encoder = bytes_to_unicode()
         self.byte_decoder = {v: k for k, v in self.byte_encoder.items()}
-        merges = gzip.open(bpe_path).read().decode("utf-8").split("\n")  # noqa: SIM115 - Keeps the upstream file-handle lifetime.
+        with gzip.open(bpe_path if bpe_path is not None else default_bpe()) as vocab_file:
+            merges = vocab_file.read().decode("utf-8").split("\n")
         merges = merges[1 : 49152 - 256 - 2 + 1]
         merges = [tuple(merge.split()) for merge in merges]
         vocab = list(bytes_to_unicode().values())
