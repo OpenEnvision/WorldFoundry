@@ -411,6 +411,8 @@ def _cp_a2a_qkv_forward_impl(
     k: torch.Tensor,
     v: torch.Tensor,
     cp_ctx: _ResolvedContextParallel,
+    *,
+    ephemeral: bool = False,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """Exchange ``[T_local, H_all, D]`` -> ``[T_padded, H_local, D]`` with zero post-A2A copy."""
 
@@ -422,6 +424,24 @@ def _cp_a2a_qkv_forward_impl(
         return empty, empty.clone(), empty.clone()
 
     s_pad = sp_size * s_loc
+    if cp_ctx.all_to_all_fn is None and q.is_cuda and not torch.is_grad_enabled():
+        from worldfoundry.core.distributed.sequence_parallel.symm_mem_all_to_all import (
+            try_symm_mem_all_to_all_qkv,
+            ulysses_backend_mode,
+        )
+
+        if ulysses_backend_mode() != "torch":
+            symm_qkv = try_symm_mem_all_to_all_qkv(
+                q.unsqueeze(0),
+                k.unsqueeze(0),
+                v.unsqueeze(0),
+                cp_ctx.process_group,
+                ephemeral=ephemeral,
+            )
+            if symm_qkv is not None:
+                cp_ctx.all_to_all_calls += 3
+                return symm_qkv[0].squeeze(0), symm_qkv[1].squeeze(0), symm_qkv[2].squeeze(0)
+
     use_async = (
         cp_ctx.all_to_all_fn is None
         and not (q.is_cuda and torch.cuda.is_current_stream_capturing())
@@ -456,6 +476,8 @@ def _cp_a2a_qkv_forward_impl(
 def _cp_a2a_out_forward_impl(
     out_full: torch.Tensor,
     cp_ctx: _ResolvedContextParallel,
+    *,
+    ephemeral: bool = False,
 ) -> torch.Tensor:
     """Exchange ``[T_padded, H_local, D]`` -> ``[T_local, H_all, D]`` with zero pre-A2A copy."""
 
@@ -465,6 +487,28 @@ def _cp_a2a_out_forward_impl(
     if s_pad == 0:
         return torch.empty((0, h_all, head_dim), device=out_full.device, dtype=out_full.dtype)
     s_loc = s_pad // sp_size
+    if cp_ctx.all_to_all_fn is None and out_full.is_cuda and not torch.is_grad_enabled():
+        from worldfoundry.core.distributed.sequence_parallel.symm_mem_all_to_all import (
+            try_symm_mem_all_to_all_o,
+            ulysses_backend_mode,
+        )
+        from worldfoundry.core.distributed.sequence_parallel.triton_ulysses_ops import (
+            ulysses_unpack_o_gather_head,
+        )
+
+        if ulysses_backend_mode() != "torch":
+            symm_o = try_symm_mem_all_to_all_o(
+                out_full.unsqueeze(0),
+                cp_ctx.process_group,
+                ephemeral=ephemeral,
+            )
+            if symm_o is not None:
+                cp_ctx.all_to_all_calls += 1
+                return symm_o.squeeze(0)
+            send = out_full.contiguous().view(sp_size, 1, s_loc, h_loc, head_dim)
+            recv = torch.empty_like(send)
+            _cp_exec_all_to_all_single(recv, send, cp_ctx, async_op=False)
+            return ulysses_unpack_o_gather_head(recv, sp_size).squeeze(0)
     send = out_full.contiguous().view(sp_size, s_loc, h_loc, head_dim)
     recv = torch.empty_like(send)
     _cp_exec_all_to_all_single(recv, send, cp_ctx, async_op=False)
@@ -534,7 +578,7 @@ def _cp_all_to_all_qkv(
     if torch.is_grad_enabled() and (q.requires_grad or k.requires_grad or v.requires_grad):
         out: Any = _CPAllToAllQKV.apply(q, k, v, cp_ctx)
         return out
-    return _cp_a2a_qkv_forward_impl(q, k, v, cp_ctx)
+    return _cp_a2a_qkv_forward_impl(q, k, v, cp_ctx, ephemeral=not torch.is_grad_enabled())
 
 
 def _cp_all_to_all_out(
@@ -544,7 +588,7 @@ def _cp_all_to_all_out(
     if torch.is_grad_enabled() and out_full.requires_grad:
         out: Any = _CPAllToAllOut.apply(out_full, cp_ctx)
         return out
-    return _cp_a2a_out_forward_impl(out_full, cp_ctx)
+    return _cp_a2a_out_forward_impl(out_full, cp_ctx, ephemeral=not torch.is_grad_enabled())
 
 
 def _resolve_probe_bounds(

@@ -128,6 +128,20 @@ class DistributedAutograd:
             assert input_.dim() == 4, f"input must be 4D tensor, got {input_.dim()} and shape {input_.shape}"
 
             if scatter_dim == 2 and gather_dim == 1:
+                from worldfoundry.core.distributed.sequence_parallel.symm_mem_all_to_all import (
+                    ulysses_backend_mode,
+                )
+                from worldfoundry.core.distributed.sequence_parallel.triton_ulysses_ops import (
+                    ulysses_pack_single_scatter_head,
+                    ulysses_unpack_single_gather_seq,
+                )
+
+                if ulysses_backend_mode() != "torch":
+                    packed = ulysses_pack_single_scatter_head(input_, world_size)
+                    exchanged = torch.empty_like(packed)
+                    dist.all_to_all_single(exchanged, packed, group=group)
+                    return ulysses_unpack_single_gather_seq(exchanged, world_size)
+
                 bs, shard_seqlen, hn, hd = input_.shape
                 seqlen = shard_seqlen * world_size
                 shard_hn = hn // world_size
@@ -143,6 +157,28 @@ class DistributedAutograd:
 
                 return output
             elif scatter_dim == 1 and gather_dim == 2:
+                from worldfoundry.core.distributed.sequence_parallel.symm_mem_all_to_all import (
+                    try_symm_mem_all_to_all_o,
+                    ulysses_backend_mode,
+                )
+                from worldfoundry.core.distributed.sequence_parallel.triton_ulysses_ops import (
+                    ulysses_pack_o_scatter_seq,
+                    ulysses_unpack_o_gather_head,
+                )
+
+                if ulysses_backend_mode() != "torch":
+                    symm_out = try_symm_mem_all_to_all_o(
+                        input_,
+                        group,
+                        ephemeral=False if any(ctx.needs_input_grad) else None,
+                    )
+                    if symm_out is not None:
+                        return symm_out
+                    packed = ulysses_pack_o_scatter_seq(input_, world_size)
+                    exchanged = torch.empty_like(packed)
+                    dist.all_to_all_single(exchanged, packed, group=group)
+                    return ulysses_unpack_o_gather_head(exchanged, world_size)
+
                 bs, seqlen, shard_hn, hd = input_.shape
                 hn = shard_hn * world_size
                 shard_seqlen = seqlen // world_size

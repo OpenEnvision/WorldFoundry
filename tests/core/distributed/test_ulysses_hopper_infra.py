@@ -323,6 +323,61 @@ def _nccl_ulysses_worker(rank: int, world_size: int, init_path: str, result_queu
             got_rp = row_lin(full_x[..., rank * half : (rank + 1) * half])
             torch.testing.assert_close(got_rp, ref_rp, rtol=1e-2, atol=2e-2)
 
+            # 7) DistributedAutograd.AllToAll4D (GroupCoordinator path, both directions)
+            from worldfoundry.core.distributed.sequence_parallel.device_communicators.base_device_communicator import (
+                DistributedAutograd,
+            )
+
+            x4d = torch.randn((1, 32, 8, 128), device=device, dtype=torch.bfloat16)
+            os.environ["WORLDFOUNDRY_ULYSSES_BACKEND"] = "torch"
+            ref_a2a_in = DistributedAutograd.AllToAll4D.apply(group, x4d, world_size, 2, 1)
+            ref_a2a_out = DistributedAutograd.AllToAll4D.apply(group, ref_a2a_in, world_size, 1, 2)
+            os.environ["WORLDFOUNDRY_ULYSSES_BACKEND"] = "symm_mem"
+            got_a2a_in = DistributedAutograd.AllToAll4D.apply(group, x4d, world_size, 2, 1)
+            got_a2a_out = DistributedAutograd.AllToAll4D.apply(group, got_a2a_in, world_size, 1, 2)
+            assert torch.equal(got_a2a_in, ref_a2a_in)
+            assert torch.equal(got_a2a_out, ref_a2a_out)
+
+            # 8) MiniMax-H3 _cp_all_to_all_qkv / _cp_all_to_all_out (inference ephemeral + counter)
+            from worldfoundry.base_models.diffusion_model.models.networks.minimax_h3.dit import (
+                _cp_all_to_all_out,
+                _cp_all_to_all_qkv,
+                _ResolvedContextParallel,
+            )
+
+            cp_ctx_ref = _ResolvedContextParallel(
+                sp_size=world_size, rank=rank, process_group=group, all_to_all_fn=None, all_gather_fn=None
+            )
+            cp_ctx_got = _ResolvedContextParallel(
+                sp_size=world_size, rank=rank, process_group=group, all_to_all_fn=None, all_gather_fn=None
+            )
+            q3 = q.squeeze(0)[:, :12, :].contiguous()
+            k3 = k.squeeze(0)[:, :12, :].contiguous()
+            v3 = v.squeeze(0)[:, :12, :].contiguous()
+            os.environ["WORLDFOUNDRY_ULYSSES_BACKEND"] = "torch"
+            rq3, rk3, rv3 = _cp_all_to_all_qkv(q3, k3, v3, cp_ctx_ref)
+            ro3 = _cp_all_to_all_out(rq3, cp_ctx_ref)
+            os.environ["WORLDFOUNDRY_ULYSSES_BACKEND"] = "symm_mem"
+            gq3, gk3, gv3 = _cp_all_to_all_qkv(q3, k3, v3, cp_ctx_got)
+            assert torch.equal(gq3, rq3) and torch.equal(gk3, rk3) and torch.equal(gv3, rv3)
+            go3 = _cp_all_to_all_out(gq3, cp_ctx_got)
+            assert torch.equal(go3, ro3)
+            assert cp_ctx_got.all_to_all_calls == cp_ctx_ref.all_to_all_calls == 4
+
+        # 8b) MiniMax-H3 autograd backward must NOT alias gq/gk/gv on symm_mem buffer
+        os.environ["WORLDFOUNDRY_ULYSSES_BACKEND"] = "symm_mem"
+        cp_ctx_grad = _ResolvedContextParallel(
+            sp_size=world_size, rank=rank, process_group=group, all_to_all_fn=None, all_gather_fn=None
+        )
+        qg = q3.detach().clone().requires_grad_(True)
+        kg = k3.detach().clone().requires_grad_(True)
+        vg = v3.detach().clone().requires_grad_(True)
+        q_ex, k_ex, v_ex = _cp_all_to_all_qkv(qg, kg, vg, cp_ctx_grad)
+        loss = (q_ex.float() * 1.0 + k_ex.float() * 2.0 + v_ex.float() * 3.0).sum()
+        loss.backward()
+        assert qg.grad is not None and kg.grad is not None and vg.grad is not None
+        assert torch.all(qg.grad == 1.0) and torch.all(kg.grad == 2.0) and torch.all(vg.grad == 3.0)
+
         clear_symm_mem_pools()
         result_queue.put(True)
     finally:

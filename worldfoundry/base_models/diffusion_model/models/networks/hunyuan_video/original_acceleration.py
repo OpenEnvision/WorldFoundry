@@ -2368,24 +2368,28 @@ def run_sp_maskless_joint_attention(
         all_to_all_4D,
         all_to_all_4d_many,
     )
-
-    q_img_full, k_img_full, v_img_full = all_to_all_4d_many(
-        (q_img, k_img, v_img),
-        group=sp_group,
-        scatter_dim=2,
-        gather_dim=1,
-        assume_even=True,
+    from worldfoundry.core.distributed.sequence_parallel.symm_mem_all_to_all import (
+        ulysses_ephemeral_output_scope,
     )
-    local_heads = int(q_txt.shape[2]) // int(sp_size)
-    head_offset = int(sp_rank) * local_heads
-    q_txt_h = q_txt.narrow(2, head_offset, local_heads)
-    k_txt_h = k_txt.narrow(2, head_offset, local_heads)
-    v_txt_h = v_txt.narrow(2, head_offset, local_heads)
 
-    img_full_len = int(q_img_full.shape[1])
-    q_joint = torch.cat((q_img_full, q_txt_h), dim=1)
-    k_joint = torch.cat((k_img_full, k_txt_h), dim=1)
-    v_joint = torch.cat((v_img_full, v_txt_h), dim=1)
+    with ulysses_ephemeral_output_scope():
+        q_img_full, k_img_full, v_img_full = all_to_all_4d_many(
+            (q_img, k_img, v_img),
+            group=sp_group,
+            scatter_dim=2,
+            gather_dim=1,
+            assume_even=True,
+        )
+        local_heads = int(q_txt.shape[2]) // int(sp_size)
+        head_offset = int(sp_rank) * local_heads
+        q_txt_h = q_txt.narrow(2, head_offset, local_heads)
+        k_txt_h = k_txt.narrow(2, head_offset, local_heads)
+        v_txt_h = v_txt.narrow(2, head_offset, local_heads)
+
+        img_full_len = int(q_img_full.shape[1])
+        q_joint = torch.cat((q_img_full, q_txt_h), dim=1)
+        k_joint = torch.cat((k_img_full, k_txt_h), dim=1)
+        v_joint = torch.cat((v_img_full, v_txt_h), dim=1)
 
     attn_joint = run_maskless_joint_attention(
         q_joint,
