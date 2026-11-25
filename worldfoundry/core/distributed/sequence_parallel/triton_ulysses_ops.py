@@ -270,8 +270,8 @@ def _load_triton_kernels() -> dict[str, Any]:
         tl.store(out_ptr + dst_off, val, mask=out_mask)
 
     # ──────────────────────────────────────────────────────────────────────
-    # Direct NVLink P2P Symmetric Memory Kernels (zero-staging 1-kernel push
-    # and fresh-output pull-unpack)
+    # Direct NVLink P2P Symmetric Memory Kernels (Latin-square peer swizzled
+    # to eliminate 8-to-1 NVSwitch incast, coarse BLOCK_S streaming tiles)
     # ──────────────────────────────────────────────────────────────────────
 
     @triton.jit
@@ -296,42 +296,50 @@ def _load_triton_kernels() -> dict[str, Any]:
         H_L,
         P: tl.constexpr,
         D: tl.constexpr,
+        BLOCK_S: tl.constexpr,
         BLOCK_HD: tl.constexpr,
     ):
-        """1-kernel NVLink push: local (Q,K,V)[B,S_L,H_ORIG,D] -> peer[dst][3,B,P*S_L,H_L,D]."""
-        pid_bs = tl.program_id(0).to(tl.int64)
+        """1-kernel Latin-square NVSwitch push: local (Q,K,V) -> peer[dst][3,B,P*S_L,H_L,D]."""
+        pid_s_blk = tl.program_id(0).to(tl.int64)
         pid_pt = tl.program_id(1).to(tl.int64)
         pid_hd = tl.program_id(2).to(tl.int64)
 
-        dst_p = pid_pt // 3
-        t_idx = pid_pt - dst_p * 3
-        b_idx = pid_bs // S_L
-        s_l = pid_bs - b_idx * S_L
-
-        hd_l = H_L * D
-        hd_offs = pid_hd * BLOCK_HD + tl.arange(0, BLOCK_HD).to(tl.int64)
-        mask = hd_offs < hd_l
-        h_l = hd_offs // D
-        d_idx = hd_offs - h_l * D
-        h_global = dst_p * H_L + h_l
-        in_bounds = mask & (h_global < H_ORIG)
-
-        if t_idx == 0:
-            src_off = b_idx * stride_qb + s_l * stride_qs + h_global * stride_qh + d_idx
-            val = tl.load(q_ptr + src_off, mask=in_bounds, other=0.0)
-        elif t_idx == 1:
-            src_off = b_idx * stride_kb + s_l * stride_ks + h_global * stride_kh + d_idx
-            val = tl.load(k_ptr + src_off, mask=in_bounds, other=0.0)
-        else:
-            src_off = b_idx * stride_vb + s_l * stride_vs + h_global * stride_vh + d_idx
-            val = tl.load(v_ptr + src_off, mask=in_bounds, other=0.0)
+        raw_p = pid_pt // 3
+        t_idx = pid_pt - raw_p * 3
+        # Latin-square swizzle: every rank targets a distinct peer per wave.
+        dst_p = (src_rank + raw_p) % P
 
         peer_base_i64 = tl.load(peer_out_ptrs_ptr + dst_p)
         peer_ptr = peer_base_i64.to(tl.pointer_type(q_ptr.dtype.element_ty))
 
+        hd_l = H_L * D
+        hd_offs = pid_hd * BLOCK_HD + tl.arange(0, BLOCK_HD).to(tl.int64)
+        hd_mask = hd_offs < hd_l
+        h_l = hd_offs // D
+        d_idx = hd_offs - h_l * D
+        h_global = dst_p * H_L + h_l
+        in_h = hd_mask & (h_global < H_ORIG)
+
         s_full = P * S_L
-        dst_row = (t_idx * B + b_idx) * s_full + (src_rank * S_L + s_l)
-        tl.store(peer_ptr + dst_row * hd_l + hd_offs, val, mask=mask)
+        total_bs = B * S_L
+        s_start = pid_s_blk * BLOCK_S
+
+        for i in range(BLOCK_S):
+            bs_idx = s_start + i
+            if bs_idx < total_bs:
+                b_idx = bs_idx // S_L
+                s_l = bs_idx - b_idx * S_L
+                if t_idx == 0:
+                    src_off = b_idx * stride_qb + s_l * stride_qs + h_global * stride_qh + d_idx
+                    val = tl.load(q_ptr + src_off, mask=in_h, other=0.0)
+                elif t_idx == 1:
+                    src_off = b_idx * stride_kb + s_l * stride_ks + h_global * stride_kh + d_idx
+                    val = tl.load(k_ptr + src_off, mask=in_h, other=0.0)
+                else:
+                    src_off = b_idx * stride_vb + s_l * stride_vs + h_global * stride_vh + d_idx
+                    val = tl.load(v_ptr + src_off, mask=in_h, other=0.0)
+                dst_row = (t_idx * B + b_idx) * s_full + (src_rank * S_L + s_l)
+                tl.store(peer_ptr + dst_row * hd_l + hd_offs, val, mask=hd_mask, cache_modifier=".cs")
 
     @triton.jit
     def _symm_qkv_pull_unpack_kernel(
@@ -344,34 +352,46 @@ def _load_triton_kernels() -> dict[str, Any]:
         S_L,
         HD_L,
         P: tl.constexpr,
+        BLOCK_S: tl.constexpr,
         BLOCK_HD: tl.constexpr,
     ):
-        """Pull [dst_rank,:,:,:,:] from each peer's [P,3,B,S_L,HD_L] into fresh (Q,K,V)."""
-        pid_s = tl.program_id(0).to(tl.int64)
-        pid_bt = tl.program_id(1).to(tl.int64)
+        """Latin-square swizzled pull from each peer's [P,3,B,S_L,HD_L] into fresh (Q,K,V)."""
+        pid_s_blk = tl.program_id(0).to(tl.int64)
+        pid_pbt = tl.program_id(1).to(tl.int64)
         pid_hd = tl.program_id(2).to(tl.int64)
 
-        t_idx = pid_bt // B
-        b_idx = pid_bt - t_idx * B
-        src_p = pid_s // S_L
-        s_l = pid_s - src_p * S_L
+        tb = 3 * B
+        raw_p = pid_pbt // tb
+        rem = pid_pbt - raw_p * tb
+        t_idx = rem // B
+        b_idx = rem - t_idx * B
+        src_p = (dst_rank + raw_p) % P
 
         peer_base_i64 = tl.load(peer_in_ptrs_ptr + src_p)
         peer_ptr = peer_base_i64.to(tl.pointer_type(q_out_ptr.dtype.element_ty))
 
         hd_offs = pid_hd * BLOCK_HD + tl.arange(0, BLOCK_HD).to(tl.int64)
-        mask = hd_offs < HD_L
+        hd_mask = hd_offs < HD_L
 
-        src_row = ((dst_rank * 3 + t_idx) * B + b_idx) * S_L + s_l
-        val = tl.load(peer_ptr + src_row * HD_L + hd_offs, mask=mask)
+        s_full = P * S_L
+        s_start = pid_s_blk * BLOCK_S
+        src_base_row = ((dst_rank * 3 + t_idx) * B + b_idx) * S_L
+        dst_base_row = b_idx * s_full + src_p * S_L
 
-        dst_row = b_idx * (P * S_L) + pid_s
-        if t_idx == 0:
-            tl.store(q_out_ptr + dst_row * HD_L + hd_offs, val, mask=mask)
-        elif t_idx == 1:
-            tl.store(k_out_ptr + dst_row * HD_L + hd_offs, val, mask=mask)
-        else:
-            tl.store(v_out_ptr + dst_row * HD_L + hd_offs, val, mask=mask)
+        for i in range(BLOCK_S):
+            s_l = s_start + i
+            if s_l < S_L:
+                val = tl.load(
+                    peer_ptr + (src_base_row + s_l) * HD_L + hd_offs,
+                    mask=hd_mask,
+                    eviction_policy="evict_first",
+                )
+                if t_idx == 0:
+                    tl.store(q_out_ptr + (dst_base_row + s_l) * HD_L + hd_offs, val, mask=hd_mask)
+                elif t_idx == 1:
+                    tl.store(k_out_ptr + (dst_base_row + s_l) * HD_L + hd_offs, val, mask=hd_mask)
+                else:
+                    tl.store(v_out_ptr + (dst_base_row + s_l) * HD_L + hd_offs, val, mask=hd_mask)
 
     @triton.jit
     def _symm_o_direct_push_kernel(
@@ -387,33 +407,38 @@ def _load_triton_kernels() -> dict[str, Any]:
         H_L,
         P: tl.constexpr,
         D: tl.constexpr,
+        BLOCK_S: tl.constexpr,
         BLOCK_HD: tl.constexpr,
     ):
-        """1-kernel NVLink push: local O[B,P*S_L,H_L,D] -> peer[dst][B,S_L,H_OUT,D] (fused crop)."""
-        pid_bs = tl.program_id(0).to(tl.int64)
-        dst_p = tl.program_id(1).to(tl.int64)
+        """1-kernel Latin-square NVSwitch push: local O -> peer[dst][B,S_L,H_OUT,D] (fused crop)."""
+        pid_s_blk = tl.program_id(0).to(tl.int64)
+        raw_p = tl.program_id(1).to(tl.int64)
         pid_hd = tl.program_id(2).to(tl.int64)
 
-        b_idx = pid_bs // S_L
-        s_l = pid_bs - b_idx * S_L
-        s_global = dst_p * S_L + s_l
-
-        hd_l = H_L * D
-        hd_offs = pid_hd * BLOCK_HD + tl.arange(0, BLOCK_HD).to(tl.int64)
-        mask = hd_offs < hd_l
-        h_l = hd_offs // D
-        d_idx = hd_offs - h_l * D
-        h_global = src_rank * H_L + h_l
-        out_mask = mask & (h_global < H_OUT)
-
-        src_off = b_idx * stride_ob + s_global * stride_os + h_l * stride_oh + d_idx
-        val = tl.load(o_ptr + src_off, mask=out_mask)
-
+        dst_p = (src_rank + raw_p) % P
         peer_base_i64 = tl.load(peer_out_ptrs_ptr + dst_p)
         peer_ptr = peer_base_i64.to(tl.pointer_type(o_ptr.dtype.element_ty))
 
-        dst_off = (pid_bs * H_OUT + h_global) * D + d_idx
-        tl.store(peer_ptr + dst_off, val, mask=out_mask)
+        hd_l = H_L * D
+        hd_offs = pid_hd * BLOCK_HD + tl.arange(0, BLOCK_HD).to(tl.int64)
+        hd_mask = hd_offs < hd_l
+        h_l = hd_offs // D
+        d_idx = hd_offs - h_l * D
+        h_global = src_rank * H_L + h_l
+        out_mask = hd_mask & (h_global < H_OUT)
+
+        total_bs = B * S_L
+        s_start = pid_s_blk * BLOCK_S
+        for i in range(BLOCK_S):
+            bs_idx = s_start + i
+            if bs_idx < total_bs:
+                b_idx = bs_idx // S_L
+                s_l = bs_idx - b_idx * S_L
+                s_global = dst_p * S_L + s_l
+                src_off = b_idx * stride_ob + s_global * stride_os + h_l * stride_oh + d_idx
+                val = tl.load(o_ptr + src_off, mask=out_mask)
+                dst_off = (bs_idx * H_OUT + h_global) * D + d_idx
+                tl.store(peer_ptr + dst_off, val, mask=out_mask, cache_modifier=".cs")
 
     @triton.jit
     def _symm_o_pull_unpack_kernel(
@@ -426,32 +451,41 @@ def _load_triton_kernels() -> dict[str, Any]:
         H_L,
         P: tl.constexpr,
         D: tl.constexpr,
+        BLOCK_S: tl.constexpr,
         BLOCK_HD: tl.constexpr,
     ):
-        """Pull [dst_rank,:,:,:,:] from each peer's [P,B,S_L,H_L,D] into fresh O[B,S_L,H_OUT,D]."""
-        pid_bs = tl.program_id(0).to(tl.int64)
-        src_p = tl.program_id(1).to(tl.int64)
+        """Latin-square swizzled pull from each peer's [P,B,S_L,H_L,D] into fresh O[B,S_L,H_OUT,D]."""
+        pid_s_blk = tl.program_id(0).to(tl.int64)
+        raw_p = tl.program_id(1).to(tl.int64)
         pid_hd = tl.program_id(2).to(tl.int64)
 
-        b_idx = pid_bs // S_L
-        s_l = pid_bs - b_idx * S_L
-
-        hd_l = H_L * D
-        hd_offs = pid_hd * BLOCK_HD + tl.arange(0, BLOCK_HD).to(tl.int64)
-        mask = hd_offs < hd_l
-        h_l = hd_offs // D
-        d_idx = hd_offs - h_l * D
-        h_global = src_p * H_L + h_l
-        out_mask = mask & (h_global < H_OUT)
-
+        src_p = (dst_rank + raw_p) % P
         peer_base_i64 = tl.load(peer_in_ptrs_ptr + src_p)
         peer_ptr = peer_base_i64.to(tl.pointer_type(out_ptr.dtype.element_ty))
 
-        src_row = (dst_rank * B + b_idx) * S_L + s_l
-        val = tl.load(peer_ptr + src_row * hd_l + hd_offs, mask=out_mask)
+        hd_l = H_L * D
+        hd_offs = pid_hd * BLOCK_HD + tl.arange(0, BLOCK_HD).to(tl.int64)
+        hd_mask = hd_offs < hd_l
+        h_l = hd_offs // D
+        d_idx = hd_offs - h_l * D
+        h_global = src_p * H_L + h_l
+        out_mask = hd_mask & (h_global < H_OUT)
 
-        dst_off = (pid_bs * H_OUT + h_global) * D + d_idx
-        tl.store(out_ptr + dst_off, val, mask=out_mask)
+        total_bs = B * S_L
+        s_start = pid_s_blk * BLOCK_S
+        for i in range(BLOCK_S):
+            bs_idx = s_start + i
+            if bs_idx < total_bs:
+                b_idx = bs_idx // S_L
+                s_l = bs_idx - b_idx * S_L
+                src_row = (dst_rank * B + b_idx) * S_L + s_l
+                val = tl.load(
+                    peer_ptr + src_row * hd_l + hd_offs,
+                    mask=out_mask,
+                    eviction_policy="evict_first",
+                )
+                dst_off = (bs_idx * H_OUT + h_global) * D + d_idx
+                tl.store(out_ptr + dst_off, val, mask=out_mask)
 
     return {
         "triton": triton,
@@ -907,6 +941,15 @@ def launch_symm_qkv_pack_into(
         )
 
 
+def _symm_block_s_for(rows: int) -> int:
+    """Choose coarse row-streaming tile size for NVLink P2P kernels."""
+    if rows >= 512:
+        return 16
+    if rows >= 128:
+        return 8
+    return 4
+
+
 def launch_symm_qkv_direct_push(
     q: torch.Tensor,
     k: torch.Tensor,
@@ -916,7 +959,7 @@ def launch_symm_qkv_direct_push(
     world_size: int,
     pad_heads: int,
 ) -> None:
-    """1-kernel NVLink push from local ``(q, k, v)`` straight into peers' symmetric output."""
+    """1-kernel Latin-square NVSwitch push from local ``(q, k, v)`` into peers' symmetric output."""
     b, s_l, h_orig, d = q.shape
     h_l = (h_orig + int(pad_heads)) // int(world_size)
     if b * s_l * h_l * d == 0:
@@ -924,8 +967,10 @@ def launch_symm_qkv_direct_push(
     kernels = _load_triton_kernels()
     triton_mod = kernels["triton"]
     hd_l = h_l * d
-    block_hd, num_warps = _block_hd_for(hd_l, triton_mod)
-    grid = (b * s_l, int(world_size) * 3, triton_mod.cdiv(hd_l, block_hd))
+    block_hd, _ = _block_hd_for(hd_l, triton_mod)
+    num_warps = 8 if block_hd >= 512 else 4
+    block_s = _symm_block_s_for(b * s_l)
+    grid = (triton_mod.cdiv(b * s_l, block_s), int(world_size) * 3, triton_mod.cdiv(hd_l, block_hd))
     with torch.cuda.device(q.device):
         kernels["symm_qkv_push"][grid](
             q,
@@ -948,6 +993,7 @@ def launch_symm_qkv_direct_push(
             h_l,
             P=int(world_size),
             D=d,
+            BLOCK_S=block_s,
             BLOCK_HD=block_hd,
             num_warps=num_warps,
         )
@@ -961,7 +1007,7 @@ def launch_symm_qkv_pull_unpack(
     dst_rank: int,
     world_size: int,
 ) -> None:
-    """Pull from all peers' symmetric input buffers directly into fresh ``(q_out, k_out, v_out)``."""
+    """Latin-square swizzled pull from all peers' symmetric input buffers into fresh ``(q_out, k_out, v_out)``."""
     b, s_full, h_l, d = q_out.shape
     s_l = s_full // int(world_size)
     if q_out.numel() == 0:
@@ -969,8 +1015,10 @@ def launch_symm_qkv_pull_unpack(
     kernels = _load_triton_kernels()
     triton_mod = kernels["triton"]
     hd_l = h_l * d
-    block_hd, num_warps = _block_hd_for(hd_l, triton_mod)
-    grid = (s_full, 3 * b, triton_mod.cdiv(hd_l, block_hd))
+    block_hd, _ = _block_hd_for(hd_l, triton_mod)
+    num_warps = 8 if block_hd >= 512 else 4
+    block_s = _symm_block_s_for(s_l)
+    grid = (triton_mod.cdiv(s_l, block_s), int(world_size) * 3 * b, triton_mod.cdiv(hd_l, block_hd))
     with torch.cuda.device(q_out.device):
         kernels["symm_qkv_pull"][grid](
             peer_in_ptrs,
@@ -982,6 +1030,7 @@ def launch_symm_qkv_pull_unpack(
             s_l,
             hd_l,
             P=int(world_size),
+            BLOCK_S=block_s,
             BLOCK_HD=block_hd,
             num_warps=num_warps,
         )
@@ -1029,7 +1078,7 @@ def launch_symm_o_direct_push(
     world_size: int,
     out_heads: int,
 ) -> None:
-    """1-kernel NVLink push from local ``O`` straight into peers' symmetric output with fused crop."""
+    """1-kernel Latin-square NVSwitch push from local ``O`` into peers' symmetric output with fused crop."""
     b, s_full, h_l, d = x.shape
     s_l = s_full // int(world_size)
     if x.numel() == 0 or out_heads <= 0:
@@ -1037,8 +1086,10 @@ def launch_symm_o_direct_push(
     kernels = _load_triton_kernels()
     triton_mod = kernels["triton"]
     hd_l = h_l * d
-    block_hd, num_warps = _block_hd_for(hd_l, triton_mod)
-    grid = (b * s_l, int(world_size), triton_mod.cdiv(hd_l, block_hd))
+    block_hd, _ = _block_hd_for(hd_l, triton_mod)
+    num_warps = 8 if block_hd >= 512 else 4
+    block_s = _symm_block_s_for(b * s_l)
+    grid = (triton_mod.cdiv(b * s_l, block_s), int(world_size), triton_mod.cdiv(hd_l, block_hd))
     with torch.cuda.device(x.device):
         kernels["symm_o_push"][grid](
             x,
@@ -1053,6 +1104,7 @@ def launch_symm_o_direct_push(
             h_l,
             P=int(world_size),
             D=d,
+            BLOCK_S=block_s,
             BLOCK_HD=block_hd,
             num_warps=num_warps,
         )
@@ -1065,15 +1117,17 @@ def launch_symm_o_pull_unpack(
     world_size: int,
     h_l: int,
 ) -> None:
-    """Pull from all peers' symmetric input buffers directly into fresh ``out[B, S_L, H_OUT, D]``."""
+    """Latin-square swizzled pull from all peers' symmetric input buffers into fresh ``out[B, S_L, H_OUT, D]``."""
     b, s_l, out_heads, d = out.shape
     if out.numel() == 0:
         return
     kernels = _load_triton_kernels()
     triton_mod = kernels["triton"]
     hd_l = int(h_l) * d
-    block_hd, num_warps = _block_hd_for(hd_l, triton_mod)
-    grid = (b * s_l, int(world_size), triton_mod.cdiv(hd_l, block_hd))
+    block_hd, _ = _block_hd_for(hd_l, triton_mod)
+    num_warps = 8 if block_hd >= 512 else 4
+    block_s = _symm_block_s_for(b * s_l)
+    grid = (triton_mod.cdiv(b * s_l, block_s), int(world_size), triton_mod.cdiv(hd_l, block_hd))
     with torch.cuda.device(out.device):
         kernels["symm_o_pull"][grid](
             peer_in_ptrs,
@@ -1085,6 +1139,7 @@ def launch_symm_o_pull_unpack(
             int(h_l),
             P=int(world_size),
             D=d,
+            BLOCK_S=block_s,
             BLOCK_HD=block_hd,
             num_warps=num_warps,
         )

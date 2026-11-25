@@ -354,15 +354,25 @@ def try_symm_mem_row_parallel_mm_all_reduce(
         return None
 
     symm_ops = getattr(torch.ops, "symm_mem", None)
-    two_shot = getattr(symm_ops, "two_shot_all_reduce_", None) if symm_ops is not None else None
-    if not callable(two_shot):
+    if symm_ops is None:
+        return None
+    multimem = getattr(symm_ops, "multimem_all_reduce_", None)
+    two_shot = getattr(symm_ops, "two_shot_all_reduce_", None)
+    has_multicast = bool(getattr(slot.hdl, "multicast_ptr", 0))
+    # On NVSwitch meshes with >=4 GPUs, hardware NVLS SHARP multicast reduces in
+    # one hop (1.2x-2.0x faster than NCCL & two-shot). On 2 GPUs, direct P2P
+    # two-shot avoids multicast setup overhead and outperforms NCCL.
+    reduce_fn = multimem if (world_size >= 4 and has_multicast and callable(multimem)) else two_shot
+    if not callable(reduce_fn):
+        reduce_fn = multimem if (has_multicast and callable(multimem)) else None
+    if not callable(reduce_fn):
         return None
 
     try:
         symm_2d = slot.buf[:needed_bytes].view(torch.float32).view(rows, out_features)
         with torch.cuda.device(value.device):
             torch.mm(value_2d, weight.t(), out_dtype=torch.float32, out=symm_2d)
-            two_shot(symm_2d, "sum", group_name)
+            reduce_fn(symm_2d, "sum", group_name)
             if bias is not None:
                 symm_2d.add_(bias.to(torch.float32))
             return symm_2d.to(value.dtype).reshape(*value.shape[:-1], out_features)
