@@ -1777,13 +1777,19 @@ class MiniMaxH3DiTBlock(nn.Module):
         attention_groups: list[tuple[torch.Tensor, torch.Tensor]] | None = None,
         ffn_conditioner: Any = None,
         cp_seq_len: int | None = None,
-    ) -> torch.Tensor:
+        pre_normed_h: torch.Tensor | None = None,
+        next_norm_adaln: tuple[nn.RMSNorm, torch.Tensor, torch.Tensor] | None = None,
+    ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
         if adaln_params is None:
             adaln_params = self.adaln_proj(adaln_input)
         shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = adaln_params
 
         residual = x
-        h = rms_norm_indexed_scale_shift(x, self.norm1, shift_msa, scale_msa, combined_indices, dtype=x.dtype)
+        h = (
+            rms_norm_indexed_scale_shift(x, self.norm1, shift_msa, scale_msa, combined_indices, dtype=x.dtype)
+            if pre_normed_h is None
+            else pre_normed_h
+        )
         if attention_groups is None:
             h = self.attn(
                 h,
@@ -1826,6 +1832,18 @@ class MiniMaxH3DiTBlock(nn.Module):
             x = ffn_conditioner(x)
             h = rms_norm_indexed_scale_shift(x, self.norm2, shift_mlp, scale_mlp, combined_indices, dtype=x.dtype)
         h = self.mlp(h)
+        if next_norm_adaln is not None:
+            next_norm1, next_shift_msa, next_scale_msa = next_norm_adaln
+            return indexed_gate_rms_norm_indexed_scale_shift(
+                residual,
+                gate_mlp,
+                h,
+                next_norm1,
+                next_shift_msa,
+                next_scale_msa,
+                combined_indices,
+                dtype=x.dtype,
+            )
         return indexed_gate(residual, gate_mlp, h, combined_indices, dtype=x.dtype)
 
 
@@ -2497,8 +2515,40 @@ class MiniMaxH3DiTModel(nn.Module):
         capturing = hidden.is_cuda and torch.cuda.is_current_stream_capturing()
         before_snapshot = self._snapshot_slice_counters(start, stop) if capturing else None
         rope_cache = (cos_sin_cache, positions)
+        can_fuse_boundary = (
+            stop - start > 1
+            and not self.training
+            and not torch.is_grad_enabled()
+            and hidden.is_cuda
+            and hidden.dtype == _BF16
+        )
+        pre_normed_h: torch.Tensor | None = None
+        cached_adaln: tuple[torch.Tensor, ...] | None = None
         for index in range(start, stop):
-            hidden = self.blocks[index](
+            block = self.blocks[index]
+            cur_adaln = cached_adaln
+            cached_adaln = None
+            next_norm_adaln: tuple[nn.RMSNorm, torch.Tensor, torch.Tensor] | None = None
+            if (
+                can_fuse_boundary
+                and index + 1 < stop
+                and type(block) is MiniMaxH3DiTBlock
+                and isinstance(self.blocks[index + 1], MiniMaxH3DiTBlock)
+                and type(self.blocks[index + 1]) is MiniMaxH3DiTBlock
+            ):
+                next_block = self.blocks[index + 1]
+                assert isinstance(next_block, MiniMaxH3DiTBlock)
+                if (
+                    not block._forward_hooks
+                    and not block._forward_pre_hooks
+                    and not next_block._forward_hooks
+                    and not next_block._forward_pre_hooks
+                    and not next_block.norm1._forward_hooks
+                    and not next_block.norm1._forward_pre_hooks
+                ):
+                    cached_adaln = next_block.adaln_proj(adaln_input)
+                    next_norm_adaln = (next_block.norm1, cached_adaln[0], cached_adaln[1])
+            res = block(
                 hidden,
                 adaln_input=adaln_input,
                 combined_indices=combined_indices,
@@ -2509,8 +2559,16 @@ class MiniMaxH3DiTModel(nn.Module):
                 ignore_trailing_pad=ignore_trailing_pad,
                 prefix_sink_tokens=prefix_sink_tokens,
                 force_dense_attention=force_dense_attention,
+                adaln_params=cur_adaln,
                 cp_seq_len=cp_seq_len,
+                pre_normed_h=pre_normed_h,
+                next_norm_adaln=next_norm_adaln,
             )
+            if next_norm_adaln is not None:
+                hidden, pre_normed_h = res
+            else:
+                hidden = res
+                pre_normed_h = None
         if before_snapshot is not None:
             fp8_after, ffn_after, prov_after, cp_a2a_after = self._snapshot_slice_counters(start, stop)
             fp8_before, ffn_before, prov_before, cp_a2a_before = before_snapshot

@@ -139,8 +139,41 @@ class ViTBase(nn.Module):
     def forward_transformer_blocks(self, hidden_states, rotary_pos_emb, pack_info=None):
         if pack_info is None:
             pack_info = {}
-        for block in self.transformer_blocks:
-            hidden_states = block(hidden_states, rotary_pos_emb, pack_info)
+        can_fuse_boundary = (
+            not self.training
+            and not torch.is_grad_enabled()
+            and hidden_states.is_cuda
+            and len(self.transformer_blocks) > 1
+        )
+        pre_normed: torch.Tensor | None = None
+        num_blocks = len(self.transformer_blocks)
+        for idx, block in enumerate(self.transformer_blocks):
+            if (
+                can_fuse_boundary
+                and type(block) is TransformerBlock
+                and not block._forward_hooks
+                and not block._forward_pre_hooks
+            ):
+                next_norm = None
+                if idx + 1 < num_blocks:
+                    nb = self.transformer_blocks[idx + 1]
+                    if (
+                        type(nb) is TransformerBlock
+                        and not nb._forward_hooks
+                        and not nb._forward_pre_hooks
+                        and TransformerBlock._is_fusable_rmsnorm(nb.norm1)
+                    ):
+                        next_norm = nb.norm1
+                hidden_states, pre_normed = block._forward_impl(
+                    hidden_states,
+                    rotary_pos_emb,
+                    pack_info,
+                    pre_normed=pre_normed,
+                    next_norm=next_norm,
+                )
+            else:
+                pre_normed = None
+                hidden_states = block(hidden_states, rotary_pos_emb, pack_info)
         return hidden_states
 
     def apply_mask_postprocess(self, hidden_states, num_patches):
@@ -336,8 +369,41 @@ class ViT3DDecoder(ViTBase):
                     rotary_pos_emb,
                 )
 
-        for block in self.transformer_blocks:
-            hidden_states = block(hidden_states, rotary_pos_emb, pack_info)
+        can_fuse_boundary = (
+            not self.training
+            and not torch.is_grad_enabled()
+            and hidden_states.is_cuda
+            and len(self.transformer_blocks) > 1
+        )
+        pre_normed: torch.Tensor | None = None
+        num_blocks = len(self.transformer_blocks)
+        for idx, block in enumerate(self.transformer_blocks):
+            if (
+                can_fuse_boundary
+                and type(block) is TransformerBlock
+                and not block._forward_hooks
+                and not block._forward_pre_hooks
+            ):
+                next_norm = None
+                if idx + 1 < num_blocks:
+                    nb = self.transformer_blocks[idx + 1]
+                    if (
+                        type(nb) is TransformerBlock
+                        and not nb._forward_hooks
+                        and not nb._forward_pre_hooks
+                        and TransformerBlock._is_fusable_rmsnorm(nb.norm1)
+                    ):
+                        next_norm = nb.norm1
+                hidden_states, pre_normed = block._forward_impl(
+                    hidden_states,
+                    rotary_pos_emb,
+                    pack_info,
+                    pre_normed=pre_normed,
+                    next_norm=next_norm,
+                )
+            else:
+                pre_normed = None
+                hidden_states = block(hidden_states, rotary_pos_emb, pack_info)
 
         hidden_states = self.norm_out(hidden_states)
 

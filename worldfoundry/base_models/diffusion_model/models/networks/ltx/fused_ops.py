@@ -945,6 +945,158 @@ def _load_triton_kernels() -> dict[str, Any]:
             tl.store(o2_base + cols, (norm_f * (1.0 + s2) + sh2).to(x_in.dtype), mask=mask)
 
     @triton.jit
+    def _residual_gate_dual_rmsnorm_scale_shift_kernel(
+        res_ptr,
+        val_ptr,
+        gate_ptr,
+        s1_ptr,
+        sh1_ptr,
+        s2_ptr,
+        sh2_ptr,
+        out_ptr,
+        o1_ptr,
+        o2_ptr,
+        res_stride_b,
+        res_stride_t,
+        val_stride_b,
+        val_stride_t,
+        gate_stride_b,
+        gate_stride_t,
+        s1_stride_b,
+        s1_stride_t,
+        sh1_stride_b,
+        sh1_stride_t,
+        s2_stride_b,
+        s2_stride_t,
+        sh2_stride_b,
+        sh2_stride_t,
+        out_stride_b,
+        out_stride_t,
+        o1_stride_b,
+        o1_stride_t,
+        o2_stride_b,
+        o2_stride_t,
+        seq_len,
+        eps,
+        features: tl.constexpr,
+        round_bf16: tl.constexpr,
+        BLOCK_SIZE: tl.constexpr,
+    ):
+        """Fuse ``out = residual + value * gate`` and two AdaLN views of ``rms_norm(out)``."""
+        row = tl.program_id(0).to(tl.int64)
+        b = row // seq_len
+        t = row % seq_len
+        cols = tl.arange(0, BLOCK_SIZE)
+        mask = cols < features
+
+        res_in = tl.load(res_ptr + b * res_stride_b + t * res_stride_t + cols, mask=mask, other=0.0)
+        val_in = tl.load(val_ptr + b * val_stride_b + t * val_stride_t + cols, mask=mask, other=0.0)
+        gate_in = tl.load(gate_ptr + b * gate_stride_b + t * gate_stride_t + cols, mask=mask, other=0.0)
+
+        prod = val_in.to(tl.float32) * gate_in.to(tl.float32)
+        if round_bf16:
+            prod = _round_bf16(prod)
+        out_val = (res_in.to(tl.float32) + prod).to(res_in.dtype)
+        tl.store(out_ptr + b * out_stride_b + t * out_stride_t + cols, out_val, mask=mask)
+
+        out_f = out_val.to(tl.float32)
+        variance = tl.sum(out_f * out_f, axis=0) / features
+        norm_f = (out_f * tl.rsqrt(variance + eps)).to(res_in.dtype).to(tl.float32)
+
+        s1 = tl.load(s1_ptr + b * s1_stride_b + t * s1_stride_t + cols, mask=mask, other=0.0).to(tl.float32)
+        sh1 = tl.load(sh1_ptr + b * sh1_stride_b + t * sh1_stride_t + cols, mask=mask, other=0.0).to(tl.float32)
+        s2 = tl.load(s2_ptr + b * s2_stride_b + t * s2_stride_t + cols, mask=mask, other=0.0).to(tl.float32)
+        sh2 = tl.load(sh2_ptr + b * sh2_stride_b + t * sh2_stride_t + cols, mask=mask, other=0.0).to(tl.float32)
+
+        tl.store(
+            o1_ptr + b * o1_stride_b + t * o1_stride_t + cols, (norm_f * (1.0 + s1) + sh1).to(res_in.dtype), mask=mask
+        )
+        tl.store(
+            o2_ptr + b * o2_stride_b + t * o2_stride_t + cols, (norm_f * (1.0 + s2) + sh2).to(res_in.dtype), mask=mask
+        )
+
+    @triton.jit
+    def _residual_gate_dual_rmsnorm_scale_shift_tiled_kernel(
+        res_ptr,
+        val_ptr,
+        gate_ptr,
+        s1_ptr,
+        sh1_ptr,
+        s2_ptr,
+        sh2_ptr,
+        out_ptr,
+        o1_ptr,
+        o2_ptr,
+        res_stride_b,
+        res_stride_t,
+        val_stride_b,
+        val_stride_t,
+        gate_stride_b,
+        gate_stride_t,
+        s1_stride_b,
+        s1_stride_t,
+        sh1_stride_b,
+        sh1_stride_t,
+        s2_stride_b,
+        s2_stride_t,
+        sh2_stride_b,
+        sh2_stride_t,
+        out_stride_b,
+        out_stride_t,
+        o1_stride_b,
+        o1_stride_t,
+        o2_stride_b,
+        o2_stride_t,
+        seq_len,
+        eps,
+        features: tl.constexpr,
+        round_bf16: tl.constexpr,
+        BLOCK_N: tl.constexpr,
+    ):
+        """Register-safe 2-pass tiled residual-gate + dual RMSNorm+AdaLN for wide dims (``> 4096``)."""
+        row = tl.program_id(0).to(tl.int64)
+        b = row // seq_len
+        t = row % seq_len
+        res_base = res_ptr + b * res_stride_b + t * res_stride_t
+        val_base = val_ptr + b * val_stride_b + t * val_stride_t
+        gate_base = gate_ptr + b * gate_stride_b + t * gate_stride_t
+        out_base = out_ptr + b * out_stride_b + t * out_stride_t
+
+        sq = tl.zeros((), dtype=tl.float32)
+        for start in tl.static_range(0, features, BLOCK_N):
+            cols = start + tl.arange(0, BLOCK_N)
+            mask = cols < features
+            res_in = tl.load(res_base + cols, mask=mask, other=0.0)
+            val_in = tl.load(val_base + cols, mask=mask, other=0.0)
+            gate_in = tl.load(gate_base + cols, mask=mask, other=0.0)
+            prod = val_in.to(tl.float32) * gate_in.to(tl.float32)
+            if round_bf16:
+                prod = _round_bf16(prod)
+            out_val = (res_in.to(tl.float32) + prod).to(res_in.dtype)
+            tl.store(out_base + cols, out_val, mask=mask)
+            out_f = tl.where(mask, out_val.to(tl.float32), 0.0)
+            sq += tl.sum(out_f * out_f, axis=0)
+        rstd = tl.rsqrt(sq / features + eps)
+
+        s1_base = s1_ptr + b * s1_stride_b + t * s1_stride_t
+        sh1_base = sh1_ptr + b * sh1_stride_b + t * sh1_stride_t
+        s2_base = s2_ptr + b * s2_stride_b + t * s2_stride_t
+        sh2_base = sh2_ptr + b * sh2_stride_b + t * sh2_stride_t
+        o1_base = o1_ptr + b * o1_stride_b + t * o1_stride_t
+        o2_base = o2_ptr + b * o2_stride_b + t * o2_stride_t
+        for start in tl.static_range(0, features, BLOCK_N):
+            cols = start + tl.arange(0, BLOCK_N)
+            mask = cols < features
+            out_in = tl.load(out_base + cols, mask=mask, other=0.0)
+            norm_f = (out_in.to(tl.float32) * rstd).to(out_in.dtype).to(tl.float32)
+            s1 = tl.load(s1_base + cols, mask=mask, other=0.0).to(tl.float32)
+            sh1 = tl.load(sh1_base + cols, mask=mask, other=0.0).to(tl.float32)
+            tl.store(o1_base + cols, (norm_f * (1.0 + s1) + sh1).to(out_in.dtype), mask=mask)
+            s2 = tl.load(s2_base + cols, mask=mask, other=0.0).to(tl.float32)
+            sh2 = tl.load(sh2_base + cols, mask=mask, other=0.0).to(tl.float32)
+            tl.store(o2_base + cols, (norm_f * (1.0 + s2) + sh2).to(out_in.dtype), mask=mask)
+
+    @triton.jit
     def _scale_shift_kernel(
         x_ptr,
         s_ptr,
@@ -1133,6 +1285,8 @@ def _load_triton_kernels() -> dict[str, Any]:
         "rmsnorm_adaln_fp8": _rmsnorm_scale_shift_fp8_kernel,
         "dual_rmsnorm_adaln": _dual_rmsnorm_scale_shift_kernel,
         "dual_rmsnorm_adaln_tiled": _dual_rmsnorm_scale_shift_tiled_kernel,
+        "res_gate_dual_rmsnorm_adaln": _residual_gate_dual_rmsnorm_scale_shift_kernel,
+        "res_gate_dual_rmsnorm_adaln_tiled": _residual_gate_dual_rmsnorm_scale_shift_tiled_kernel,
         "scale_shift": _scale_shift_kernel,
         "qk_rmsnorm_paired": _qk_rmsnorm_paired_kernel,
         "gelu_fp8_1pass": _gelu_tanh_fp8_1pass_kernel,
@@ -1879,6 +2033,133 @@ def _ltx_dual_rmsnorm_scale_shift_fake(
 
 
 @torch.library.custom_op(
+    "worldfoundry::ltx_residual_gate_dual_rmsnorm_scale_shift",
+    mutates_args=(),
+    device_types="cuda",
+)
+def _ltx_residual_gate_dual_rmsnorm_scale_shift_op(
+    residual: torch.Tensor,
+    value: torch.Tensor,
+    gate: torch.Tensor,
+    scale1: torch.Tensor,
+    shift1: torch.Tensor,
+    scale2: torch.Tensor,
+    shift2: torch.Tensor,
+    eps: float,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    kernels = _load_triton_kernels()
+    triton = kernels["triton"]
+    batch_size, seq_len, features = residual.shape
+    block_size = triton.next_power_of_2(features)
+    num_warps = 4 if block_size <= 2048 else 8
+
+    gate_exp = gate.expand_as(residual)
+    s1_exp = scale1.expand_as(residual)
+    sh1_exp = shift1.expand_as(residual)
+    s2_exp = scale2.expand_as(residual)
+    sh2_exp = shift2.expand_as(residual)
+    out = torch.empty_like(residual)
+    o1 = torch.empty_like(residual)
+    o2 = torch.empty_like(residual)
+    round_bf16 = torch.promote_types(value.dtype, gate.dtype) == torch.bfloat16
+    with torch.cuda.device(residual.device):
+        if features > 4096:
+            kernels["res_gate_dual_rmsnorm_adaln_tiled"][(batch_size * seq_len,)](
+                residual,
+                value,
+                gate_exp,
+                s1_exp,
+                sh1_exp,
+                s2_exp,
+                sh2_exp,
+                out,
+                o1,
+                o2,
+                residual.stride(0),
+                residual.stride(1),
+                value.stride(0),
+                value.stride(1),
+                gate_exp.stride(0),
+                gate_exp.stride(1),
+                s1_exp.stride(0),
+                s1_exp.stride(1),
+                sh1_exp.stride(0),
+                sh1_exp.stride(1),
+                s2_exp.stride(0),
+                s2_exp.stride(1),
+                sh2_exp.stride(0),
+                sh2_exp.stride(1),
+                out.stride(0),
+                out.stride(1),
+                o1.stride(0),
+                o1.stride(1),
+                o2.stride(0),
+                o2.stride(1),
+                seq_len,
+                eps,
+                features=features,
+                round_bf16=round_bf16,
+                BLOCK_N=2048,
+                num_warps=4,
+            )
+        else:
+            kernels["res_gate_dual_rmsnorm_adaln"][(batch_size * seq_len,)](
+                residual,
+                value,
+                gate_exp,
+                s1_exp,
+                sh1_exp,
+                s2_exp,
+                sh2_exp,
+                out,
+                o1,
+                o2,
+                residual.stride(0),
+                residual.stride(1),
+                value.stride(0),
+                value.stride(1),
+                gate_exp.stride(0),
+                gate_exp.stride(1),
+                s1_exp.stride(0),
+                s1_exp.stride(1),
+                sh1_exp.stride(0),
+                sh1_exp.stride(1),
+                s2_exp.stride(0),
+                s2_exp.stride(1),
+                sh2_exp.stride(0),
+                sh2_exp.stride(1),
+                out.stride(0),
+                out.stride(1),
+                o1.stride(0),
+                o1.stride(1),
+                o2.stride(0),
+                o2.stride(1),
+                seq_len,
+                eps,
+                features=features,
+                round_bf16=round_bf16,
+                BLOCK_SIZE=block_size,
+                num_warps=num_warps,
+            )
+    return out, o1, o2
+
+
+@_ltx_residual_gate_dual_rmsnorm_scale_shift_op.register_fake
+def _ltx_residual_gate_dual_rmsnorm_scale_shift_fake(
+    residual: torch.Tensor,
+    value: torch.Tensor,
+    gate: torch.Tensor,
+    scale1: torch.Tensor,
+    shift1: torch.Tensor,
+    scale2: torch.Tensor,
+    shift2: torch.Tensor,
+    eps: float,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    del value, gate, scale1, shift1, scale2, shift2, eps
+    return torch.empty_like(residual), torch.empty_like(residual), torch.empty_like(residual)
+
+
+@torch.library.custom_op(
     "worldfoundry::ltx_scale_shift",
     mutates_args=(),
     device_types="cuda",
@@ -2365,6 +2646,51 @@ def fused_ltx_dual_rmsnorm_scale_shift(
     return normed * (1 + scale1) + shift1, normed * (1 + scale2) + shift2
 
 
+def fused_ltx_residual_gate_dual_rmsnorm_scale_shift(
+    residual: torch.Tensor,
+    value: torch.Tensor,
+    gate: torch.Tensor,
+    scale1: torch.Tensor,
+    shift1: torch.Tensor,
+    scale2: torch.Tensor,
+    shift2: torch.Tensor,
+    *,
+    eps: float,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Fuse ``out = residual + value * gate`` and two AdaLN views of ``rms_norm(out, eps)``."""
+    eligible = (
+        residual.ndim == 3
+        and value.shape == residual.shape
+        and 0 < residual.shape[-1] <= 8192
+        and residual.dtype == value.dtype == gate.dtype == scale1.dtype == shift1.dtype == scale2.dtype == shift2.dtype
+        and all(
+            t.ndim == 3
+            and t.shape[0] in (1, residual.shape[0])
+            and t.shape[1] in (1, residual.shape[1])
+            and t.shape[2] == residual.shape[2]
+            for t in (gate, scale1, shift1, scale2, shift2)
+        )
+        and _triton_cuda_eligible(residual, value, gate, scale1, shift1, scale2, shift2)
+    )
+    if eligible:
+        try:
+            return _ltx_residual_gate_dual_rmsnorm_scale_shift_op(
+                residual,
+                value,
+                gate,
+                scale1,
+                shift1,
+                scale2,
+                shift2,
+                float(eps),
+            )
+        except (ImportError, OSError):
+            pass
+    output = residual + value * gate
+    normed = rms_norm(output, None, eps=eps)
+    return output, normed * (1 + scale1) + shift1, normed * (1 + scale2) + shift2
+
+
 def fused_ltx_scale_shift(
     x: torch.Tensor,
     scale: torch.Tensor,
@@ -2651,6 +2977,7 @@ __all__ = [
     "fused_ltx_post_sa_residual_rmsnorm_adaln",
     "fused_ltx_qk_rmsnorm",
     "fused_ltx_qk_rmsnorm_rope",
+    "fused_ltx_residual_gate_dual_rmsnorm_scale_shift",
     "fused_ltx_rmsnorm_scale_shift_fp8",
     "fused_ltx_scale_shift",
     "ltx_fused_transformer_ops",

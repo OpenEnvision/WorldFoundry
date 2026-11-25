@@ -138,8 +138,8 @@ def _fused_qknorm_rope_kernel(
     k1 = tl.load(k_base + offs_h[None, :], mask=mask_h, other=0.0).to(tl.float32)
     k2 = tl.load(k_base + ROT_HALF + offs_h[None, :], mask=mask_h, other=0.0).to(tl.float32)
 
-    q_sum_sq = tl.sum(q1 * q1, axis=1) + tl.sum(q2 * q2, axis=1)
-    k_sum_sq = tl.sum(k1 * k1, axis=1) + tl.sum(k2 * k2, axis=1)
+    q_sum_sq = tl.sum(q1 * q1 + q2 * q2, axis=1)
+    k_sum_sq = tl.sum(k1 * k1 + k2 * k2, axis=1)
 
     if PASS_DIM > 0:
         offs_p = tl.arange(0, BLOCK_PASS)
@@ -178,6 +178,101 @@ def _fused_qknorm_rope_kernel(
         kp_n = (kp * k_rstd).to(tl.bfloat16) * kwp
         tl.store(q_out_base + rot_dim + offs_p[None, :], qp_n, mask=mask_p)
         tl.store(k_out_base + rot_dim + offs_p[None, :], kp_n, mask=mask_p)
+
+
+@triton.jit
+def _fused_qknorm_rope_1cta_kernel(
+    q_ptr,
+    k_ptr,
+    q_out_ptr,
+    k_out_ptr,
+    q_weight_ptr,
+    k_weight_ptr,
+    cos_sin_ptr,
+    eps,
+    q_stride_t,
+    q_stride_h,
+    k_stride_t,
+    k_stride_h,
+    out_stride_t,
+    out_stride_h,
+    cs_stride_t,
+    NUM_HEADS: tl.constexpr,
+    HEAD_DIM: tl.constexpr,
+    ROT_HALF: tl.constexpr,
+    PASS_DIM: tl.constexpr,
+    BLOCK_HALF: tl.constexpr,
+    BLOCK_PASS: tl.constexpr,
+    BLOCK_H: tl.constexpr,
+):
+    """One CTA per token: load ``cos/sin`` and RMSNorm weights once across all heads."""
+
+    token = tl.program_id(0).to(tl.int64)
+    offs_h = tl.arange(0, BLOCK_HALF)
+    rot_mask = offs_h < ROT_HALF
+
+    cs_base = cos_sin_ptr + token * cs_stride_t
+    cos_h = tl.load(cs_base + offs_h, mask=rot_mask, other=0.0).to(tl.bfloat16).to(tl.float32)[None, :]
+    sin_h = tl.load(cs_base + ROT_HALF + offs_h, mask=rot_mask, other=0.0).to(tl.bfloat16).to(tl.float32)[None, :]
+
+    qw1 = tl.load(q_weight_ptr + offs_h, mask=rot_mask, other=0.0).to(tl.bfloat16)[None, :]
+    qw2 = tl.load(q_weight_ptr + ROT_HALF + offs_h, mask=rot_mask, other=0.0).to(tl.bfloat16)[None, :]
+    kw1 = tl.load(k_weight_ptr + offs_h, mask=rot_mask, other=0.0).to(tl.bfloat16)[None, :]
+    kw2 = tl.load(k_weight_ptr + ROT_HALF + offs_h, mask=rot_mask, other=0.0).to(tl.bfloat16)[None, :]
+
+    if PASS_DIM > 0:
+        offs_p = tl.arange(0, BLOCK_PASS)
+        pass_mask = offs_p < PASS_DIM
+        rot_dim: tl.constexpr = 2 * ROT_HALF
+        qwp = tl.load(q_weight_ptr + rot_dim + offs_p, mask=pass_mask, other=0.0).to(tl.bfloat16)[None, :]
+        kwp = tl.load(k_weight_ptr + rot_dim + offs_p, mask=pass_mask, other=0.0).to(tl.bfloat16)[None, :]
+
+    q_tok = q_ptr + token * q_stride_t
+    k_tok = k_ptr + token * k_stride_t
+    q_out_tok = q_out_ptr + token * out_stride_t
+    k_out_tok = k_out_ptr + token * out_stride_t
+    inv_head_dim: tl.constexpr = 1.0 / HEAD_DIM
+
+    for h_start in tl.static_range(0, NUM_HEADS, BLOCK_H):
+        heads = h_start + tl.arange(0, BLOCK_H)
+        head_mask = heads < NUM_HEADS
+        mask_h = head_mask[:, None] & rot_mask[None, :]
+        q_base = q_tok + heads[:, None] * q_stride_h
+        k_base = k_tok + heads[:, None] * k_stride_h
+        q_out_base = q_out_tok + heads[:, None] * out_stride_h
+        k_out_base = k_out_tok + heads[:, None] * out_stride_h
+
+        q1 = tl.load(q_base + offs_h[None, :], mask=mask_h, other=0.0).to(tl.float32)
+        q2 = tl.load(q_base + ROT_HALF + offs_h[None, :], mask=mask_h, other=0.0).to(tl.float32)
+        k1 = tl.load(k_base + offs_h[None, :], mask=mask_h, other=0.0).to(tl.float32)
+        k2 = tl.load(k_base + ROT_HALF + offs_h[None, :], mask=mask_h, other=0.0).to(tl.float32)
+
+        q_sum_sq = tl.sum(q1 * q1 + q2 * q2, axis=1)
+        k_sum_sq = tl.sum(k1 * k1 + k2 * k2, axis=1)
+
+        if PASS_DIM > 0:
+            mask_p = head_mask[:, None] & pass_mask[None, :]
+            qp = tl.load(q_base + rot_dim + offs_p[None, :], mask=mask_p, other=0.0).to(tl.float32)
+            kp = tl.load(k_base + rot_dim + offs_p[None, :], mask=mask_p, other=0.0).to(tl.float32)
+            q_sum_sq += tl.sum(qp * qp, axis=1)
+            k_sum_sq += tl.sum(kp * kp, axis=1)
+
+        q_rstd = tl.rsqrt(q_sum_sq * inv_head_dim + eps)[:, None]
+        k_rstd = tl.rsqrt(k_sum_sq * inv_head_dim + eps)[:, None]
+
+        q1_n = ((q1 * q_rstd).to(tl.bfloat16) * qw1).to(tl.float32)
+        q2_n = ((q2 * q_rstd).to(tl.bfloat16) * qw2).to(tl.float32)
+        k1_n = ((k1 * k_rstd).to(tl.bfloat16) * kw1).to(tl.float32)
+        k2_n = ((k2 * k_rstd).to(tl.bfloat16) * kw2).to(tl.float32)
+
+        tl.store(q_out_base + offs_h[None, :], (q1_n * cos_h - q2_n * sin_h).to(tl.bfloat16), mask=mask_h)
+        tl.store(q_out_base + ROT_HALF + offs_h[None, :], (q2_n * cos_h + q1_n * sin_h).to(tl.bfloat16), mask=mask_h)
+        tl.store(k_out_base + offs_h[None, :], (k1_n * cos_h - k2_n * sin_h).to(tl.bfloat16), mask=mask_h)
+        tl.store(k_out_base + ROT_HALF + offs_h[None, :], (k2_n * cos_h + k1_n * sin_h).to(tl.bfloat16), mask=mask_h)
+
+        if PASS_DIM > 0:
+            tl.store(q_out_base + rot_dim + offs_p[None, :], (qp * q_rstd).to(tl.bfloat16) * qwp, mask=mask_p)
+            tl.store(k_out_base + rot_dim + offs_p[None, :], (kp * k_rstd).to(tl.bfloat16) * kwp, mask=mask_p)
 
 
 def fused_qknorm_rope(
@@ -224,33 +319,59 @@ def fused_qknorm_rope(
     # Cap BLOCK_H to 8 (4 for head_dim=256) to stay register-resident at high occupancy.
     max_block_h = 4 if head_dim >= 256 else 8
     block_h = min(triton.next_power_of_2(num_heads), max_block_h)
-    grid = (total, triton.cdiv(num_heads, block_h))
-
-    _fused_qknorm_rope_kernel[grid](
-        q_in,
-        k_in,
-        q_out,
-        k_out,
-        qw,
-        kw,
-        cs,
-        float(eps),
-        q_in.stride(0),
-        q_in.stride(1),
-        k_in.stride(0),
-        k_in.stride(1),
-        q_out.stride(0),
-        q_out.stride(1),
-        cs.stride(0),
-        num_heads,
-        HEAD_DIM=head_dim,
-        ROT_HALF=rot_half,
-        PASS_DIM=pass_dim,
-        BLOCK_HALF=block_half,
-        BLOCK_PASS=block_pass,
-        BLOCK_H=block_h,
-        num_warps=4,
-    )
+    if total >= 512 and num_heads > block_h:
+        _fused_qknorm_rope_1cta_kernel[(total,)](
+            q_in,
+            k_in,
+            q_out,
+            k_out,
+            qw,
+            kw,
+            cs,
+            float(eps),
+            q_in.stride(0),
+            q_in.stride(1),
+            k_in.stride(0),
+            k_in.stride(1),
+            q_out.stride(0),
+            q_out.stride(1),
+            cs.stride(0),
+            NUM_HEADS=num_heads,
+            HEAD_DIM=head_dim,
+            ROT_HALF=rot_half,
+            PASS_DIM=pass_dim,
+            BLOCK_HALF=block_half,
+            BLOCK_PASS=block_pass,
+            BLOCK_H=block_h,
+            num_warps=4,
+        )
+    else:
+        grid = (total, triton.cdiv(num_heads, block_h))
+        _fused_qknorm_rope_kernel[grid](
+            q_in,
+            k_in,
+            q_out,
+            k_out,
+            qw,
+            kw,
+            cs,
+            float(eps),
+            q_in.stride(0),
+            q_in.stride(1),
+            k_in.stride(0),
+            k_in.stride(1),
+            q_out.stride(0),
+            q_out.stride(1),
+            cs.stride(0),
+            num_heads,
+            HEAD_DIM=head_dim,
+            ROT_HALF=rot_half,
+            PASS_DIM=pass_dim,
+            BLOCK_HALF=block_half,
+            BLOCK_PASS=block_pass,
+            BLOCK_H=block_h,
+            num_warps=4,
+        )
     return q_out, k_out
 
 

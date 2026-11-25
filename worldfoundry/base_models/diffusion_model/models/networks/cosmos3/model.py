@@ -41,7 +41,12 @@ from worldfoundry.core.nn import DomainAwareLinear
 from worldfoundry.core.nn.checkpointing.gradient import gradient_checkpoint_forward
 from worldfoundry.core.nn.diffusion.timestep import TimestepEmbedding, Timesteps
 
-from .fused_ops import cosmos3_fa3_attention, fused_residual_add_rmsnorm, fused_rmsnorm_rope_gqa
+from .fused_ops import (
+    cosmos3_fa3_attention,
+    fused_residual_add_rmsnorm,
+    fused_rmsnorm_rope_gqa,
+    fused_rmsnorm_rope_gqa_cat_kv,
+)
 
 
 def _module_param_device(module: nn.Module) -> torch.device | None:
@@ -189,9 +194,12 @@ class Cosmos3AttnProcessor:
         # Generation pathway: project Q/K/V, QK-RMSNorm+RoPE, attend over [und, gen].
         q_gen, k_gen, v_gen = self._project_gen_qkv(attn, gen_seq)
         if self.use_fused_ops and not torch.is_grad_enabled() and q_gen.is_cuda:
-            q_gen, k_gen = fused_rmsnorm_rope_gqa(
+            q_gen, all_k, all_v = fused_rmsnorm_rope_gqa_cat_kv(
                 q_gen,
                 k_gen,
+                v_gen,
+                k_und,
+                v_und,
                 attn.norm_added_q.weight,
                 attn.norm_added_k.weight,
                 cos_gen,
@@ -205,9 +213,8 @@ class Cosmos3AttnProcessor:
             sin_g = sin_gen.unsqueeze(1)
             q_gen = q_gen * cos_g + _rotate_half(q_gen) * sin_g
             k_gen = k_gen * cos_g + _rotate_half(k_gen) * sin_g
-
-        all_k = torch.cat([k_und, k_gen], dim=0)
-        all_v = torch.cat([v_und, v_gen], dim=0)
+            all_k = torch.cat([k_und, k_gen], dim=0)
+            all_v = torch.cat([v_und, v_gen], dim=0)
         full_out = self._run_attn(q_gen, all_k, all_v, causal=False)
         gen_out = attn.to_add_out(full_out)
 
@@ -386,9 +393,12 @@ class Cosmos3VLTextMoTDecoderLayer(nn.Module):
         sin_gen: torch.Tensor,
         k_und: torch.Tensor,
         v_und: torch.Tensor,
-    ) -> torch.Tensor:
+        *,
+        pre_normed_gen: torch.Tensor | None = None,
+        next_norm: nn.RMSNorm | None = None,
+    ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
         """Execute ONLY the generation pathway reusing precomputed ``(k_und, v_und)``."""
-        gen_norm = self.input_layernorm_moe_gen(gen_seq)
+        gen_norm = self.input_layernorm_moe_gen(gen_seq) if pre_normed_gen is None else pre_normed_gen
         _, gen_attn_out = self.self_attn(
             None,
             gen_norm,
@@ -402,10 +412,21 @@ class Cosmos3VLTextMoTDecoderLayer(nn.Module):
                 self.post_attention_layernorm_moe_gen.weight,
                 eps=float(self.post_attention_layernorm_moe_gen.eps or 1e-6),
             )
-            return residual_gen + self.mlp_moe_gen(post_norm_gen)
+            mlp_out = self.mlp_moe_gen(post_norm_gen)
+            if next_norm is not None and not next_norm._forward_hooks and not next_norm._forward_pre_hooks:
+                return fused_residual_add_rmsnorm(
+                    residual_gen,
+                    mlp_out,
+                    next_norm.weight,
+                    eps=float(next_norm.eps or 1e-6),
+                )
+            return residual_gen + mlp_out
         residual_gen = gen_seq + gen_attn_out
         mlp_out_gen = self.mlp_moe_gen(self.post_attention_layernorm_moe_gen(residual_gen))
-        return residual_gen + mlp_out_gen
+        out = residual_gen + mlp_out_gen
+        if next_norm is not None:
+            return out, next_norm(out)
+        return out
 
     def forward(
         self,
@@ -1109,10 +1130,28 @@ class Cosmos3OmniTransformer(nn.Module):
                             uv_stack: torch.Tensor,
                         ) -> torch.Tensor:
                             cur = g_in
+                            pre_norm: torch.Tensor | None = None
                             for rel_idx in range(num_layers - 1):
-                                cur = self.layers[rel_idx + 1].forward_gen_with_cached_und_kv(
-                                    cur, c_g, s_g, uk_stack[rel_idx], uv_stack[rel_idx]
+                                layer = self.layers[rel_idx + 1]
+                                next_norm = (
+                                    self.layers[rel_idx + 2].input_layernorm_moe_gen
+                                    if (rel_idx + 2 < num_layers and layer._use_fused_ops)
+                                    else None
                                 )
+                                res = layer.forward_gen_with_cached_und_kv(
+                                    cur,
+                                    c_g,
+                                    s_g,
+                                    uk_stack[rel_idx],
+                                    uv_stack[rel_idx],
+                                    pre_normed_gen=pre_norm,
+                                    next_norm=next_norm,
+                                )
+                                if next_norm is not None:
+                                    cur, pre_norm = res
+                                else:
+                                    cur = res
+                                    pre_norm = None
                             return cur
 
                         seg_runner = piecewise_graph.get_or_register_segment(seg_name, _tail_segment)
@@ -1136,13 +1175,39 @@ class Cosmos3OmniTransformer(nn.Module):
                     cur = hidden_after_0
                     cur_cg = cos_gen_0
                     cur_sg = sin_gen_0
+                    pre_norm: torch.Tensor | None = None
                     for idx in range(1, num_layers):
-                        l_dev = _module_param_device(self.layers[idx])
+                        layer = self.layers[idx]
+                        l_dev = _module_param_device(layer)
+                        if cur.device != l_dev:
+                            pre_norm = None
                         cur = _to_device(cur, l_dev)
                         cur_cg = _to_device(cur_cg, l_dev)
                         cur_sg = _to_device(cur_sg, l_dev)
                         ki, vi = _to_device(und_entry.layer_kv[idx], l_dev)
-                        cur = self.layers[idx].forward_gen_with_cached_und_kv(cur, cur_cg, cur_sg, ki, vi)
+                        next_norm = (
+                            self.layers[idx + 1].input_layernorm_moe_gen
+                            if (
+                                idx + 1 < num_layers
+                                and layer._use_fused_ops
+                                and _module_param_device(self.layers[idx + 1]) == l_dev
+                            )
+                            else None
+                        )
+                        res = layer.forward_gen_with_cached_und_kv(
+                            cur,
+                            cur_cg,
+                            cur_sg,
+                            ki,
+                            vi,
+                            pre_normed_gen=pre_norm,
+                            next_norm=next_norm,
+                        )
+                        if next_norm is not None:
+                            cur, pre_norm = res
+                        else:
+                            cur = res
+                            pre_norm = None
                     return cur
 
                 if active_gen_cache is not None and step_index is not None:
