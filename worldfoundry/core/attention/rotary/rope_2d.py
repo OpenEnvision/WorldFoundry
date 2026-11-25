@@ -23,6 +23,8 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 
+from worldfoundry.core.attention.rotary.triton_rotary_ops import triton_rope_2d_indexed
+
 # ──────────────────────────────────────────────────────────────────────────
 # Patch grid cache — rebuild only when (H, W) or device changes
 # ──────────────────────────────────────────────────────────────────────────
@@ -86,6 +88,10 @@ class RotaryPositionEmbedding2D(nn.Module):
         feature_dim = tokens.size(-1) // 2
         max_position = int(positions.abs().max()) + 1
         cos_comp, sin_comp = self._compute_frequency_components(feature_dim, max_position, tokens.device, tokens.dtype)
+        if tokens.device.type == "cuda":
+            triton_out = triton_rope_2d_indexed(tokens, positions, cos_comp, sin_comp, signed_positions=True)
+            if triton_out is not None:
+                return triton_out
         vertical_features, horizontal_features = tokens.chunk(2, dim=-1)
         vertical_features = self._apply_1d_rope(vertical_features, positions[..., 0], cos_comp, sin_comp)
         horizontal_features = self._apply_1d_rope(horizontal_features, positions[..., 1], cos_comp, sin_comp)

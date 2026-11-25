@@ -6,6 +6,8 @@
 import torch
 from einops import rearrange
 
+from worldfoundry.core.attention.rotary.triton_rotary_ops import triton_interleaved_partial_rope
+
 
 def rotate_pairs(x: torch.Tensor) -> torch.Tensor:
     """Rotate adjacent pairs as ``[x0, x1, x2, x3] -> [-x1, x0, -x3, x2]``."""
@@ -34,6 +36,16 @@ def apply_rotary_emb(
     assert rot_dim <= t.shape[-1], (
         f"Feature dimension {t.shape[-1]} is not of sufficient size to rotate in all the positions {rot_dim}"
     )
+    if t.device.type == "cuda":
+        triton_out = triton_interleaved_partial_rope(
+            freqs,
+            t,
+            start_index=start_index,
+            scale=scale,
+            seq_dim=seq_dim,
+        )
+        if triton_out is not None:
+            return triton_out
     t_left = t[..., :start_index]
     t_middle = t[..., start_index:end_index]
     t_right = t[..., end_index:]

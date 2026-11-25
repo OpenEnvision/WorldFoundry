@@ -16,6 +16,8 @@ from __future__ import annotations
 import torch
 from einops import rearrange
 
+from worldfoundry.core.attention.rotary.triton_rotary_ops import triton_complex_rotary_embedding
+
 
 def complex_rotary_frequencies(
     dim: int,
@@ -99,6 +101,11 @@ def apply_complex_rotary_embedding(
 
     if compute_dtype not in {torch.float32, torch.float64}:
         raise ValueError("complex RoPE compute_dtype must be float32 or float64")
+
+    if value.device.type == "cuda" and frequencies.device.type != "npu":
+        triton_out = triton_complex_rotary_embedding(value, frequencies, num_heads, compute_dtype=compute_dtype)
+        if triton_out is not None:
+            return triton_out
 
     value = rearrange(value, "b s (h d) -> b s h d", h=int(num_heads))
     complex_value = torch.view_as_complex(value.to(compute_dtype).reshape(*value.shape[:-1], -1, 2).contiguous())
