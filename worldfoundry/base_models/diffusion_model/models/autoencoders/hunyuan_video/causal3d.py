@@ -5,7 +5,6 @@ Composes :mod:`.original_encoder` and :mod:`.original_decoder`. Public ``encode`
 from __future__ import annotations
 
 import json
-import math
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -256,8 +255,26 @@ class HunyuanVideoCausal3DAutoencoder(nn.Module):
         col_starts = list(range(0, width, overlap))
         num_rows = len(row_starts)
         num_cols = len(col_starts)
-        total_tiles = num_rows * num_cols
-        tiles_per_rank = math.ceil(total_tiles / world_size)
+        # Longest-processing-time-first (LPT) tile load balancing across ranks so
+        # smaller border tiles pair with full tiles and eliminate straggler ranks.
+        # Canonical (ri, rj) merge order below preserves bitwise-exact output.
+        tile_specs = [
+            (
+                ri,
+                rj,
+                min(self.tile_latent_min_size, height - row_starts[ri])
+                * min(self.tile_latent_min_size, width - col_starts[rj]),
+            )
+            for ri in range(num_rows)
+            for rj in range(num_cols)
+        ]
+        rank_loads = [0] * world_size
+        rank_bins: list[list[tuple[int, int]]] = [[] for _ in range(world_size)]
+        for ri, rj, area in sorted(tile_specs, key=lambda item: (-item[2], item[0], item[1])):
+            target = min(range(world_size), key=lambda r: (rank_loads[r], len(rank_bins[r]), r))
+            rank_bins[target].append((ri, rj))
+            rank_loads[target] += area
+        tiles_per_rank = max((len(b) for b in rank_bins), default=0)
 
         spatial_ratio = int(self.config.spatial_compression_ratio)
         time_ratio = int(self.config.time_compression_ratio)
@@ -279,9 +296,7 @@ class HunyuanVideoCausal3DAutoencoder(nn.Module):
             device=value.device,
             dtype=out_dtype,
         )
-        for slot, lin_idx in enumerate(range(rank, total_tiles, world_size)):
-            ri = lin_idx // num_cols
-            rj = lin_idx % num_cols
+        for slot, (ri, rj) in enumerate(rank_bins[rank]):
             r_start = row_starts[ri]
             c_start = col_starts[rj]
             tile = value[
@@ -306,12 +321,7 @@ class HunyuanVideoCausal3DAutoencoder(nn.Module):
 
         rows: list[list[torch.Tensor | None]] = [[None for _ in range(num_cols)] for _ in range(num_rows)]
         for r in range(world_size):
-            for k in range(tiles_per_rank):
-                lin_idx = r + k * world_size
-                if lin_idx >= total_tiles:
-                    break
-                ri = lin_idx // num_cols
-                rj = lin_idx % num_cols
+            for k, (ri, rj) in enumerate(rank_bins[r]):
                 tile_out_h = min(self.tile_latent_min_size, height - row_starts[ri]) * spatial_ratio
                 tile_out_w = min(self.tile_latent_min_size, width - col_starts[rj]) * spatial_ratio
                 rows[ri][rj] = gathered_tiles[r, k, :, :, :, :tile_out_h, :tile_out_w]

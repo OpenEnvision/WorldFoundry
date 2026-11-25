@@ -852,8 +852,23 @@ class AutoencoderKLConv3D(nn.Module, NativeConfigMixin):
 
         num_rows = math.ceil(H / overlap_size)
         num_cols = math.ceil(W / overlap_size)
-        total_tiles = num_rows * num_cols
-        tiles_per_rank = math.ceil(total_tiles / world_size)
+        tile_specs = [
+            (
+                ri,
+                rj,
+                min(self.tile_latent_min_size, H - ri * overlap_size)
+                * min(self.tile_latent_min_size, W - rj * overlap_size),
+            )
+            for ri in range(num_rows)
+            for rj in range(num_cols)
+        ]
+        rank_loads = [0] * world_size
+        rank_bins: list[list[tuple[int, int]]] = [[] for _ in range(world_size)]
+        for ri, rj, area in sorted(tile_specs, key=lambda item: (-item[2], item[0], item[1])):
+            target = min(range(world_size), key=lambda r: (rank_loads[r], len(rank_bins[r]), r))
+            rank_bins[target].append((ri, rj))
+            rank_loads[target] += area
+        tiles_per_rank = max((len(b) for b in rank_bins), default=0)
 
         H_out_std = max(self.tile_sample_min_size, self.tile_latent_min_size * self.ffactor_spatial)
         W_out_std = max(self.tile_sample_min_size, self.tile_latent_min_size * self.ffactor_spatial)
@@ -872,9 +887,7 @@ class AutoencoderKLConv3D(nn.Module, NativeConfigMixin):
             device=z.device,
             dtype=out_dtype,
         )
-        for slot, lin_idx in enumerate(range(rank, total_tiles, world_size)):
-            ri = lin_idx // num_cols
-            rj = lin_idx % num_cols
+        for slot, (ri, rj) in enumerate(rank_bins[rank]):
             i = ri * overlap_size
             j = rj * overlap_size
             tile = z[:, :, :, i : i + self.tile_latent_min_size, j : j + self.tile_latent_min_size]
@@ -901,12 +914,7 @@ class AutoencoderKLConv3D(nn.Module, NativeConfigMixin):
 
         rows: list[list[torch.Tensor | None]] = [[None for _ in range(num_cols)] for _ in range(num_rows)]
         for r in range(world_size):
-            for k in range(tiles_per_rank):
-                lin_idx = r + k * world_size
-                if lin_idx >= total_tiles:
-                    break
-                ri = lin_idx // num_cols
-                rj = lin_idx % num_cols
+            for k, (ri, rj) in enumerate(rank_bins[r]):
                 i = ri * overlap_size
                 j = rj * overlap_size
                 tile_out_h = min(self.tile_latent_min_size, H - i) * self.ffactor_spatial

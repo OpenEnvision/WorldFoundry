@@ -1309,7 +1309,22 @@ class VideoDecoder(nn.Module):
                 world_size = int(dist.get_world_size(comm_group))
                 if world_size > 1:
                     rank = int(dist.get_rank(comm_group))
-                    tiles_to_decode = group_tiles[rank::world_size]
+                    # LPT bin-packing by tile spatial area eliminates uneven border stragglers.
+                    lat_h, lat_w = int(latent.shape[-2]), int(latent.shape[-1])
+                    scored: list[tuple[int, int, Tile]] = []
+                    for idx, tile in enumerate(group_tiles):
+                        h_sl = tile.in_coords[3]
+                        w_sl = tile.in_coords[4]
+                        h_len = (lat_h if h_sl.stop is None else h_sl.stop) - (0 if h_sl.start is None else h_sl.start)
+                        w_len = (lat_w if w_sl.stop is None else w_sl.stop) - (0 if w_sl.start is None else w_sl.start)
+                        scored.append((h_len * w_len, idx, tile))
+                    rank_loads = [0] * world_size
+                    rank_bins: list[list[Tile]] = [[] for _ in range(world_size)]
+                    for area, _idx, tile in sorted(scored, key=lambda item: (-item[0], item[1])):
+                        target = min(range(world_size), key=lambda r: (rank_loads[r], len(rank_bins[r]), r))
+                        rank_bins[target].append(tile)
+                        rank_loads[target] += area
+                    tiles_to_decode = rank_bins[rank]
                     sharded = True
 
         for tile in tiles_to_decode:
