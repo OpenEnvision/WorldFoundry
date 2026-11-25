@@ -20,6 +20,11 @@ class Snake1d(nn.Module):
         self.beta = nn.Parameter(torch.zeros(1, hidden_dim, 1))
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        if not self.training and hidden_states.is_cuda and not torch.is_grad_enabled():
+            from .triton_audio_ops import can_use_cosmos3_snake1d, fused_cosmos3_snake1d
+
+            if can_use_cosmos3_snake1d(hidden_states, self.alpha, self.beta):
+                return fused_cosmos3_snake1d(hidden_states, self.alpha, self.beta)
         alpha = torch.exp(self.alpha)
         beta = torch.exp(self.beta)
         return hidden_states + (beta + 1e-9).reciprocal() * torch.sin(alpha * hidden_states).pow(2)
