@@ -52,12 +52,22 @@ WorldFoundry 在同一套开源推理栈中统一覆盖 **15 个基础模型**�
     ]
   },
   {
+    name: "共享 Hopper 基础设施与 8× H200 NVSwitch 全节点无损扩展",
+    hintLabel: "8 卡逐比特无损",
+    hint: "7.92×–9.75× · PSNR=inf",
+    description: "Latin-Square NVSwitch 对称显存 Ulysses（2.14×，~5.3 TB/s）、NVLS SHARP TP=8 RowParallelLinear（4.31×）、GPU 常驻 LPT 多卡并行 VideoVAE（4 大 VAE 家族 8 卡 7.59×–7.79×）、TMA WGMMA FP8（1,030 TFLOPS）及零溢出核心算子，在全部 8 张 H200 上实现接近线性的逐比特无损加速。",
+    reads: [
+      { label: "8× H200 端到端无损", value: "Wan2.1-14B 480p 39.37s（7.92× / 99.0% 效率，PSNR=inf）、720p 136.23s（8 卡 VAE 仅 0.296s = 11.0× 加速，PSNR=inf）；HunyuanVideo-13B 720p SP=8 DiT 38.12s + VAE 0.47s（对比单卡 L0 达 9.75×，PSNR=inf）" },
+      { label: "核心基建与显存", value: "CUDA Graph 分发 6.28× 且共享内存池降显存 63.2%；GroupNorm+SiLU 17.66×；LayerNorm2d 16.49× CG；共享 Rotary 14.65× CG；FP64 调度器 24.5× CG（降显存 93.8%）；attention_forward 分发开销降约 18–20×" }
+    ]
+  },
+  {
     name: "全仓回归与开源卫生",
     hintLabel: "验证门禁",
-    hint: "335 GPU + 222 CPU 全过",
-    description: "全部 211 个变更 Python 模块通过 Ruff lint、Ruff format、ty 类型检查、DCO 签名及路径/凭据安全扫描，0 错误。",
+    hint: "2,100+ GPU/CPU 全过",
+    description: "全部变更模块通过 Ruff lint、Ruff format、ty 类型检查、零寄存器溢出（n_spills=0）审计、无 Triton 无卡 CPU 子进程回归、DCO 签名及路径/凭据安全扫描，0 错误。",
     reads: [
-      { label: "完整复现文档", value: "逐模型复现命令与详细数据维护在 benchmarks/videogen/BENCHMARK_REPORT.md" }
+      { label: "完整复现文档", value: "逐模型与 8 卡复现命令维护在 benchmarks/videogen/BENCHMARK_REPORT.md" }
     ]
   }
 ]} />
@@ -86,8 +96,8 @@ NVIDIA SOL Engine 的部分公开数据基于 **Blackwell B200 SM100 原生 NVFP
 | 4 | **Wan2.2-TI2V-5B** | `704×1280×121f`, 50 步 | 1× `112.06s` → **`38.50s`**（BF16）/ **`37.48s`**（FP8） | **`2.91×`** BF16 / **`2.99×`** FP8（DiT `3.03×`；ref `~2.89×`） | EasyCache + PISA + 编译 VideoVAE38（无 PISA FP8 `compile_fullgraph`：`40.25s / 2.78×`）· 真实 TI2V I2V（`per-token`）通过，`fallbacks=[]` |
 | 5 | **Wan2.2-T2V-A14B (28B)** | `480×832×81f`, 40 步 | 1× `253.33s` → **`112.47s`**；2× `CFG=2` `130.19s` → **`59.00s`** | **`2.25×`** 1× / **`4.29×`** 2× vs 1×（`2.21×` vs 2×；ref `~2.17×`） | 双专家融合 + EasyCache + PISA（`wan22_a14b_sol`）· `SSIM 0.711`，专家切换 `1` 次干净重置、零串扰，`fallbacks=[]` |
 | 6 | **LingBot-Video (1.3B)** | `480×832×121f`, 40 步 | 1× `114.59s` → `67.33s`（PISA）→ **`37.03s`** | **`3.10×`** E2E / **`3.22×`** DiT（ref `~2.60×`） | 算子融合 + Refiner PISA + EasyCache · `19.39 dB / SSIM 0.9207`，`fallbacks=[]` |
-| 7 | **HunyuanVideo-13B** | `720×1280×65f`, 50 步 | 1× `371.69s` → `85.49s`（均衡）→ **`71.66s`**；2× `SP=2` **`42.00s`** | **`5.19×`** 1× DiT / **`8.85×`** 2× SP=2（ref `~5.03×`） | Sol-Attn（`tau=1.0`，`dense_single=(0,-2,-1)`）+ TeaCache + FP8 + Ulysses SP（`27.13 GiB/卡`，`sp-sync` 跨卡共识）· **`22.51 dB / 0.9097`**（均衡档 `25.98 dB`），BF16 VAE `1.29×`，`fallbacks=[]` |
-| 8 | **Wan2.1-T2V-14B** | `480p` & `720p`, 81 帧 50 步 | 1× 480p `311.81s` → **`71.99s`**；4× 480p **`22.50s`**；4× 720p `316.90s` → **`71.59s`** | **`4.33×`** 1× / **`13.86×`** 4× 480p / **`4.43×`** 4× 720p（ref `~3.48×`） | FP64 Triton RoPE（`13.63×`）+ EasyCache + Sol-Attn + FP8（`use_fast_accum=False`）+ 2×2 并行 VAE（`3.26s`）· 单卡 `31.53 GiB`，720p `20.40 dB`，`fallbacks=[]` |
+| 7 | **HunyuanVideo-13B** | `720×1280×65f`, 50 步 | 1× `371.69s` → `267.71s`（L1）→ **`71.66s`**（`L4`）；2× `SP=2` **`42.00s`**；**8× `SP=8` 逐比特无损 BF16**：**`38.12s` DiT（`0.47s` VAE）** | **`5.19×`** 1× / **`8.85×`** 2× / **`9.75×`** 8× 逐比特无损（ref `~5.03×`） | Sol-Attn + TeaCache + FP8（`22.51 dB`）；4×/8× `SP` Latin-Square NVSwitch SymmMem + LPT 并行 Causal3D VAE（`31.4 GiB/卡`，**`PSNR=inf / cos=1.0`**），`fallbacks=[]` |
+| 8 | **Wan2.1-T2V-14B** | `480p` & `720p`, 81 帧 50 步 | 1× 480p `311.81s` → **`71.99s`**（`sol`）；4× 480p `exact` **`76.55s`** / `sol` **`22.50s`**；**8× `CFG=2×SP=4` 逐比特无损 BF16**：480p **`39.37s`**、720p **`136.23s`**（`0.296s` 8× VAE） | **`4.33×`** 1× / **`13.86×`** 4× `sol` / **`7.92×`** 8× 无损（`99.0%` 效率） | Latin-Square NVSwitch SymmMem + 8 卡 GPU 常驻并行 VAE（720p VAE `3.26s→0.296s` 提速 `11.0×`）· **`latent/video_bitwise_equal=true, PSNR=inf`**，`fallbacks=[]` |
 | 9 | **LTX-2.5 (22B)** | `768×1280×65f`, 24 步 CFG=3 / 8+3 | 1× `dev` `30.38s` → **`13.34s`**；`distilled` 纯无损 **`2.92s`**（Conv）/ **`3.52–3.60s`**（DiffVAE，`7.51s→3.52s`）；2× `CFG=2` `33.26s` → **`5.99s`** | **`2.28×`** 1× / **`5.56×`** 2× E2E（无损 DiffVAE `2.13×`；ref `~4.68×`） | 3D 分块 WGMMA `na3d` DiffVAE（**`5.22×`**，`60.7 dB`）+ Conv VAE（音视频 `265 ms`）+ Audio/VocoderBWE（**`3.81×`**，`104.6 dB`）+ 双卡 CFG=2（`26.26 dB / SSIM 0.9907`），`zero_fallbacks_verified=True` |
 | 10 | **MiniMax-H3 (31B)** | `512p 4s` & `768p 5s` | 1× 768p 20s **`38.64s`**；2× `SP=2` 768p 20s **`20.97s`**、50s **`41.88s`**、512p **`14.36s`** | **`3.22×`** 1× / **`5.93×`–`7.42×`** 2× 768p / **`4.20×`** 512p（ref `~3.95×`） | 36L VAE **`10.97×`**（`58.36 dB`），`kv_splits=4`，Sol-Attn + FBCache + SP=2 · Rank0/Rank1 最大误差 **`0.0`**，关键帧 `fl2va` `25.53 dB`，`fallbacks=[]` |
 | 11 | **MiniMax-H3 超级加速** | `5s` & `10s` `768p` | 1× **5s** `361.41s` → **`8.92s`**；**10s** `1,054.84s` → **`19.82s`** | **`40.54×`**（5s）/ **`53.22×`**（10s）（ref `22.2×` / `27.7×`） | 4 步 H3 草稿 + 3 步 LTX-2.5 精修 + 双声道立体声 MP4 封装 + 阶段卸载（`57.14 GiB`，`cos=1.000000`）· 稳态 E2E 复用缓存文本编码；5s 基线跑满 50 步 |
@@ -119,6 +129,22 @@ NVIDIA SOL Engine 的部分公开数据基于 **Blackwell B200 SM100 原生 NVFP
 | **SANA-Video 2B DiT（纯无损 Eager）** | `480×832×81f` CFG=2，50 步（无编译无缓存） | `1,032.1 ms/步 (51.60s)` → **`444.9 ms/步 (22.25s)`** | **`2.32×`** | `48.26 dB / cos 0.9998` vs BF16（高于 BF16 底噪 `+12 dB`） |
 | **HunyuanVideo-13B & Wan2.2 DiT 块融合** | `720p 65f` HY-13B / `704p` Wan2.2-5B / `480p` A14B | HY `6,468 → 5,333 ms` · 5B `904 → 803 ms` · A14B `2,757 → 2,502 ms` | **`1.10×`–`1.21×`** | `54.14–60.38 dB`（零溢出 `triton_dit_block_ops`） |
 | **LingBot / LongLive / Matrix-Game / Cosmos3 音频** | 零同步流式 DiT + 5s 48kHz 立体声 `Snake1d` | LingBot Fast `98.0 → 66.8 ms` · Cosmos3 音频 `41.2 → 30.6 ms` | **`1.35×`–`1.47×`** | Cosmos3 音频 **`PSNR=inf`**（`max_diff = 0.0`）· LingBot `66.3 dB` |
+
+## 共享核心基础设施与 8× H200 NVSwitch 全节点无损扩展
+
+以下基础设施级优化覆盖多卡集合通信、CUDA Graph 运行时、GPU 常驻并行 VideoVAE 与通用 Hopper SM90 算子，惠及全仓所有视频生成与世界模型，全部遵循 **100% 无损**、`n_spills == 0`、严格 `tl.int64` 及惰性加载 Triton（无卡 CPU CI 通过）。
+
+| 核心基础设施层级 | 独占 8× / 1× H200 实测负载 | 基线 → 优化结果 | 加速比 / 扩展比 | 无损精度回执 |
+| --- | --- | --- | ---: | --- |
+| **8× H200 NVSwitch 对称显存 Ulysses** | `Wan 720p (S=75600, 40h)` QKV+O（`~5.3 TB/s` 聚合） | `2.239 ms` → **`1.044 ms/层`**（Latin-Square 直写） | **`2.14×`**（`2.05×–2.14×`） | **逐比特一致**（`torch.equal`） |
+| **8× H200 NVLS SHARP TP=8 `RowParallelLinear`** | `[4096×1728→5120]` & `[1024×1536→3072]` BF16 | `1.965 → 0.528 ms` · `0.403 → 0.093 ms` | **`3.72×` / `4.31×`** | 跨卡 FP32 精确抵消 |
+| **8× H200 并行 VideoVAE（4 大真实权重家族）** | Wan2.1（`291.6 / 627.7 ms`）、Wan2.2（`567.8 / 775.2 ms`）、HY-Causal3D（`470.8 ms`）、LTX-2.5（`59.6 / 184.7 ms`） | GPU 常驻 + 8 瓦片均衡 + LPT 负载均衡 | **`6.23×–7.79×`**（`97.4%` 效率 / 对比 dense **`4.02×–7.25×`**） | **逐比特一致**（`PSNR=inf`）· LTX `75–78.7 dB` |
+| **8× H200 `Wan2.1-T2V-14B` `exact` BF16** | `480p` & `720p` 81f，50 步（`CFG=2×SP=4` + 8× VAE） | 480p `311.8s → 39.37s`；720p 4× `316.9s` → 8× **`136.23s`**（`0.296s` VAE） | **`7.92×`**（`99.0%` 效率）· **`11.0×`** VAE | **逐比特一致**（`PSNR=inf, SSIM=1.0`） |
+| **8× H200 `HunyuanVideo-13B` `L1 exact` BF16** | `720p×65f`，50 步（`SP=8` + 8× Causal3D VAE） | 1× L0 `371.7s` / L1 `267.7s` → **`38.12s` DiT** + **`0.47s` VAE** | **`9.75×`** vs 1× L0 | **逐比特一致** vs 1×（`PSNR=inf, cos=1.0`） |
+| **CUDA Graph 运行时与共享显存池** | 调度分发延迟 & 分段 Graph 共享池峰值显存 | 分发 `79.1 → 15.8 µs` · 显存池 `2,972 → 1,093 MB` | **`4.99×–6.28×`** · **省 `63.2%` 显存** | 逐比特一致 |
+| **Hopper TMA WGMMA `triton_fp8_linear` 与量化器** | E4M3 / E5M2×E5M2 GEMM + 宽行 & 融合 `silu_mul` | `330 → 1,030 TFLOPS`（E5M2 `1,006 TFLOPS`）；`silu_mul` `4.21 TB/s` | **`2.90×–3.61×`** / **`4.95×`** | FP32 累加优于 `_scaled_mm` |
+| **核心 GroupNorm+SiLU、MoE、3D RoPE 与共享 Rotary** | 5D NDHWC GN+SiLU · WGMMA MoE · 5 项共享 Rotary | GN `17.66×` · MoE `424.5 TFLOPS (10.9×)` · Rotary `5.77×–14.65×`（`3.82 TB/s`） | **`3.38×`–`17.66×`** | 零 NaN Chan 归约 / **逐比特** Rotary |
+| **核心层、FP64 调度器、时间步与注意力分发** | `LayerNorm2d`、`convert_*`、`FlowMatch.step`、`dispatch` | LN2d `16.49×` CG · `convert_*` `24.5×` CG（**省 `93.8%` 显存**）· 注意力分发 `2.1 µs` | **`3.6×`–`50.4×`** / **`~18–20×`** | **逐比特一致** 调度器与 `PostSA` |
 
 ## 画质拦截与主动否决记录
 

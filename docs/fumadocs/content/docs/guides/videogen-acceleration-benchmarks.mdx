@@ -52,10 +52,20 @@ WorldFoundry ships one unified open-source inference acceleration stack across *
     ]
   },
   {
+    name: "Shared Hopper Infrastructure & 8× H200 NVSwitch Scaling",
+    hintLabel: "8-GPU Lossless",
+    hint: "7.92×–9.75× · Bit-Exact",
+    description: "Latin-square NVSwitch Symmetric Memory Ulysses (2.14×, ~5.3 TB/s), NVLS SHARP TP=8 RowParallelLinear (4.31×), GPU-resident LPT Parallel VideoVAE (7.59×–7.79× across 4 VAE families), TMA WGMMA FP8 (1,030 TFLOPS), and zero-spill core Rotary/GroupNorm/MoE/Scheduler kernels scale real checkpoints across all 8× H200 GPUs with bitwise-exact parity.",
+    reads: [
+      { label: "8× H200 lossless E2E", value: "Wan2.1-14B 480p 39.37s (7.92× / 99.0% eff., PSNR=inf), 720p 136.23s (0.296s 8× VAE = 11.0× VAE speedup, PSNR=inf); HunyuanVideo-13B 720p SP=8 38.12s DiT + 0.47s VAE (9.75× vs 1× L0, PSNR=inf)" },
+      { label: "Core infra & VRAM", value: "CUDA Graph dispatch 6.28× & shared pool -63.2% VRAM; GroupNorm+SiLU 17.66×; LayerNorm2d 16.49× CG; Shared Rotary 14.65× CG; FP64 Scheduler 24.5× CG (-93.8% VRAM); attention_forward dispatch ~18–20× lower overhead" }
+    ]
+  },
+  {
     name: "Verification & Open-Source Hygiene",
     hintLabel: "Test Gates",
-    hint: "335 GPU + 222 CPU Pass",
-    description: "All 211 changed Python modules pass Ruff lint, Ruff format, ty type-checking, DCO sign-off, and path/credential hygiene scans with zero failures.",
+    hint: "2,100+ GPU/CPU Tests",
+    description: "All changed modules pass Ruff lint, Ruff format, ty type-checking, zero-spill (n_spills=0) audits, absent-Triton CPU-only CI subprocess tests, DCO sign-off, and path/credential hygiene scans with zero failures.",
     reads: [
       { label: "Reproducibility", value: "Full CLI commands and raw receipts live in benchmarks/videogen/BENCHMARK_REPORT.md" }
     ]
@@ -86,8 +96,8 @@ All latencies below are warm steady-state exclusive H200 measurements on the ide
 | 4 | **Wan2.2-TI2V-5B** | `704×1280×121f`, 50 steps | 1× `112.06s` → **`38.50s`** (BF16) / **`37.48s`** (FP8) | **`2.91×`** BF16 / **`2.99×`** FP8 (`3.03×` DiT; `~2.89×` ref) | EasyCache + PISA + compiled VideoVAE38 (no-PISA FP8 `compile_fullgraph`: `40.25s / 2.78×`) · real TI2V I2V (`per-token`) verified, `fallbacks=[]` |
 | 5 | **Wan2.2-T2V-A14B (28B)** | `480×832×81f`, 40 steps | 1× `253.33s` → **`112.47s`**; 2× `CFG=2` `130.19s` → **`59.00s`** | **`2.25×`** 1× / **`4.29×`** 2× vs 1× (`2.21×` vs 2×; `~2.17×` ref) | Dual-expert fusion + EasyCache + PISA (`wan22_a14b_sol`) · `SSIM 0.711`, `1` clean expert boundary reset, zero bleed, `fallbacks=[]` |
 | 6 | **LingBot-Video (1.3B)** | `480×832×121f`, 40 steps | 1× `114.59s` → `67.33s` (PISA) → **`37.03s`** | **`3.10×`** E2E / **`3.22×`** DiT (`~2.60×` ref) | Fusion + refiner PISA + EasyCache · `19.39 dB / SSIM 0.9207`, `fallbacks=[]` |
-| 7 | **HunyuanVideo-13B** | `720×1280×65f`, 50 steps | 1× `371.69s` → `85.49s` (bal) → **`71.66s`**; 2× `SP=2` **`42.00s`** | **`5.19×`** 1× DiT / **`8.85×`** 2× SP=2 (`~5.03×` ref) | Sol-Attn (`tau=1.0`, `dense_single=(0,-2,-1)`) + TeaCache + FP8 + Ulysses SP (`27.13 GiB/GPU`, `sp-sync`) · **`22.51 dB / 0.9097`** (`25.98 dB` balanced), BF16 VAE `1.29×`, `fallbacks=[]` |
-| 8 | **Wan2.1-T2V-14B** | `480p` & `720p`, 81f, 50 steps | 1× 480p `311.81s` → **`71.99s`**; 4× 480p **`22.50s`**; 4× 720p `316.90s` → **`71.59s`** | **`4.33×`** 1× / **`13.86×`** 4× 480p / **`4.43×`** 4× 720p (`~3.48×` ref) | FP64 Triton RoPE (`13.63×`) + EasyCache + Sol-Attn + FP8 (`use_fast_accum=False`) + 2×2 VAE (`3.26s`) · `31.53 GiB` (1×), `20.40 dB` (720p), `fallbacks=[]` |
+| 7 | **HunyuanVideo-13B** | `720×1280×65f`, 50 steps | 1× `371.69s` → `267.71s` (L1) → **`71.66s`** (`L4`); 2× `SP=2` **`42.00s`**; **8× `SP=8` bit-exact BF16**: **`38.12s` DiT (`0.47s` VAE)** | **`5.19×`** 1× / **`8.85×`** 2× / **`9.75×`** 8× bit-exact (`~5.03×` ref) | Sol-Attn + TeaCache + FP8 (`22.51 dB`); 4×/8× `SP` Latin-Square NVSwitch SymmMem + LPT Parallel Causal3D VAE (`31.4 GiB/GPU`, **`PSNR=inf / cos=1.0`**), `fallbacks=[]` |
+| 8 | **Wan2.1-T2V-14B** | `480p` & `720p`, 81f, 50 steps | 1× 480p `311.81s` → **`71.99s`** (`sol`); 4× 480p `exact` **`76.55s`** / `sol` **`22.50s`**; **8× `CFG=2×SP=4` bit-exact BF16**: 480p **`39.37s`**, 720p **`136.23s`** (`0.296s` 8× VAE) | **`4.33×`** 1× / **`13.86×`** 4× `sol` / **`7.92×`** 8× bit-exact (`99.0%` eff.) | Latin-Square NVSwitch SymmMem + 8-GPU GPU-resident Parallel VAE (`11.0×` faster 720p VAE `3.26s→0.296s`) · **`latent/video_bitwise_equal=true, PSNR=inf`**, `fallbacks=[]` |
 | 9 | **LTX-2.5 (22B)** | `768×1280×65f`, 24-step CFG=3 / 8+3 | 1× `dev` `30.38s` → **`13.34s`**; `distilled` lossless **`2.92s`** (Conv) / **`3.52–3.60s`** (DiffVAE, `7.51s→3.52s`); 2× `CFG=2` `33.26s` → **`5.99s`** | **`2.28×`** 1× / **`5.56×`** 2× E2E (`2.13×` lossless DiffVAE; `~4.68×` ref) | 3D-tiled WGMMA `na3d` DiffVAE (**`5.22×`**, `60.7 dB`) + Conv VAE (`265 ms` A+V) + Audio/VocoderBWE (**`3.81×`**, `104.6 dB`) + Parallel CFG=2 (`26.26 dB / SSIM 0.9907`), `zero_fallbacks_verified=True` |
 | 10 | **MiniMax-H3 (31B)** | `512p 4s` & `768p 5s` | 1× 768p 20s **`38.64s`**; 2× `SP=2` 768p 20s **`20.97s`**, 50s **`41.88s`**, 512p **`14.36s`** | **`3.22×`** 1× / **`5.93×`–`7.42×`** 2× 768p / **`4.20×`** 512p (`~3.95×` ref) | 36L VAE **`10.97×`** (`58.36 dB`), `kv_splits=4`, Sol-Attn + FBCache + SP=2 · Rank0/Rank1 max diff **`0.0`**, keyframe `fl2va` `25.53 dB`, `fallbacks=[]` |
 | 11 | **MiniMax-H3 Super Accel** | `5s` & `10s` `768p` | 1× **5s** `361.41s` → **`8.92s`**; **10s** `1,054.84s` → **`19.82s`** | **`40.54×`** (5s) / **`53.22×`** (10s) (`22.2×` / `27.7×` ref) | 4-step H3 draft + 3-step LTX-2.5 refine + stereo audio muxing + stage offload (`57.14 GiB`, `cos=1.000000`) · warm E2E uses cached text embeddings; 5s baseline ran all 50 full steps |
@@ -119,6 +129,22 @@ All custom Hopper Triton operators register `@torch.library.custom_op` + `.regis
 | **SANA-Video 2B DiT (Lossless Eager)** | `480×832×81f` CFG=2, 50 steps (no compile, no cache) | `1,032.1 ms/step (51.60s)` → **`444.9 ms/step (22.25s)`** | **`2.32×`** | `48.26 dB / cos 0.9998` vs BF16 (`+12 dB` above BF16 floor) |
 | **HunyuanVideo-13B & Wan2.2 DiT Block Fusion** | `720p 65f` HY-13B / `704p` Wan2.2-5B / `480p` A14B | HY `6,468 → 5,333 ms` · 5B `904 → 803 ms` · A14B `2,757 → 2,502 ms` | **`1.10×`–`1.21×`** | `54.14–60.38 dB` (zero-spill `triton_dit_block_ops`) |
 | **LingBot / LongLive / Matrix-Game / Cosmos3 Audio** | Zero-sync streaming DiTs + 5s 48kHz stereo `Snake1d` | LingBot Fast `98.0 → 66.8 ms` · Cosmos3 Audio `41.2 → 30.6 ms` | **`1.35×`–`1.47×`** | Cosmos3 Audio **`PSNR=inf`** (`max_diff = 0.0`) · LingBot `66.3 dB` |
+
+## Shared Core Infrastructure & 8× H200 NVSwitch Scaling (100% Lossless)
+
+Shared infrastructure upgrades accelerate multi-GPU collectives, CUDA Graph execution, GPU-resident parallel VideoVAEs, and core Hopper SM90 kernels across every model in WorldFoundry with zero algorithmic approximation (`n_spills == 0`, strict `tl.int64`, lazy Triton CPU-CI safe).
+
+| Infrastructure Layer | Exclusive 8× / 1× H200 Workload | Baseline → Optimized | Speedup / Scaling | Lossless Parity |
+| --- | --- | --- | ---: | --- |
+| **8× H200 NVSwitch Symmetric Ulysses** | `Wan 720p (S=75600, 40h)` QKV+O (`~5.3 TB/s` agg.) | `2.239 ms` → **`1.044 ms/layer`** (Latin-Square Push) | **`2.14×`** (`2.05×–2.14×`) | **Bit-exact** (`torch.equal`) |
+| **8× H200 NVLS SHARP TP=8 `RowParallelLinear`** | `[4096×1728→5120]` & `[1024×1536→3072]` BF16 | `1.965 → 0.528 ms` · `0.403 → 0.093 ms` | **`3.72×` / `4.31×`** | Exact FP32 cancellation |
+| **8× H200 Parallel VideoVAE (4 Real Families)** | Wan2.1 (`291.6 / 627.7 ms`), Wan2.2 (`567.8 / 775.2 ms`), HY-Causal3D (`470.8 ms`), LTX-2.5 (`59.6 / 184.7 ms`) | GPU-resident + balanced 8-tile + LPT bin packing | **`6.23×–7.79×`** (`97.4%` eff. / **`4.02×–7.25×`** vs dense) | **Bit-exact** (`PSNR=inf`) · LTX `75–78.7 dB` |
+| **8× H200 `Wan2.1-T2V-14B` `exact` BF16** | `480p` & `720p` 81f, 50 steps (`CFG=2×SP=4` + 8× VAE) | 480p `311.8s → 39.37s`; 720p 4× `316.9s` → 8× **`136.23s`** (`0.296s` VAE) | **`7.92×`** (`99.0%` eff.) · **`11.0×`** VAE | **Bit-exact** (`PSNR=inf, SSIM=1.0`) |
+| **8× H200 `HunyuanVideo-13B` `L1 exact` BF16** | `720p×65f`, 50 steps (`SP=8` + 8× Causal3D VAE) | 1× L0 `371.7s` / L1 `267.7s` → **`38.12s` DiT** + **`0.47s` VAE** | **`9.75×`** vs 1× L0 | **Bit-exact** vs 1× (`PSNR=inf, cos=1.0`) |
+| **CUDA Graph Runner & Shared Pool** | Dispatch latency & sequential piecewise pool VRAM | Dispatch `79.1 → 15.8 µs` · Pool `2,972 → 1,093 MB` | **`4.99×–6.28×`** · **`-63.2%` VRAM** | Bit-exact |
+| **Hopper TMA WGMMA `triton_fp8_linear` & Quantizer** | E4M3 / E5M2×E5M2 GEMM + wide-row & fused `silu_mul` | `330 → 1,030 TFLOPS` (E5M2 `1,006 TFLOPS`); `silu_mul` `4.21 TB/s` | **`2.90×–3.61×`** / **`4.95×`** | Tighter FP32 accum than `_scaled_mm` |
+| **Core GroupNorm+SiLU, MoE, RoPE & Rotary Suite** | 5D NDHWC GN+SiLU · WGMMA MoE · 5 shared Rotary ops | GN `17.66×` · MoE `424.5 TFLOPS (10.9×)` · Rotary `5.77×–14.65×` (`3.82 TB/s`) | **`3.38×`–`17.66×`** | Zero-NaN Chan / **Bit-exact** Rotary |
+| **Core Layers, FP64 Schedulers, Timestep & Dispatch** | `LayerNorm2d`, `convert_*`, `FlowMatch.step`, `dispatch` | LN2d `16.49×` CG · `convert_*` `24.5×` CG (**`-93.8%` VRAM**) · Attn dispatch `2.1 µs` | **`3.6×`–`50.4×`** / **`~18–20×`** | **Bit-exact** schedulers & `PostSA` |
 
 ## Quality Engineering & Blocked Presets
 
