@@ -875,9 +875,13 @@ class VideoDecoder(nn.Module):
             return False
         if mode not in {"default", "reduce-overhead", "max-autotune", "max-autotune-no-cudagraphs"}:
             raise ValueError(f"unsupported VideoDecoder compile mode: {mode!r}")
-        from worldfoundry.core.platform.compile_cache import configure_persistent_compile_cache
+        from worldfoundry.core.platform.compile_cache import (
+            configure_persistent_compile_cache,
+            register_worldfoundry_inductor_fallbacks,
+        )
 
         configure_persistent_compile_cache(namespace="ltx-video-vae")
+        register_worldfoundry_inductor_fallbacks()
         self._compiled_forward = torch.compile(self._forward_deterministic, mode=mode, dynamic=dynamic)
         self._compiled_decode_rgb = torch.compile(self._decode_rgb_deterministic, mode=mode, dynamic=dynamic)
         self._compile_mode = mode

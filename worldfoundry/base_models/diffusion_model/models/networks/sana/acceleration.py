@@ -433,6 +433,9 @@ def accelerate_sana_vae(
 
     compiled = False
     if compile_decoder and isinstance(vae, nn.Module):
+        from worldfoundry.core.platform.compile_cache import register_worldfoundry_inductor_fallbacks
+
+        register_worldfoundry_inductor_fallbacks()
         inner = getattr(vae, "model", vae)
         decoder = getattr(inner, "decoder", None)
         if isinstance(decoder, nn.Module):
@@ -464,6 +467,9 @@ def compile_sana_blocks(
     blocks = getattr(model, "blocks", None)
     if not isinstance(blocks, nn.ModuleList):
         raise TypeError("SANA model must expose a ModuleList named 'blocks'")
+    from worldfoundry.core.platform.compile_cache import register_worldfoundry_inductor_fallbacks
+
+    register_worldfoundry_inductor_fallbacks()
     compiled_count = 0
     for idx, block in enumerate(blocks):
         raw_block = getattr(block, "_orig_mod", block)

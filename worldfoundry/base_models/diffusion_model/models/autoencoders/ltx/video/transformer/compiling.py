@@ -60,6 +60,10 @@ def compile_diffusion_decoder(
     }
 
     def _compile(fn: Callable[..., Any]) -> Callable[..., Any]:
+        if cfg.backend == "inductor":
+            from worldfoundry.core.platform.compile_cache import register_worldfoundry_inductor_fallbacks
+
+            register_worldfoundry_inductor_fallbacks()
         with (
             torch._inductor.config.patch(**cfg.inductor_config),
             torch._dynamo.config.patch(**cfg.dynamo_config),  # type: ignore[attr-defined]

@@ -935,3 +935,47 @@ def test_all_new_ops_cuda_graph_and_compile_fullgraph(channels_last: bool) -> No
         comp_outs = compiled(*args)
     for got, exp in zip(comp_outs, eager_outs, strict=True):
         assert torch.equal(got, exp)
+
+
+@requires_cuda
+def test_deep_ltx_conv_decoder_compile_avoids_inductor_fallback_str_blowup() -> None:
+    """Verify deep 20-ResBlock LTX VideoDecoder compiles quickly via explicit Inductor fallbacks."""
+    import time
+
+    torch.manual_seed(43)
+    dec = (
+        VideoDecoder(
+            convolution_dimensions=3,
+            in_channels=64,
+            out_channels=3,
+            decoder_blocks=[
+                ("res_x", {"num_layers": 5}),
+                ("compress_space", {"residual": True, "multiplier": 2}),
+                ("res_x", {"num_layers": 5}),
+                ("compress_all", {"residual": True, "multiplier": 2}),
+                ("res_x", {"num_layers": 5}),
+                ("compress_all", {"residual": True, "multiplier": 2}),
+                ("res_x", {"num_layers": 5}),
+            ],
+            patch_size=4,
+            norm_layer=NormLayerType.PIXEL_NORM,
+            causal=False,
+            timestep_conditioning=False,
+        )
+        .to(device="cuda", dtype=torch.bfloat16)
+        .eval()
+    )
+    dec.per_channel_statistics.get_buffer("std-of-means").fill_(1.0)
+    dec.per_channel_statistics.get_buffer("mean-of-means").zero_()
+    dec.enable_channels_last_3d()
+    x = torch.randn(1, 64, 3, 4, 4, device="cuda", dtype=torch.bfloat16)
+    with torch.inference_mode():
+        eager = dec(x)
+
+    assert dec.enable_compile(mode="default")
+    t0 = time.perf_counter()
+    with torch.inference_mode():
+        compiled = dec(x)
+    elapsed = time.perf_counter() - t0
+    assert elapsed < 30.0, f"deep VideoDecoder compile took too long: {elapsed:.2f}s"
+    _assert_lossless(compiled, eager, torch.bfloat16)
