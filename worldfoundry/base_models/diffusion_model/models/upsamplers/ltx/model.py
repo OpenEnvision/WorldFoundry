@@ -12,9 +12,19 @@ from einops import rearrange
 
 from worldfoundry.base_models.diffusion_model.models.autoencoders.ltx.video import VideoEncoder
 from worldfoundry.base_models.diffusion_model.models.upsamplers.ltx.pixel_shuffle import PixelShuffleND
-from worldfoundry.base_models.diffusion_model.models.upsamplers.ltx.res_block import ResBlock
+from worldfoundry.base_models.diffusion_model.models.upsamplers.ltx.res_block import (
+    ResBlock,
+    _can_defer_conv_bias,
+    _can_fuse_norm_act_module,
+    _conv_no_bias,
+)
 from worldfoundry.base_models.diffusion_model.models.upsamplers.ltx.spatial_rational_resampler import (
     SpatialRationalResampler,
+)
+from worldfoundry.base_models.diffusion_model.models.upsamplers.ltx.triton_upsampler_ops import (
+    _is_channels_last_nd,
+    can_use_triton_upsampler_group_norm_silu,
+    triton_upsampler_group_norm_silu,
 )
 
 
@@ -88,6 +98,44 @@ class LatentUpsampler(torch.nn.Module):
         )
 
         self.final_conv = conv(mid_channels, in_channels, kernel_size=3, padding=1)
+        self._channels_last_3d: bool = False
+
+    def enable_channels_last_3d(self) -> int:
+        """Convert Conv3d/Conv2d weights to channels-last layouts for Hopper Tensor Cores."""
+        from worldfoundry.core.acceleration.convolution_layout import convert_convolution_weight_layouts
+
+        report = convert_convolution_weight_layouts(self, conv2d=True, conv3d=True)
+        converted = report.conv3d_converted + report.conv2d_converted
+        self._channels_last_3d = report.conv3d_converted > 0
+        return converted
+
+    def _run_initial(self, x: torch.Tensor) -> torch.Tensor:
+        if _can_defer_conv_bias(self.initial_conv, x) and _can_fuse_norm_act_module(
+            self.initial_norm, self.initial_activation, x.device
+        ):
+            h = _conv_no_bias(self.initial_conv, x)
+            if can_use_triton_upsampler_group_norm_silu(
+                h,
+                self.initial_norm.num_groups,
+                self.initial_norm.weight,
+                self.initial_norm.bias,
+                pre_bias=self.initial_conv.bias,
+            ):
+                return triton_upsampler_group_norm_silu(
+                    h,
+                    self.initial_norm.num_groups,
+                    self.initial_norm.weight,
+                    self.initial_norm.bias,
+                    self.initial_norm.eps,
+                    pre_bias=self.initial_conv.bias,
+                    apply_silu=True,
+                )
+            if self.initial_conv.bias is not None:
+                h = h + self.initial_conv.bias.view((1, -1) + (1,) * (h.ndim - 2)).to(h)
+            return self.initial_activation(self.initial_norm(h))
+        x = self.initial_conv(x)
+        x = self.initial_norm(x)
+        return self.initial_activation(x)
 
     def forward(self, latent: torch.Tensor) -> torch.Tensor:
         """Upsample a BCTHW latent; 2-D path folds time into the batch."""
@@ -95,9 +143,7 @@ class LatentUpsampler(torch.nn.Module):
 
         if self.dims == 2:
             x = rearrange(latent, "b c f h w -> (b f) c h w")
-            x = self.initial_conv(x)
-            x = self.initial_norm(x)
-            x = self.initial_activation(x)
+            x = self._run_initial(x)
 
             for block in self.res_blocks:
                 x = block(x)
@@ -110,9 +156,10 @@ class LatentUpsampler(torch.nn.Module):
             x = self.final_conv(x)
             x = rearrange(x, "(b f) c h w -> b c f h w", b=b, f=f)
         else:
-            x = self.initial_conv(latent)
-            x = self.initial_norm(x)
-            x = self.initial_activation(x)
+            x = latent
+            if self._channels_last_3d and x.ndim == 5 and x.device.type == "cuda":
+                x = x.contiguous(memory_format=torch.channels_last_3d)
+            x = self._run_initial(x)
 
             for block in self.res_blocks:
                 x = block(x)
@@ -124,6 +171,13 @@ class LatentUpsampler(torch.nn.Module):
                 x = x[:, :, 1:, :, :]
             elif isinstance(self.upsampler, SpatialRationalResampler):
                 x = self.upsampler(x)
+            elif _is_channels_last_nd(x):
+                # Zero-copy 5-D NDHWC <-> 4-D NHWC view around the 2-D spatial upsampler.
+                _, c_mid, _, h_in, w_in = x.shape
+                x_4d = x.permute(0, 2, 3, 4, 1).reshape(b * f, h_in, w_in, c_mid).permute(0, 3, 1, 2)
+                x_4d = self.upsampler(x_4d)
+                _, c_up, h_up, w_up = x_4d.shape
+                x = x_4d.permute(0, 2, 3, 1).contiguous().reshape(b, f, h_up, w_up, c_up).permute(0, 4, 1, 2, 3)
             else:
                 x = rearrange(x, "b c f h w -> (b f) c h w")
                 x = self.upsampler(x)

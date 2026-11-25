@@ -18,9 +18,15 @@ import torch
 from einops import rearrange
 from torch import nn
 
-from .convolution import make_conv_nd
+from .convolution import CausalConv3d, make_conv_nd
 from .enums import PaddingModeType
-from .triton_vae_ops import triton_depth_to_space_3d
+from .triton_vae_ops import (
+    can_use_triton_ltx_pad_3d,
+    can_use_triton_space_to_depth_3d_add,
+    triton_depth_to_space_3d,
+    triton_ltx_pad_3d,
+    triton_space_to_depth_3d_add,
+)
 
 
 class SpaceToDepthDownsample(nn.Module):
@@ -52,7 +58,51 @@ class SpaceToDepthDownsample(nn.Module):
         x: torch.Tensor,
         causal: bool = True,
     ) -> torch.Tensor:
-        if self.stride[0] == 2:
+        dup_first_t = self.stride[0] == 2
+        if (
+            x.is_cuda
+            and x.ndim == 5
+            and not torch.is_grad_enabled()
+            and type(self.conv) is CausalConv3d
+            and self.conv._can_use_fast_conv_path(x)
+        ):
+            pad, s_mode, conv_pad = self.conv._fused_pad_spec(causal, extra_pt_l=1 if dup_first_t else 0)
+            if all(p == 0 for p in pad) or can_use_triton_ltx_pad_3d(
+                x, pad, spatial_mode=s_mode, temporal_mode="replicate"
+            ):
+                x_pad = (
+                    x
+                    if all(p == 0 for p in pad)
+                    else triton_ltx_pad_3d(x, pad, spatial_mode=s_mode, temporal_mode="replicate")
+                )
+                h, h_bias = self.conv._forward_conv_only(x_pad, conv_pad, defer_bias=True)
+                if can_use_triton_space_to_depth_3d_add(
+                    h, x, self.stride, self.group_size, dup_first_t=dup_first_t, h_bias=h_bias
+                ):
+                    return triton_space_to_depth_3d_add(
+                        h, x, self.stride, self.group_size, dup_first_t=dup_first_t, h_bias=h_bias
+                    )
+                if h_bias is not None:
+                    h = h + h_bias.view(1, -1, 1, 1, 1).to(h)
+                x_dup = torch.cat([x[:, :, :1, :, :], x], dim=2) if dup_first_t else x
+                x_in = rearrange(
+                    x_dup,
+                    "b c (d p1) (h p2) (w p3) -> b (c p1 p2 p3) d h w",
+                    p1=self.stride[0],
+                    p2=self.stride[1],
+                    p3=self.stride[2],
+                )
+                x_in = rearrange(x_in, "b (c g) d h w -> b c g d h w", g=self.group_size).mean(dim=2)
+                h_out = rearrange(
+                    h,
+                    "b c (d p1) (h p2) (w p3) -> b (c p1 p2 p3) d h w",
+                    p1=self.stride[0],
+                    p2=self.stride[1],
+                    p3=self.stride[2],
+                )
+                return h_out + x_in
+
+        if dup_first_t:
             x = torch.cat([x[:, :, :1, :, :], x], dim=2)  # duplicate first frames for padding
 
         # skip connection
@@ -114,12 +164,28 @@ class DepthToSpaceUpsample(nn.Module):
         causal: bool = True,
     ) -> torch.Tensor:
         if x.is_cuda and x.ndim == 5:
-            x_conv = self.conv(x, causal=causal)
+            h_bias: torch.Tensor | None = None
+            if not torch.is_grad_enabled() and type(self.conv) is CausalConv3d and self.conv._can_use_fast_conv_path(x):
+                pad, s_mode, conv_pad = self.conv._fused_pad_spec(causal)
+                if all(p == 0 for p in pad) or can_use_triton_ltx_pad_3d(
+                    x, pad, spatial_mode=s_mode, temporal_mode="replicate"
+                ):
+                    x_pad = (
+                        x
+                        if all(p == 0 for p in pad)
+                        else triton_ltx_pad_3d(x, pad, spatial_mode=s_mode, temporal_mode="replicate")
+                    )
+                    x_conv, h_bias = self.conv._forward_conv_only(x_pad, conv_pad, defer_bias=True)
+                else:
+                    x_conv = self.conv(x, causal=causal)
+            else:
+                x_conv = self.conv(x, causal=causal)
             return triton_depth_to_space_3d(
                 x_conv,
                 self.stride,
                 residual=x if self.residual else None,
                 out_channels_reduction_factor=self.out_channels_reduction_factor,
+                h_bias=h_bias,
             )
 
         if self.residual:

@@ -14,18 +14,30 @@ implementation detail; do not comment every conv.
 from __future__ import annotations
 
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
 
 from worldfoundry.base_models.diffusion_model.models.autoencoders.ltx.audio.attention import AttentionType, make_attn
-from worldfoundry.base_models.diffusion_model.models.autoencoders.ltx.audio.causal_conv_2d import make_conv2d
+from worldfoundry.base_models.diffusion_model.models.autoencoders.ltx.audio.causal_conv_2d import (
+    CausalConv2d,
+    make_conv2d,
+)
 from worldfoundry.base_models.diffusion_model.models.autoencoders.ltx.audio.causality_axis import CausalityAxis
 from worldfoundry.base_models.diffusion_model.models.autoencoders.ltx.audio.downsample import build_downsampling_path
-from worldfoundry.base_models.diffusion_model.models.autoencoders.ltx.audio.resnet import ResnetBlock
+from worldfoundry.base_models.diffusion_model.models.autoencoders.ltx.audio.resnet import (
+    ResnetBlock,
+    _can_fuse_audio_norm_silu_conv,
+)
 from worldfoundry.base_models.diffusion_model.models.autoencoders.ltx.audio.statistics import PerChannelStatistics
+from worldfoundry.base_models.diffusion_model.models.autoencoders.ltx.audio.triton_audio_ops import (
+    triton_pixel_norm_silu_pad_2d,
+    triton_residual_bias_add_2d,
+)
 from worldfoundry.base_models.diffusion_model.models.autoencoders.ltx.audio.upsample import build_upsampling_path
 from worldfoundry.base_models.diffusion_model.models.autoencoders.ltx.audio.vocoder import Vocoder
 from worldfoundry.base_models.diffusion_model.models.autoencoders.ltx.common.normalization import (
     NormType,
+    PixelNorm,
     build_normalization_layer,
 )
 from worldfoundry.base_models.diffusion_model.models.representations.ltx.patchifiers import AudioPatchifier
@@ -201,6 +213,15 @@ class AudioEncoder(torch.nn.Module):
             stride=1,
             causality_axis=self.causality_axis,
         )
+        self._channels_last: bool = False
+
+    def enable_channels_last(self) -> int:
+        """Convert Conv2d weights to ``channels_last`` (NHWC) for Tensor Core acceleration."""
+        from worldfoundry.core.acceleration.convolution_layout import convert_convolution_weight_layouts
+
+        report = convert_convolution_weight_layouts(self, conv2d=True)
+        self._channels_last = report.conv2d_converted > 0
+        return report.conv2d_converted
 
     def forward(self, spectrogram: torch.Tensor) -> torch.Tensor:
         """
@@ -210,6 +231,8 @@ class AudioEncoder(torch.nn.Module):
         Returns:
             Encoded latent representation of shape (batch, channels, frames, mel_bins)
         """
+        if self._channels_last and spectrogram.ndim == 4 and spectrogram.device.type == "cuda":
+            spectrogram = spectrogram.contiguous(memory_format=torch.channels_last)
         h = self.conv_in(spectrogram)
         h = self._run_downsampling_path(h)
         h = run_mid_block(self.mid, h)
@@ -231,6 +254,16 @@ class AudioEncoder(torch.nn.Module):
         return h
 
     def _finalize_output(self, h: torch.Tensor) -> torch.Tensor:
+        if (
+            isinstance(self.norm_out, PixelNorm)
+            and isinstance(self.conv_out, CausalConv2d)
+            and isinstance(self.conv_out.conv, nn.Conv2d)
+            and _can_fuse_audio_norm_silu_conv(self.norm_out, self.non_linearity, self.conv_out, h)
+        ):
+            h_pad = triton_pixel_norm_silu_pad_2d(h, self.norm_out.eps, self.conv_out.padding, apply_silu=True)
+            co = self.conv_out.conv
+            out = F.conv2d(h_pad, co.weight, None, co.stride, co.padding, co.dilation, co.groups)
+            return triton_residual_bias_add_2d(None, out, co.bias) if co.bias is not None else out
         h = self.norm_out(h)
         h = self.non_linearity(h)
         return self.conv_out(h)
@@ -398,6 +431,15 @@ class AudioDecoder(torch.nn.Module):
         self.conv_out = make_conv2d(
             final_block_channels, out_ch, kernel_size=3, stride=1, causality_axis=self.causality_axis
         )
+        self._channels_last: bool = False
+
+    def enable_channels_last(self) -> int:
+        """Convert Conv2d weights to ``channels_last`` (NHWC) for Tensor Core acceleration."""
+        from worldfoundry.core.acceleration.convolution_layout import convert_convolution_weight_layouts
+
+        report = convert_convolution_weight_layouts(self, conv2d=True)
+        self._channels_last = report.conv2d_converted > 0
+        return report.conv2d_converted
 
     def forward(self, sample: torch.Tensor) -> torch.Tensor:
         """
@@ -408,6 +450,8 @@ class AudioDecoder(torch.nn.Module):
             Reconstructed audio spectrogram of shape (batch, channels, time, frequency)
         """
         sample, target_shape = self._denormalize_latents(sample)
+        if self._channels_last and sample.ndim == 4 and sample.device.type == "cuda":
+            sample = sample.contiguous(memory_format=torch.channels_last)
 
         h = self.conv_in(sample)
         h = run_mid_block(self.mid, h)
@@ -504,6 +548,19 @@ class AudioDecoder(torch.nn.Module):
     def _finalize_output(self, h: torch.Tensor) -> torch.Tensor:
         if self.give_pre_end:
             return h
+
+        if (
+            isinstance(self.norm_out, PixelNorm)
+            and isinstance(self.conv_out, CausalConv2d)
+            and isinstance(self.conv_out.conv, nn.Conv2d)
+            and _can_fuse_audio_norm_silu_conv(self.norm_out, self.non_linearity, self.conv_out, h)
+        ):
+            h_pad = triton_pixel_norm_silu_pad_2d(h, self.norm_out.eps, self.conv_out.padding, apply_silu=True)
+            co = self.conv_out.conv
+            h = F.conv2d(h_pad, co.weight, None, co.stride, co.padding, co.dilation, co.groups)
+            if co.bias is not None:
+                h = triton_residual_bias_add_2d(None, h, co.bias)
+            return torch.tanh(h) if self.tanh_out else h
 
         h = self.norm_out(h)
         h = self.non_linearity(h)

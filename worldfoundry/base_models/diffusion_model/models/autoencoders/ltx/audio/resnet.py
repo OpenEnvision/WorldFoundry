@@ -12,12 +12,52 @@ Consumed by :mod:`.audio_vae` and :mod:`.vocoder`.
 
 import torch
 
-from worldfoundry.base_models.diffusion_model.models.autoencoders.ltx.audio.causal_conv_2d import make_conv2d
+from worldfoundry.base_models.diffusion_model.models.autoencoders.ltx.audio.causal_conv_2d import (
+    CausalConv2d,
+    make_conv2d,
+)
 from worldfoundry.base_models.diffusion_model.models.autoencoders.ltx.audio.causality_axis import CausalityAxis
+from worldfoundry.base_models.diffusion_model.models.autoencoders.ltx.audio.triton_audio_ops import (
+    can_use_triton_pixel_norm_silu_pad_2d,
+    triton_pixel_norm_silu_pad_2d,
+    triton_residual_bias_add_2d,
+)
 from worldfoundry.base_models.diffusion_model.models.autoencoders.ltx.common.normalization import (
     NormType,
+    PixelNorm,
     build_normalization_layer,
 )
+
+
+def _has_hooks(module: torch.nn.Module) -> bool:
+    return bool(module._forward_hooks or module._forward_pre_hooks)
+
+
+def _can_fuse_audio_norm_silu_conv(
+    norm: torch.nn.Module,
+    act: torch.nn.Module,
+    conv: torch.nn.Module,
+    x: torch.Tensor,
+    pre_bias: torch.Tensor | None = None,
+) -> bool:
+    if (
+        type(norm) is not PixelNorm
+        or norm.dim not in (1, 1 - x.ndim)
+        or type(act) is not torch.nn.SiLU
+        or type(conv) is not CausalConv2d
+        or type(conv.conv) is not torch.nn.Conv2d
+        or _has_hooks(norm)
+        or _has_hooks(act)
+        or _has_hooks(conv)
+        or _has_hooks(conv.conv)
+        or not x.is_cuda
+        or torch.is_grad_enabled()
+        or conv.conv.weight.device != x.device
+        or (conv.conv.bias is not None and conv.conv.bias.device != x.device)
+    ):
+        return False
+    return can_use_triton_pixel_norm_silu_pad_2d(x, conv.padding, pre_bias=pre_bias)
+
 
 LRELU_SLOPE = 0.1
 
@@ -177,19 +217,68 @@ class ResnetBlock(torch.nn.Module):
         temb: torch.Tensor | None = None,
     ) -> torch.Tensor:
         h = x
-        h = self.norm1(h)
-        h = self.non_linearity(h)
-        h = self.conv1(h)
+        dropout_is_noop = (
+            type(self.dropout) is torch.nn.Dropout
+            and not _has_hooks(self.dropout)
+            and (not self.training or self.dropout.p == 0.0)
+        )
+        can_fuse_2 = (
+            temb is None
+            and dropout_is_noop
+            and type(self.norm2) is PixelNorm
+            and type(self.conv2) is CausalConv2d
+            and not _has_hooks(self.norm2)
+            and not _has_hooks(self.conv2)
+        )
+
+        bias1: torch.Tensor | None = None
+        if (
+            isinstance(self.norm1, PixelNorm)
+            and isinstance(self.conv1, CausalConv2d)
+            and isinstance(self.conv1.conv, torch.nn.Conv2d)
+            and _can_fuse_audio_norm_silu_conv(self.norm1, self.non_linearity, self.conv1, h)
+        ):
+            h_pad = triton_pixel_norm_silu_pad_2d(h, self.norm1.eps, self.conv1.padding, apply_silu=True)
+            c1 = self.conv1.conv
+            h = torch.nn.functional.conv2d(h_pad, c1.weight, None, c1.stride, c1.padding, c1.dilation, c1.groups)
+            if c1.bias is not None:
+                if can_fuse_2:
+                    bias1 = c1.bias
+                else:
+                    h = triton_residual_bias_add_2d(None, h, c1.bias)
+        else:
+            h = self.norm1(h)
+            h = self.non_linearity(h)
+            h = self.conv1(h)
 
         if temb is not None:
             h = h + self.temb_proj(self.non_linearity(temb))[:, :, None, None]
 
-        h = self.norm2(h)
-        h = self.non_linearity(h)
-        h = self.dropout(h)
-        h = self.conv2(h)
+        bias2: torch.Tensor | None = None
+        if (
+            dropout_is_noop
+            and isinstance(self.norm2, PixelNorm)
+            and isinstance(self.conv2, CausalConv2d)
+            and isinstance(self.conv2.conv, torch.nn.Conv2d)
+            and _can_fuse_audio_norm_silu_conv(self.norm2, self.non_linearity, self.conv2, h, pre_bias=bias1)
+        ):
+            h_pad = triton_pixel_norm_silu_pad_2d(
+                h, self.norm2.eps, self.conv2.padding, apply_silu=True, pre_bias=bias1
+            )
+            c2 = self.conv2.conv
+            h = torch.nn.functional.conv2d(h_pad, c2.weight, None, c2.stride, c2.padding, c2.dilation, c2.groups)
+            bias2 = c2.bias
+        else:
+            if bias1 is not None:
+                h = triton_residual_bias_add_2d(None, h, bias1)
+            h = self.norm2(h)
+            h = self.non_linearity(h)
+            h = self.dropout(h)
+            h = self.conv2(h)
 
         if self.in_channels != self.out_channels:
             x = self.conv_shortcut(x) if self.use_conv_shortcut else self.nin_shortcut(x)
 
+        if bias2 is not None or (x.is_cuda and h.is_cuda and not torch.is_grad_enabled()):
+            return triton_residual_bias_add_2d(x, h, bias2)
         return x + h

@@ -22,7 +22,10 @@ from einops import rearrange
 from torch import nn
 
 from worldfoundry.base_models.diffusion_model.models.autoencoders.ltx.common.normalization import PixelNorm
-from worldfoundry.base_models.diffusion_model.models.autoencoders.ltx.video.convolution import make_conv_nd
+from worldfoundry.base_models.diffusion_model.models.autoencoders.ltx.video.convolution import (
+    CausalConv3d,
+    make_conv_nd,
+)
 from worldfoundry.base_models.diffusion_model.models.autoencoders.ltx.video.enums import (
     LogVarianceType,
     NormLayerType,
@@ -33,12 +36,21 @@ from worldfoundry.base_models.diffusion_model.models.autoencoders.ltx.video.ops 
     patchify,
     unpatchify,
 )
-from worldfoundry.base_models.diffusion_model.models.autoencoders.ltx.video.resnet import ResnetBlock3D, UNetMidBlock3D
+from worldfoundry.base_models.diffusion_model.models.autoencoders.ltx.video.resnet import (
+    ResnetBlock3D,
+    UNetMidBlock3D,
+    _can_fuse_pixel_norm_silu_conv,
+)
 from worldfoundry.base_models.diffusion_model.models.autoencoders.ltx.video.sampling import (
     DepthToSpaceUpsample,
     SpaceToDepthDownsample,
 )
 from worldfoundry.base_models.diffusion_model.models.autoencoders.ltx.video.tiling import TilingConfig
+from worldfoundry.base_models.diffusion_model.models.autoencoders.ltx.video.triton_vae_ops import (
+    triton_patchify_3d,
+    triton_pixel_norm_adaln_silu_pad_3d,
+    triton_unpatchify_3d,
+)
 from worldfoundry.base_models.diffusion_model.models.representations.ltx.tiling import (
     DEFAULT_MAPPING_OPERATION,
     DEFAULT_SPLIT_OPERATION,
@@ -328,13 +340,37 @@ class VideoEncoder(nn.Module):
             )
             sample = sample[:, :, :-frames_to_crop, ...]
 
-        sample = patchify(sample, patch_size_hw=self.patch_size, patch_size_t=1)
+        if sample.is_cuda and sample.ndim == 5 and not torch.is_grad_enabled():
+            sample = triton_patchify_3d(
+                sample,
+                patch_size_hw=self.patch_size,
+                patch_size_t=1,
+                channels_last_3d=self._channels_last_3d,
+            )
+        else:
+            sample = patchify(sample, patch_size_hw=self.patch_size, patch_size_t=1)
         sample = self.conv_in(sample)
         for down_block in self.down_blocks:
             sample = down_block(sample)
-        sample = self.conv_norm_out(sample)
-        sample = self.conv_act(sample)
-        sample = self.conv_out(sample)
+        if isinstance(self.conv_out, CausalConv3d) and _can_fuse_pixel_norm_silu_conv(
+            self.conv_norm_out, self.conv_act, self.conv_out, sample, True, None, None
+        ):
+            pad_out, s_mode_out, conv_pad_out = self.conv_out._fused_pad_spec(True)
+            sample = triton_pixel_norm_adaln_silu_pad_3d(
+                sample,
+                None,
+                None,
+                self.conv_norm_out.eps,
+                pad_out,
+                spatial_mode=s_mode_out,
+                temporal_mode="replicate",
+                apply_silu=True,
+            )
+            sample, _ = self.conv_out._forward_conv_only(sample, conv_pad_out, defer_bias=False)
+        else:
+            sample = self.conv_norm_out(sample)
+            sample = self.conv_act(sample)
+            sample = self.conv_out(sample)
 
         if self.latent_log_var == LogVarianceType.UNIFORM:
             means = sample[:, :-1, ...]
@@ -794,10 +830,28 @@ class VideoDecoder(nn.Module):
                 sample = up_block(sample, causal=self.causal, generator=None)
             else:
                 sample = up_block(sample, causal=self.causal)
-        sample = self.conv_norm_out(sample)
-        sample = self.conv_act(sample)
-        sample = self.conv_out(sample, causal=self.causal)
-        sample = unpatchify(sample, patch_size_hw=self.patch_size, patch_size_t=1)
+        if isinstance(self.conv_out, CausalConv3d) and _can_fuse_pixel_norm_silu_conv(
+            self.conv_norm_out, self.conv_act, self.conv_out, sample, self.causal, None, None
+        ):
+            pad_out, s_mode_out, conv_pad_out = self.conv_out._fused_pad_spec(self.causal)
+            sample = triton_pixel_norm_adaln_silu_pad_3d(
+                sample,
+                None,
+                None,
+                self.conv_norm_out.eps,
+                pad_out,
+                spatial_mode=s_mode_out,
+                temporal_mode="replicate",
+                apply_silu=True,
+            )
+            defer_out_bias = self.patch_size > 1
+            sample, out_bias = self.conv_out._forward_conv_only(sample, conv_pad_out, defer_bias=defer_out_bias)
+            sample = triton_unpatchify_3d(sample, patch_size_hw=self.patch_size, patch_size_t=1, bias=out_bias)
+        else:
+            sample = self.conv_norm_out(sample)
+            sample = self.conv_act(sample)
+            sample = self.conv_out(sample, causal=self.causal)
+            sample = unpatchify(sample, patch_size_hw=self.patch_size, patch_size_t=1)
         return sample.to(output_dtype)
 
     def _decode_rgb_deterministic(self, sample: torch.Tensor) -> torch.Tensor:
@@ -905,8 +959,8 @@ class VideoDecoder(nn.Module):
             else:
                 sample = up_block(sample, causal=self.causal)
 
-        sample = self.conv_norm_out(sample)
-
+        last_shift: torch.Tensor | None = None
+        last_scale: torch.Tensor | None = None
         if self.timestep_conditioning:
             embedded_timestep = self.last_time_embedder(
                 timestep=scaled_timestep.flatten(),
@@ -923,16 +977,36 @@ class VideoDecoder(nn.Module):
                 embedded_timestep.shape[-2],
                 embedded_timestep.shape[-1],
             )
-            shift, scale = ada_values.unbind(dim=1)
-            sample = sample * (1 + scale) + shift
+            last_shift, last_scale = ada_values.unbind(dim=1)
 
-        sample = self.conv_act(sample)
-        sample = self.conv_out(sample, causal=self.causal)
+        if isinstance(self.conv_out, CausalConv3d) and _can_fuse_pixel_norm_silu_conv(
+            self.conv_norm_out, self.conv_act, self.conv_out, sample, self.causal, last_scale, last_shift
+        ):
+            pad_out, s_mode_out, conv_pad_out = self.conv_out._fused_pad_spec(self.causal)
+            sample = triton_pixel_norm_adaln_silu_pad_3d(
+                sample,
+                last_scale,
+                last_shift,
+                self.conv_norm_out.eps,
+                pad_out,
+                spatial_mode=s_mode_out,
+                temporal_mode="replicate",
+                apply_silu=True,
+            )
+            defer_out_bias = self.patch_size > 1
+            sample, out_bias = self.conv_out._forward_conv_only(sample, conv_pad_out, defer_bias=defer_out_bias)
+            sample = triton_unpatchify_3d(sample, patch_size_hw=self.patch_size, patch_size_t=1, bias=out_bias)
+        else:
+            sample = self.conv_norm_out(sample)
+            if self.timestep_conditioning and last_scale is not None and last_shift is not None:
+                sample = sample * (1 + last_scale) + last_shift
+            sample = self.conv_act(sample)
+            sample = self.conv_out(sample, causal=self.causal)
 
-        # Final spatial expansion: reverse the initial patchify from encoder
-        # Moves pixels from channels back to spatial dimensions
-        # Example: (B, 48, F, 128, 128) -> (B, 3, F, 512, 512) with patch_size=4
-        sample = unpatchify(sample, patch_size_hw=self.patch_size, patch_size_t=1)
+            # Final spatial expansion: reverse the initial patchify from encoder
+            # Moves pixels from channels back to spatial dimensions
+            # Example: (B, 48, F, 128, 128) -> (B, 3, F, 512, 512) with patch_size=4
+            sample = unpatchify(sample, patch_size_hw=self.patch_size, patch_size_t=1)
 
         return sample.to(output_dtype)
 
