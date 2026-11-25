@@ -30,7 +30,7 @@
 <p align="center"><b>TL;DR</b> — WorldFoundry runs 270+ world models (video generation, interactive worlds, 3D/4D reconstruction, VLA policies) through one CLI, one Python API, and one browser workspace, and scores their outputs on integrated benchmarks with auditable scorecards.</p>
 
 ## 📰 News
-
+- **[2026-11-24]** 🚀 **WorldFoundry now supports more models, including HY-Nomas, π-H3, and π4!** We also standardized the codebase more thoroughly and removed redundant code, so it is now cleaner and more consistent. Thank you all for your patience!
 - **[2026-11-10]** 🔥 **The WorldFoundry technical report is now available on [arXiv](https://arxiv.org/abs/2611.10771)!** We welcome your support with a GitHub Star and a [Hugging Face Upvote](https://huggingface.co/papers/2611.10771). Thank you for your support!
 - **[2026-07-12]** 🔥 **WorldFoundry reached 100+ stars on its very first day!** Thanks to the community for the incredible support and encouragement. More exciting updates are coming!
 - **[2026-07-11]** 🎉 **WorldFoundry is officially open-sourced.** We welcome ⭐ stars, bug reports, feature requests, and pull requests from the community!
