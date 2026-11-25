@@ -85,14 +85,20 @@ def all_gather_concat(
     # transpose the requested dimension around the operation.
     gather_into = getattr(dist, "all_gather_into_tensor", None)
     if callable(gather_into):
-        packed = input_tensor.movedim(dim, 0).contiguous() if dim != 0 else input_tensor
+        if dim == 0:
+            output = input_tensor.new_empty((world_size * input_tensor.shape[0], *input_tensor.shape[1:]))
+            gather_into(output, input_tensor, group=group)
+            return output
+        if dim == 1 and input_tensor.shape[0] == 1:
+            output = input_tensor.new_empty((world_size * input_tensor.shape[0], *input_tensor.shape[1:]))
+            gather_into(output, input_tensor, group=group)
+            return output.reshape(1, world_size * input_tensor.shape[1], *input_tensor.shape[2:])
+        packed = input_tensor.movedim(dim, 0).contiguous()
         output_shape = list(packed.shape)
         output_shape[0] *= world_size
         output = packed.new_empty(output_shape)
         gather_into(output, packed, group=group)
-        if dim != 0:
-            output = output.movedim(0, dim).contiguous()
-        return output
+        return output.movedim(0, dim).contiguous()
 
     gathered = [torch.empty_like(input_tensor) for _ in range(world_size)]
     dist.all_gather(gathered, input_tensor, group=group)
@@ -122,8 +128,14 @@ def all_to_all_concat(
         raise ValueError(f"scatter dimension {tensor.shape[scatter_dim]} must be divisible by world size {world_size}")
 
     # Destination chunks occupy consecutive ranges on dimension zero, which is
-    # the memory contract expected by all_to_all_single.
-    packed = tensor.movedim(scatter_dim, 0).contiguous()
+    # the memory contract expected by all_to_all_single. When all leading axes
+    # before scatter_dim are singleton (e.g. B==1, scatter_dim==1), a flat view
+    # is already destination-major without any copy.
+    leading_singleton = all(tensor.shape[axis] == 1 for axis in range(scatter_dim))
+    if scatter_dim == 0 or leading_singleton:
+        packed = tensor.contiguous().reshape(world_size, -1)
+    else:
+        packed = tensor.movedim(scatter_dim, 0).contiguous()
     functional = getattr(_functional_collectives, "all_to_all_single", None)
     if callable(functional):
         exchanged = functional(

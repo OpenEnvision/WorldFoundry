@@ -19,6 +19,19 @@ from worldfoundry.core.distributed.collectives.generic import (  # noqa: F401 - 
     get_world_size,
 )
 from worldfoundry.core.distributed.collectives.tensor import all_gather_concat, all_to_all_concat
+from worldfoundry.core.distributed.sequence_parallel.symm_mem_all_to_all import (
+    try_symm_mem_all_to_all_o,
+    try_symm_mem_all_to_all_qkv,
+    ulysses_backend_mode,
+)
+from worldfoundry.core.distributed.sequence_parallel.triton_ulysses_ops import (
+    ulysses_pack_o_scatter_seq,
+    ulysses_pack_qkv,
+    ulysses_unpack_o_gather_head,
+    ulysses_unpack_qkv,
+)
+
+_ORIG_ALL_TO_ALL_SINGLE = getattr(dist, "all_to_all_single", None)
 
 # ──────────────────────────────────────────────────────────────────────────
 # Default-group init — does NOT create an SP subgroup (that is sequence_parallel_runtime)
@@ -55,27 +68,51 @@ def init_distributed_group():
 # ──────────────────────────────────────────────────────────────────────────
 
 
-def all_to_all(x, scatter_dim, gather_dim, group=None, **kwargs):
+def all_to_all(x, scatter_dim, gather_dim, group=None, *, crop_heads: int = 0, **kwargs):
     """
     `scatter` along one dimension and `gather` along another.
     """
     world_size = dist.get_world_size(group) if _distributed_ready() else get_world_size()
     if world_size > 1:
         if not kwargs:
-            return all_to_all_concat(
+            if (
+                x.is_cuda
+                and x.ndim == 4
+                and (int(scatter_dim) % 4) == 1
+                and (int(gather_dim) % 4) == 2
+                and x.shape[1] % world_size == 0
+                and ulysses_backend_mode() != "torch"
+                and getattr(dist, "all_to_all_single", None) is _ORIG_ALL_TO_ALL_SINGLE
+                and callable(_ORIG_ALL_TO_ALL_SINGLE)
+            ):
+                hc = x.shape[2] * world_size
+                out_heads = hc - int(crop_heads) if int(crop_heads) > 0 else hc
+                symm_out = try_symm_mem_all_to_all_o(x, group, out_heads=out_heads)
+                if symm_out is not None:
+                    return symm_out
+                packed = ulysses_pack_o_scatter_seq(x, world_size)
+                exchanged = torch.empty_like(packed)
+                _ORIG_ALL_TO_ALL_SINGLE(exchanged, packed, group=group)
+                return ulysses_unpack_o_gather_head(exchanged, world_size, out_heads=out_heads)
+            out = all_to_all_concat(
                 x,
                 scatter_dim=scatter_dim,
                 gather_dim=gather_dim,
                 group=group,
             )
+            if int(crop_heads) > 0 and x.ndim == 4 and (int(gather_dim) % 4) == 2:
+                out = out[:, :, : out.shape[2] - int(crop_heads), :].contiguous()
+            return out
         inputs = [u.contiguous() for u in x.chunk(world_size, dim=scatter_dim)]
         outputs = [torch.empty_like(u) for u in inputs]
         dist.all_to_all(outputs, inputs, group=group, **kwargs)
         x = torch.cat(outputs, dim=gather_dim).contiguous()
+        if int(crop_heads) > 0 and x.ndim == 4 and (int(gather_dim) % 4) == 2:
+            x = x[:, :, : x.shape[2] - int(crop_heads), :].contiguous()
     return x
 
 
-def all_to_all_many(tensors, scatter_dim, gather_dim, group=None, **kwargs):
+def all_to_all_many(tensors, scatter_dim, gather_dim, group=None, *, pad_heads: int = 0, **kwargs):
     """Fuse equal-shaped tensors into one destination-major all-to-all.
 
     Q/K/V exchanges otherwise pay three Python, dispatcher, and NCCL launch
@@ -104,7 +141,12 @@ def all_to_all_many(tensors, scatter_dim, gather_dim, group=None, **kwargs):
         max_bytes = 512 * 1024**2
     total_bytes = sum(value.numel() * value.element_size() for value in values)
     all_to_all_single = getattr(dist, "all_to_all_single", None)
+    pad_h = int(pad_heads)
     if not compatible or max_bytes == 0 or total_bytes > max_bytes or kwargs or not callable(all_to_all_single):
+        if pad_h > 0:
+            values = tuple(
+                torch.cat((v, v.new_zeros((v.shape[0], v.shape[1], pad_h, v.shape[3]))), dim=2) for v in values
+            )
         return tuple(all_to_all(value, scatter_dim, gather_dim, group=group, **kwargs) for value in values)
 
     ndim = first.ndim
@@ -114,8 +156,31 @@ def all_to_all_many(tensors, scatter_dim, gather_dim, group=None, **kwargs):
         return tuple(all_to_all(value, scatter_dim, gather_dim, group=group) for value in values)
     scatter_dim = raw_scatter_dim % ndim
     gather_dim = raw_gather_dim % ndim
-    if first.shape[scatter_dim] % world_size:
+    if (first.shape[scatter_dim] + (pad_h if scatter_dim == 2 else 0)) % world_size:
         return tuple(all_to_all(value, scatter_dim, gather_dim, group=group) for value in values)
+
+    if (
+        first.is_cuda
+        and ndim == 4
+        and len(values) == 3
+        and scatter_dim == 2
+        and gather_dim == 1
+        and ulysses_backend_mode() != "torch"
+        and all_to_all_single is _ORIG_ALL_TO_ALL_SINGLE
+    ):
+        q, k, v = values
+        symm_out = try_symm_mem_all_to_all_qkv(q, k, v, group, pad_heads=pad_h)
+        if symm_out is not None:
+            return symm_out
+        packed = ulysses_pack_qkv(q, k, v, world_size, pad_heads=pad_h)
+        exchanged = torch.empty_like(packed)
+        all_to_all_single(exchanged, packed, group=group)
+        return ulysses_unpack_qkv(exchanged, world_size)
+
+    if pad_h > 0 and ndim == 4 and scatter_dim == 2:
+        values = tuple(torch.cat((v, v.new_zeros((v.shape[0], v.shape[1], pad_h, v.shape[3]))), dim=2) for v in values)
+        first = values[0]
+
     local_scatter = first.shape[scatter_dim] // world_size
     other_dims = [dimension for dimension in range(ndim) if dimension != scatter_dim]
     packed = first.new_empty(

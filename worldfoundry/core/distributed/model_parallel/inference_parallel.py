@@ -120,7 +120,34 @@ class InferenceParallelContext:
         lengths = [end - start for start, end in ranges]
         if value.shape[dim] != lengths[self.cp_rank]:
             raise ValueError("local token shape does not match its context-parallel range")
-        moved = value.movedim(dim, 0).contiguous()
+        moved_dim = int(dim) % value.ndim
+        gather_into = getattr(dist, "all_gather_into_tensor", None)
+        if callable(gather_into):
+            if all(length == lengths[0] for length in lengths):
+                val_contig = value.contiguous()
+                flat_out = val_contig.new_empty((self.cp_size * val_contig.shape[0], *val_contig.shape[1:]))
+                gather_into(flat_out, val_contig, group=self.cp_group)
+                if moved_dim == 0:
+                    return flat_out
+                if moved_dim == 1 and val_contig.shape[0] == 1:
+                    return flat_out.reshape(1, total, *val_contig.shape[2:])
+                gathered = flat_out.reshape(self.cp_size, *val_contig.shape)
+                out_shape = list(val_contig.shape)
+                out_shape[moved_dim] = total
+                return gathered.movedim(0, moved_dim).contiguous().reshape(out_shape)
+            moved = value.movedim(moved_dim, 0).contiguous()
+            maximum = max(lengths)
+            if moved.shape[0] < maximum:
+                moved = torch.cat((moved, moved.new_zeros((maximum - moved.shape[0], *moved.shape[1:]))))
+            flat_all = moved.new_empty((self.cp_size * moved.shape[0], *moved.shape[1:]))
+            gather_into(flat_all, moved, group=self.cp_group)
+            gathered_all = flat_all.reshape(self.cp_size, *moved.shape)
+            return (
+                torch.cat([gathered_all[idx, :length] for idx, length in enumerate(lengths)])
+                .movedim(0, moved_dim)
+                .contiguous()
+            )
+        moved = value.movedim(moved_dim, 0).contiguous()
         maximum = max(lengths)
         if moved.shape[0] < maximum:
             moved = torch.cat((moved, moved.new_zeros((maximum - moved.shape[0], *moved.shape[1:]))))
@@ -128,7 +155,7 @@ class InferenceParallelContext:
         dist.all_gather(gathered, moved, group=self.cp_group)
         return (
             torch.cat([part[:length] for part, length in zip(gathered, lengths, strict=False)])
-            .movedim(0, dim)
+            .movedim(0, moved_dim)
             .contiguous()
         )
 
@@ -286,10 +313,46 @@ class RowParallelLinear(torch.nn.Module):
     def forward(self, value: torch.Tensor) -> torch.Tensor:
         if torch.is_grad_enabled() and value.requires_grad:
             raise RuntimeError("row-parallel inference projections do not support autograd")
+        if (
+            self.parallel.tp_size > 1
+            and value.is_cuda
+            and value.dtype in {torch.float16, torch.bfloat16}
+            and self.weight.dtype == value.dtype
+        ):
+            self.parallel._check()
+            from worldfoundry.core.distributed.sequence_parallel.symm_mem_all_to_all import (
+                try_symm_mem_row_parallel_mm_all_reduce,
+            )
+
+            fused_out = try_symm_mem_row_parallel_mm_all_reduce(
+                value,
+                self.weight,
+                self.bias,
+                cast(dist.ProcessGroup | None, self.parallel.tp_group),
+            )
+            if fused_out is not None:
+                return fused_out
         compute_dtype = torch.float32 if value.dtype in {torch.float16, torch.bfloat16} else value.dtype
-        output = self.parallel.sum_tensor_shards(
-            functional.linear(value.to(compute_dtype), self.weight.to(compute_dtype)),
-        )
+        local_out: torch.Tensor | None = None
+        if (
+            value.is_cuda
+            and value.dtype in {torch.float16, torch.bfloat16}
+            and self.weight.dtype == value.dtype
+            and value.ndim >= 2
+            and value.numel() > 0
+        ):
+            try:
+                value_2d = value.reshape(-1, value.shape[-1])
+                local_out = torch.mm(
+                    value_2d,
+                    self.weight.t(),
+                    out_dtype=torch.float32,
+                ).reshape(*value.shape[:-1], self.out_features)
+            except (TypeError, RuntimeError):
+                local_out = None
+        if local_out is None:
+            local_out = functional.linear(value.to(compute_dtype), self.weight.to(compute_dtype))
+        output = self.parallel.sum_tensor_shards(local_out)
         if self.bias is not None:
             output = output + self.bias.to(compute_dtype)
         return output.to(value.dtype)

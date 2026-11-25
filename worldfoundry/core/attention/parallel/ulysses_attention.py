@@ -23,6 +23,9 @@ import torch.distributed as dist
 
 from worldfoundry.core.attention import flash_attention
 from worldfoundry.core.distributed.sequence_parallel.ops import all_to_all, all_to_all_many
+from worldfoundry.core.distributed.sequence_parallel.symm_mem_all_to_all import (
+    ulysses_ephemeral_output_scope,
+)
 
 # ──────────────────────────────────────────────────────────────────────────
 # Wan Ulysses — scatter heads, gather sequence, local kernel, swap back
@@ -50,21 +53,24 @@ def distributed_attention(
     """
     if not dist.is_initialized():
         raise ValueError("distributed group should be initialized.")
-    # gather q/k/v sequence
-    q, k, v = all_to_all_many(
-        (q, k, v),
-        scatter_dim=2,
-        gather_dim=1,
-    )
+    # gather q/k/v sequence — ephemeral scope only covers Q/K/V consumed inside
+    # attention_fn; returned `x` escapes to the caller so inverse exchange uses
+    # non-aliasing fresh output.
+    with ulysses_ephemeral_output_scope():
+        q, k, v = all_to_all_many(
+            (q, k, v),
+            scatter_dim=2,
+            gather_dim=1,
+        )
 
-    # apply attention
-    x = attention_fn(
-        q,
-        k,
-        v,
-        k_lens=seq_lens,
-        window_size=window_size,
-    )
+        # apply attention
+        x = attention_fn(
+            q,
+            k,
+            v,
+            k_lens=seq_lens,
+            window_size=window_size,
+        )
 
     # scatter q/k/v sequence
     x = all_to_all(x, scatter_dim=1, gather_dim=2)
@@ -117,20 +123,21 @@ def flattened_ulysses_attention(
         raise ValueError(f"hidden size ({hidden}) must be divisible by attention heads ({heads})")
     head_dim = hidden // heads
     q, k, v = (tensor.view(batch, -1, heads, head_dim) for tensor in (q, k, v))
-    q, k, v = all_to_all_many(
-        (q, k, v),
-        scatter_dim=2,
-        gather_dim=1,
-        group=group,
-    )
-    local_heads = heads // world_size
-    full_q = q.reshape(batch, -1, local_heads * head_dim)
-    full_k = k.reshape(batch, -1, local_heads * head_dim)
-    full_v = v.reshape(batch, -1, local_heads * head_dim)
-    if mask is None:
-        output = attention_fn(full_q, full_k, full_v, local_heads)
-    else:
-        output = attention_fn(full_q, full_k, full_v, local_heads, mask)
+    with ulysses_ephemeral_output_scope():
+        q, k, v = all_to_all_many(
+            (q, k, v),
+            scatter_dim=2,
+            gather_dim=1,
+            group=group,
+        )
+        local_heads = heads // world_size
+        full_q = q.reshape(batch, -1, local_heads * head_dim)
+        full_k = k.reshape(batch, -1, local_heads * head_dim)
+        full_v = v.reshape(batch, -1, local_heads * head_dim)
+        if mask is None:
+            output = attention_fn(full_q, full_k, full_v, local_heads)
+        else:
+            output = attention_fn(full_q, full_k, full_v, local_heads, mask)
     output = output.view(batch, -1, local_heads, head_dim)
     output = all_to_all(output, scatter_dim=1, gather_dim=2, group=group)
     return output.reshape(batch, -1, hidden)

@@ -26,11 +26,13 @@ Public surface:
   local :func:`attention`, crop dummy heads.
 """
 
-import torch
 import torch.distributed as dist
 
 from worldfoundry.core.attention import attention
 from worldfoundry.core.distributed.sequence_parallel.ops import all_to_all, all_to_all_many
+from worldfoundry.core.distributed.sequence_parallel.symm_mem_all_to_all import (
+    ulysses_ephemeral_output_scope,
+)
 
 # ──────────────────────────────────────────────────────────────────────────
 # Padded Ulysses — head-pad so all-to-all shapes match when Nq % p != 0
@@ -64,32 +66,29 @@ def distributed_attention(
     # Ulysses all_to_all gathers along sequence after scattering heads.
     # To keep tensor shapes consistent across ranks, pad heads to a multiple
     # of world_size when needed (e.g. 40 heads on 7 GPUs -> 42 heads).
+    pad_heads = 0
     if original_num_heads % world_size != 0:
         padded_num_heads = ((original_num_heads + world_size - 1) // world_size) * world_size
         pad_heads = padded_num_heads - original_num_heads
-        if pad_heads > 0:
-            q = torch.cat([q, q.new_zeros(*q.shape[:2], pad_heads, q.shape[3])], dim=2)
-            k = torch.cat([k, k.new_zeros(*k.shape[:2], pad_heads, k.shape[3])], dim=2)
-            v = torch.cat([v, v.new_zeros(*v.shape[:2], pad_heads, v.shape[3])], dim=2)
 
-    # gather q/k/v sequence
-    q, k, v = all_to_all_many(
-        (q, k, v),
-        scatter_dim=2,
-        gather_dim=1,
-    )
+    # Ephemeral scope covers only Q/K/V consumed by attention(); output `x`
+    # escapes so inverse all_to_all returns a fresh non-aliasing tensor.
+    with ulysses_ephemeral_output_scope():
+        q, k, v = all_to_all_many(
+            (q, k, v),
+            scatter_dim=2,
+            gather_dim=1,
+            pad_heads=pad_heads,
+        )
 
-    x = attention(
-        q,
-        k,
-        v,
-        k_lens=seq_lens,
-        window_size=window_size,
-        version=fa_version,
-    )
+        x = attention(
+            q,
+            k,
+            v,
+            k_lens=seq_lens,
+            window_size=window_size,
+            version=fa_version,
+        )
 
-    # scatter q/k/v sequence
-    x = all_to_all(x, scatter_dim=1, gather_dim=2)
-    if padded_num_heads != original_num_heads:
-        x = x[:, :, :original_num_heads, :].contiguous()
-    return x
+    # scatter sequence / gather heads with fused head crop
+    return all_to_all(x, scatter_dim=1, gather_dim=2, crop_heads=pad_heads)
