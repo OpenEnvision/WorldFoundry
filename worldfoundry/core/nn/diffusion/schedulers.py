@@ -38,6 +38,21 @@ import torch
 # ──────────────────────────────────────────────────────────────────────────
 
 
+def _try_triton_scheduler_convert(
+    alphas_cumprod: torch.Tensor,
+    first: torch.Tensor,
+    xt: torch.Tensor,
+    timestep: torch.Tensor,
+    mode: int,
+) -> torch.Tensor | None:
+    """Single-pass in-register FP64 conversion when eligible, else ``None``."""
+    if not first.is_cuda or not xt.is_cuda:
+        return None
+    from worldfoundry.core.nn.triton_core_layers import triton_scheduler_convert_fp64
+
+    return triton_scheduler_convert_fp64(alphas_cumprod, first, xt, timestep, mode=mode)
+
+
 class SchedulerInterface(ABC):
     """Base interface for diffusion noise schedules."""
 
@@ -59,6 +74,9 @@ class SchedulerInterface(ABC):
         timestep: torch.Tensor,
     ) -> torch.Tensor:
         """Convert a clean-data prediction to a noise prediction."""
+        fused = _try_triton_scheduler_convert(self.alphas_cumprod, x0, xt, timestep, 0)
+        if fused is not None:
+            return fused
 
         original_dtype = x0.dtype
         x0, xt, alphas_cumprod = (x.double().to(x0.device) for x in [x0, xt, self.alphas_cumprod])
@@ -76,6 +94,9 @@ class SchedulerInterface(ABC):
         timestep: torch.Tensor,
     ) -> torch.Tensor:
         """Convert a noise prediction to a clean-data prediction."""
+        fused = _try_triton_scheduler_convert(self.alphas_cumprod, noise, xt, timestep, 1)
+        if fused is not None:
+            return fused
 
         original_dtype = noise.dtype
         noise, xt, alphas_cumprod = (x.double().to(noise.device) for x in [noise, xt, self.alphas_cumprod])
@@ -92,6 +113,9 @@ class SchedulerInterface(ABC):
         timestep: torch.Tensor,
     ) -> torch.Tensor:
         """Convert a velocity prediction to a clean-data prediction."""
+        fused = _try_triton_scheduler_convert(self.alphas_cumprod, velocity, xt, timestep, 2)
+        if fused is not None:
+            return fused
 
         original_dtype = velocity.dtype
         velocity, xt, alphas_cumprod = (x.double().to(velocity.device) for x in [velocity, xt, self.alphas_cumprod])
@@ -195,6 +219,13 @@ class FlowMatchScheduler:
             self.linear_timesteps_weights = y_shifted * (num_inference_steps / y_shifted.sum())
         self.training = bool(training)
 
+    def _ensure_schedule_device(self, device: torch.device) -> None:
+        """Move ``sigmas`` and ``timesteps`` onto *device* only when needed."""
+        if self.sigmas.device != device:
+            self.sigmas = self.sigmas.to(device)
+        if self.timesteps.device != device:
+            self.timesteps = self.timesteps.to(device)
+
     def _indices(self, timestep, *, device: torch.device) -> tuple[torch.Tensor, bool]:
         """Nearest-neighbor lookup of ``timestep`` on the stored calendar.
 
@@ -202,8 +233,11 @@ class FlowMatchScheduler:
         :meth:`_broadcast_sigma` can keep a 0-dim σ for unbatched samples.
         """
 
-        timesteps = self.timesteps.to(device)
-        value = torch.as_tensor(timestep, device=device, dtype=timesteps.dtype)
+        timesteps = self.timesteps if self.timesteps.device == device else self.timesteps.to(device)
+        if isinstance(timestep, torch.Tensor) and timestep.device == device and timestep.dtype == timesteps.dtype:
+            value = timestep
+        else:
+            value = torch.as_tensor(timestep, device=device, dtype=timesteps.dtype)
         scalar = value.ndim == 0 or value.numel() == 1
         value = value.reshape(-1)
         indices = torch.argmin((timesteps.unsqueeze(0) - value.unsqueeze(1)).abs(), dim=1)
@@ -224,11 +258,26 @@ class FlowMatchScheduler:
         snap). Inverse/reversed calendars use terminal ``1.0`` instead of
         ``0.0`` so the integrator still walks toward clean data.
         """
-        self.sigmas = self.sigmas.to(model_output.device)
-        self.timesteps = self.timesteps.to(model_output.device)
-        timestep_id, scalar = self._indices(timestep, device=model_output.device)
-        sigma = self._broadcast_sigma(self.sigmas[timestep_id], sample, scalar)
+        device = model_output.device
+        self._ensure_schedule_device(device)
         terminal = 1.0 if (self.inverse_timesteps or self.reverse_sigmas) else 0.0
+        if device.type == "cuda":
+            from worldfoundry.core.nn.triton_core_layers import triton_flow_match_step
+
+            fused = triton_flow_match_step(
+                sample,
+                model_output,
+                timestep,
+                self.timesteps,
+                self.sigmas,
+                terminal=terminal,
+                to_final=bool(to_final),
+            )
+            if fused is not None:
+                return fused
+
+        timestep_id, scalar = self._indices(timestep, device=device)
+        sigma = self._broadcast_sigma(self.sigmas[timestep_id], sample, scalar)
         next_id = torch.clamp(timestep_id + 1, max=len(self.timesteps) - 1)
         next_sigma = self.sigmas[next_id]
         terminal_mask = timestep_id + 1 >= len(self.timesteps)
@@ -242,18 +291,44 @@ class FlowMatchScheduler:
     def return_to_timestep(self, timestep, sample, stabilized_sample):
         """Recover a velocity that maps ``sample`` to ``stabilized_sample``."""
 
-        self.sigmas = self.sigmas.to(sample.device)
-        self.timesteps = self.timesteps.to(sample.device)
-        timestep_id, scalar = self._indices(timestep, device=sample.device)
+        device = sample.device
+        self._ensure_schedule_device(device)
+        if device.type == "cuda":
+            from worldfoundry.core.nn.triton_core_layers import triton_flow_match_return_to_timestep
+
+            fused = triton_flow_match_return_to_timestep(
+                sample,
+                stabilized_sample,
+                timestep,
+                self.timesteps,
+                self.sigmas,
+            )
+            if fused is not None:
+                return fused
+
+        timestep_id, scalar = self._indices(timestep, device=device)
         sigma = self._broadcast_sigma(self.sigmas[timestep_id], sample, scalar)
         return (sample - stabilized_sample) / sigma
 
     def add_noise(self, original_samples, noise, timestep):
         """Run the forward corruption process."""
 
-        self.sigmas = self.sigmas.to(noise.device)
-        self.timesteps = self.timesteps.to(noise.device)
-        timestep_id, scalar = self._indices(timestep, device=noise.device)
+        device = noise.device
+        self._ensure_schedule_device(device)
+        if device.type == "cuda":
+            from worldfoundry.core.nn.triton_core_layers import triton_flow_match_add_noise
+
+            fused = triton_flow_match_add_noise(
+                original_samples,
+                noise,
+                timestep,
+                self.timesteps,
+                self.sigmas,
+            )
+            if fused is not None:
+                return fused
+
+        timestep_id, scalar = self._indices(timestep, device=device)
         sigma = self._broadcast_sigma(self.sigmas[timestep_id], noise, scalar)
         sample = (1 - sigma) * original_samples + sigma * noise
         return sample.type_as(noise)

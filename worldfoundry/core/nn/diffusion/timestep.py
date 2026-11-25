@@ -65,6 +65,20 @@ def get_timestep_embedding(
     """
     assert len(timesteps.shape) == 1, "Timesteps should be a 1d-array"
 
+    if timesteps.is_cuda:
+        from worldfoundry.core.nn.triton_core_layers import triton_sinusoidal_timestep_embedding
+
+        fused = triton_sinusoidal_timestep_embedding(
+            timesteps,
+            embedding_dim,
+            flip_sin_to_cos=flip_sin_to_cos,
+            downscale_freq_shift=downscale_freq_shift,
+            scale=scale,
+            max_period=max_period,
+        )
+        if fused is not None:
+            return fused
+
     half_dim = embedding_dim // 2
     exponent = -math.log(max_period) * torch.arange(start=0, end=half_dim, dtype=torch.float32, device=timesteps.device)
     exponent = exponent / (half_dim - downscale_freq_shift)

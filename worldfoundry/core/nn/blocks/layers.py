@@ -168,6 +168,12 @@ class QuickGELU(nn.Module):
     """CLIP's sigmoid approximation, with multiplication in the input dtype."""
 
     def forward(self, x: Tensor) -> Tensor:
+        if x.is_cuda and not self._backward_hooks and not self._backward_pre_hooks:
+            from worldfoundry.core.nn.triton_core_layers import triton_quick_gelu
+
+            out = triton_quick_gelu(x)
+            if out is not None:
+                return out
         return x * torch.sigmoid(1.702 * x)
 
 
@@ -175,6 +181,12 @@ class Mish(nn.Module):
     """Mish with explicit softplus/tanh rounding in the input dtype."""
 
     def forward(self, hidden_states: Tensor) -> Tensor:
+        if hidden_states.is_cuda and not self._backward_hooks and not self._backward_pre_hooks:
+            from worldfoundry.core.nn.triton_core_layers import triton_mish
+
+            out = triton_mish(hidden_states)
+            if out is not None:
+                return out
         return hidden_states * torch.tanh(F.softplus(hidden_states))
 
 
@@ -199,7 +211,12 @@ class LayerNorm2d(nn.Module):
 
     def forward(self, x: Tensor) -> Tensor:
         """Normalize over dim=1 (C) for ``[B, C, H, W]``; last-dim LN would be wrong."""
+        if x.is_cuda and not self._backward_hooks and not self._backward_pre_hooks:
+            from worldfoundry.core.nn.triton_core_layers import triton_layer_norm_2d
 
+            out = triton_layer_norm_2d(x, self.weight, self.bias, self.eps)
+            if out is not None:
+                return out
         u = x.mean(1, keepdim=True)
         s = (x - u).pow(2).mean(1, keepdim=True)
         x = (x - u) / torch.sqrt(s + self.eps)
@@ -703,6 +720,15 @@ class SwiGLUFFN(nn.Module):
         """Last-dim SwiGLU matching the ``w12`` / ``w3`` checkpoint split."""
 
         x12 = self.w12(x)
+        if (
+            x12.is_cuda
+            and not (torch.is_grad_enabled() and x12.requires_grad)
+            and not self._backward_hooks
+            and not self._backward_pre_hooks
+        ):
+            from worldfoundry.core.kernels.diffusion import silu_and_mul
+
+            return self.w3(silu_and_mul(x12))
         x1, x2 = x12.chunk(2, dim=-1)
         return self.w3(F.silu(x1) * x2)
 
