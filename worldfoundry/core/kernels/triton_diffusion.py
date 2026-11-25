@@ -1926,9 +1926,197 @@ def hidden_qk_rmsnorm_rope_freqs(
     return q_output, k_output
 
 
+@triton.jit
+def _residual_gate_add_rms_norm_kernel(
+    residual_ptr,
+    value_ptr,
+    gate_ptr,
+    weight_ptr,
+    x_out_ptr,
+    norm_out_ptr,
+    rows,
+    eps,
+    features: tl.constexpr,
+    d0: tl.constexpr,
+    d1: tl.constexpr,
+    d2: tl.constexpr,
+    d3: tl.constexpr,
+    gs0: tl.constexpr,
+    gs1: tl.constexpr,
+    gs2: tl.constexpr,
+    gs3: tl.constexpr,
+    gs4: tl.constexpr,
+    has_weight: tl.constexpr,
+    round_product_bf16: tl.constexpr,
+    round_product_fp16: tl.constexpr,
+    round_x_bf16: tl.constexpr,
+    round_x_fp16: tl.constexpr,
+    block: tl.constexpr,
+):
+    """Single-pass ``x_out = residual + value * gate`` and ``norm_out = rms_norm(x_out, weight, eps)``."""
+
+    row = tl.program_id(0).to(tl.int64)
+    row_off = row * features
+    cols = tl.arange(0, block)
+    mask = (row < rows) & (cols < features)
+
+    res_row = residual_ptr + row_off
+    val_row = value_ptr + row_off
+    xout_row = x_out_ptr + row_off
+    nout_row = norm_out_ptr + row_off
+    gate_row = gate_ptr + _broadcast_row_offset(row, d0, d1, d2, d3, gs0, gs1, gs2, gs3)
+
+    res_f = tl.load(res_row + cols, mask=mask, other=0.0).to(tl.float32)
+    val_f = tl.load(val_row + cols, mask=mask, other=0.0).to(tl.float32)
+    gate_f = tl.load(gate_row + cols * gs4, mask=mask, other=0.0).to(tl.float32)
+
+    product = val_f * gate_f
+    if round_product_bf16:
+        product = _round_float32_to_bfloat16_ptx(product)
+    elif round_product_fp16:
+        product = _round_float32_to_float16(product)
+
+    x_new = res_f + product
+    if round_x_bf16:
+        x_new = _round_float32_to_bfloat16_ptx(x_new)
+    elif round_x_fp16:
+        x_new = _round_float32_to_float16(x_new)
+    tl.store(xout_row + cols, x_new, mask=mask)
+
+    x_masked = tl.where(mask, x_new, 0.0)
+    rstd = tl.rsqrt(tl.sum(x_masked * x_masked, axis=0) / features + eps)
+    normed = x_masked * rstd
+    if has_weight:
+        weight = tl.load(weight_ptr + cols, mask=mask, other=1.0).to(tl.float32)
+        normed = normed * weight
+    tl.store(nout_row + cols, normed, mask=mask)
+
+
+def residual_gate_add_rms_norm(
+    residual: torch.Tensor,
+    value: torch.Tensor,
+    norm_weights: torch.Tensor | None,
+    eps: float,
+    gate: torch.Tensor,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Single-pass Hopper Triton ``output = residual + value * gate`` and ``rms_norm(output, norm_weights, eps)``."""
+
+    rows = residual.numel() // residual.shape[-1]
+    features = int(residual.shape[-1])
+    gate_for_broadcast = gate.reshape(1) if gate.ndim == 0 else gate
+    dims, gate_strides = _padded_outer_shape_and_strides(residual, gate_for_broadcast)
+    block = triton.next_power_of_2(features)
+    product_dtype = torch.promote_types(value.dtype, gate.dtype)
+    out_dtype = torch.promote_types(residual.dtype, product_dtype)
+    x_out = torch.empty_like(residual, dtype=out_dtype)
+    norm_out = torch.empty_like(residual, dtype=out_dtype)
+    weight_ptr = residual if norm_weights is None else norm_weights
+    num_warps = 4 if features <= 3072 else 8
+    with torch.cuda.device(residual.device):
+        _residual_gate_add_rms_norm_kernel[(rows,)](
+            residual,
+            value,
+            gate_for_broadcast,
+            weight_ptr,
+            x_out,
+            norm_out,
+            rows,
+            float(eps),
+            features=features,
+            d0=dims[0],
+            d1=dims[1],
+            d2=dims[2],
+            d3=dims[3],
+            gs0=gate_strides[0],
+            gs1=gate_strides[1],
+            gs2=gate_strides[2],
+            gs3=gate_strides[3],
+            gs4=gate_strides[4],
+            has_weight=norm_weights is not None,
+            round_product_bf16=product_dtype == torch.bfloat16,
+            round_product_fp16=product_dtype == torch.float16,
+            round_x_bf16=out_dtype == torch.bfloat16,
+            round_x_fp16=out_dtype == torch.float16,
+            block=block,
+            num_warps=num_warps,
+            enable_fp_fusion=False,
+        )
+    return x_out, norm_out
+
+
+@triton.jit
+def _head_sigmoid_gate_kernel(
+    attn_ptr,
+    logits_ptr,
+    out_ptr,
+    total_heads,
+    dim_head: tl.constexpr,
+    round_gate_bf16: tl.constexpr,
+    round_gate_fp16: tl.constexpr,
+    BLOCK_H: tl.constexpr,
+    BLOCK_D: tl.constexpr,
+):
+    """Single-pass per-head ``2.0 * sigmoid(gate_logits) * attention_output`` with 128-bit coalesced I/O."""
+
+    h_start = tl.program_id(0).to(tl.int64) * BLOCK_H
+    hs_i32 = tl.arange(0, BLOCK_H)
+    h_mask = (h_start + hs_i32) < total_heads
+    ds_i32 = tl.arange(0, BLOCK_D)
+    d_mask = ds_i32 < dim_head
+    mask = h_mask[:, None] & d_mask[None, :]
+
+    g_logit = tl.load((logits_ptr + h_start) + hs_i32, mask=h_mask, other=0.0).to(tl.float32)
+    sig = 1.0 / (1.0 + tl.math.exp2(-g_logit * 1.4426950408889634))
+    if round_gate_bf16:
+        sig = _round_float32_to_bfloat16_ptx(sig)
+    elif round_gate_fp16:
+        sig = _round_float32_to_float16(sig)
+    gate = (2.0 * sig)[:, None]
+
+    base_off = h_start * dim_head
+    tile_offs = hs_i32[:, None] * dim_head + ds_i32[None, :]
+    attn = tl.load((attn_ptr + base_off) + tile_offs, mask=mask, other=0.0).to(tl.float32)
+    tl.store((out_ptr + base_off) + tile_offs, attn * gate, mask=mask)
+
+
+def head_sigmoid_gate(
+    attention_output: torch.Tensor,
+    gate_logits: torch.Tensor,
+    heads: int,
+    dim_head: int,
+) -> torch.Tensor:
+    """Apply fused ``2.0 * sigmoid(gate_logits)`` per head to ``attention_output``."""
+
+    del heads
+    total_heads = int(gate_logits.numel())
+    out_dtype = torch.promote_types(attention_output.dtype, gate_logits.dtype)
+    output = torch.empty_like(attention_output, dtype=out_dtype)
+    if total_heads == 0 or dim_head == 0:
+        return output
+    block_d = triton.next_power_of_2(dim_head)
+    block_h = 16 if block_d <= 64 else (8 if block_d <= 256 else 4)
+    num_warps = 4 if (block_h * block_d) <= 1024 else 8
+    grid = (triton.cdiv(total_heads, block_h),)
+    with torch.cuda.device(attention_output.device):
+        _head_sigmoid_gate_kernel[grid](
+            attention_output,
+            gate_logits,
+            output,
+            total_heads,
+            dim_head=int(dim_head),
+            round_gate_bf16=gate_logits.dtype == torch.bfloat16,
+            round_gate_fp16=gate_logits.dtype == torch.float16,
+            BLOCK_H=block_h,
+            BLOCK_D=block_d,
+            num_warps=num_warps,
+        )
+    return output
+
+
 __all__ = [
     "apply_real_rope_bshd",
     "fused_layer_norm_scale_shift",
+    "head_sigmoid_gate",
     "hidden_qk_rmsnorm_rope_3d",
     "hidden_qk_rmsnorm_rope_freqs",
     "layer_norm_scale_shift",
@@ -1936,6 +2124,7 @@ __all__ = [
     "residual_add_layer_norm_scale_shift",
     "residual_add_layer_norm_scale_shift_inplace",
     "residual_gate",
+    "residual_gate_add_rms_norm",
     "residual_gate_inplace",
     "residual_gate_layer_norm",
     "residual_gate_layer_norm_inplace",
