@@ -277,6 +277,123 @@ class SanaVideoMSBlock(nn.Module):
 
         return x
 
+    def _can_use_hopper_block_ops(self, x: torch.Tensor, t: torch.Tensor, has_hook: bool) -> bool:
+        policy = self._worldfoundry_block_fusion
+        return (
+            policy is not None
+            and policy.fuse_layer_norm
+            and policy.backend != "torch"
+            and policy.eligible(x)
+            and not has_hook
+            and not self.training
+            and x.is_cuda
+            and x.ndim == 3
+            and t.ndim == 2
+            and type(self.norm1) is nn.LayerNorm
+            and not self.norm1.elementwise_affine
+            and self.norm1.normalized_shape == (x.shape[-1],)
+            and not self.norm1._forward_hooks
+            and not self.norm1._forward_pre_hooks
+            and type(self.norm2) is nn.LayerNorm
+            and not self.norm2.elementwise_affine
+            and self.norm2.normalized_shape == (x.shape[-1],)
+            and not self.norm2._forward_hooks
+            and not self.norm2._forward_pre_hooks
+            and (
+                type(self.drop_path) is nn.Identity
+                or (type(self.drop_path) is DropPath and not self.drop_path.training)
+            )
+            and not self.drop_path._forward_hooks
+            and not self.drop_path._forward_pre_hooks
+        )
+
+    def _forward_hopper_fused(
+        self,
+        x: torch.Tensor,
+        y: torch.Tensor,
+        t: torch.Tensor,
+        *,
+        mask=None,
+        THW=None,
+        rotary_emb=None,
+        chunk_index=None,
+        pre_norm_sa_in: torch.Tensor | None = None,
+        next_block: "SanaVideoMSBlock | None" = None,
+        **kwargs,
+    ) -> torch.Tensor | tuple[torch.Tensor, object]:
+        from worldfoundry.core.kernels.triton_dit_block_ops import (
+            fused_dit_res_gate_ln_adaln,
+            fused_wan_modulation_ln_adaln,
+            fused_wan_res_add_ln_adaln,
+            fused_wan_res_gate_add,
+        )
+
+        B, _N, C = x.shape
+        t_mod = t.reshape(B, 6, C)
+        mod_table = self.scale_shift_table.unsqueeze(0)
+
+        if pre_norm_sa_in is not None:
+            x_sa_in = pre_norm_sa_in
+        else:
+            x_sa_in = fused_wan_modulation_ln_adaln(x, mod_table, t_mod, eps=self.norm1.eps, slot_shift=0, slot_scale=1)
+
+        self_attn_kwargs: dict[str, object] = {
+            "HW": THW,
+            "rotary_emb": rotary_emb,
+        }
+        if chunk_index is not None:
+            self_attn_kwargs["chunk_index"] = chunk_index[:]
+        save_kv_cache = kwargs.get("save_kv_cache")
+        if save_kv_cache is not None:
+            self_attn_kwargs["save_kv_cache"] = save_kv_cache
+        kv_cache = kwargs.get("kv_cache")
+        if kv_cache is not None:
+            self_attn_kwargs["kv_cache"] = kv_cache
+
+        x_sa = self.attn(x_sa_in, **self_attn_kwargs)
+        if kv_cache is not None:
+            x_sa, kv_cache = x_sa
+
+        if self.flash_attn_additional:
+            x_sa = x_sa + self.learnable_fa_scale * self.flash_attn_additional(x_sa_in, rotary_emb=rotary_emb, HW=THW)
+
+        x = fused_wan_res_gate_add(x, x_sa, mod_table, t_mod, slot_gate=2)
+
+        if self.cross_attn_image_embeds:
+            cross_out = self.cross_attn(x, y, mask=mask, image_embeds=kwargs.get("image_embeds"))
+        else:
+            cross_out = self.cross_attn(x, y, mask=mask)
+
+        x, x_mlp_in = fused_wan_res_add_ln_adaln(
+            x, cross_out, mod_table, t_mod, eps=self.norm2.eps, slot_shift=3, slot_scale=4
+        )
+
+        mlp_kwargs: dict[str, object] = {"HW": THW}
+        if chunk_index is not None:
+            mlp_kwargs["chunk_index"] = chunk_index[:]
+        if save_kv_cache is not None:
+            mlp_kwargs["save_kv_cache"] = save_kv_cache
+        if kv_cache is not None:
+            mlp_kwargs["kv_cache"] = kv_cache
+
+        mlp_out = self.mlp(x_mlp_in, **mlp_kwargs)
+        if kv_cache is not None:
+            mlp_out, kv_cache = mlp_out
+
+        if next_block is not None and kv_cache is None:
+            gate_mlp = self.scale_shift_table[5] + t_mod[:, 5]
+            next_shift = next_block.scale_shift_table[0] + t_mod[:, 0]
+            next_scale = next_block.scale_shift_table[1] + t_mod[:, 1]
+            x, next_sa_in = fused_dit_res_gate_ln_adaln(
+                x, mlp_out, gate_mlp, next_scale, next_shift, eps=next_block.norm1.eps
+            )
+            return x, next_sa_in
+
+        x = fused_wan_res_gate_add(x, mlp_out, mod_table, t_mod, slot_gate=5)
+        if kv_cache is not None:
+            return x, kv_cache
+        return x
+
     def forward(self, x, y, t, mask=None, THW=None, rotary_emb=None, chunk_index=None, **kwargs):
         if len(t.shape) > 2:
             return self.forward_frame_aware(
@@ -290,6 +407,17 @@ class SanaVideoMSBlock(nn.Module):
                 **kwargs,
             )
         has_hook = self.block_hook is not None
+        if self._can_use_hopper_block_ops(x, t, has_hook):
+            return self._forward_hopper_fused(
+                x,
+                y,
+                t,
+                mask=mask,
+                THW=THW,
+                rotary_emb=rotary_emb,
+                chunk_index=chunk_index,
+                **kwargs,
+            )
         intermediate_feats = (
             {
                 "x_in": x,

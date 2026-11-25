@@ -121,6 +121,8 @@ def test_glumbconv_and_glumbconvtemp_end_to_end_parity() -> None:
 
     for cls in (GLUMBConv, GLUMBConvTemp):
         mod = cls(in_features=c, hidden_features=c_mid, use_bias=(True, True, False), act=("silu", "silu", None))
+        if isinstance(mod, GLUMBConvTemp):
+            mod.t_conv.weight.data.normal_(0.0, 0.05)
         mod = mod.to(device="cuda", dtype=torch.bfloat16).eval()
 
         with torch.inference_mode():
@@ -128,6 +130,7 @@ def test_glumbconv_and_glumbconvtemp_end_to_end_parity() -> None:
             out_ref = mod(x, HW=(t, h, w))
 
             mod._fused_glumbconv = True
+            assert mod.depth_conv.conv is not None
             mod.depth_conv.conv.weight.data = mod.depth_conv.conv.weight.data.to(memory_format=torch.channels_last)
             out_fused = mod(x, HW=(t, h, w))
 
@@ -135,3 +138,17 @@ def test_glumbconv_and_glumbconvtemp_end_to_end_parity() -> None:
         cos = F.cosine_similarity(out_fused.float().flatten(), out_ref.float().flatten(), dim=0).item()
         assert cos > 0.99995, f"{cls.__name__} cos={cos}"
         assert diff.mean().item() < 2e-3
+
+        # Verify forward hooks on t_conv bypass the fused temporal path cleanly.
+        if isinstance(mod, GLUMBConvTemp):
+            called: list[int] = []
+            handle = mod.t_conv.register_forward_hook(lambda m, i, o: called.append(1) or o)
+            try:
+                with torch.inference_mode():
+                    out_hooked = mod(x, HW=(t, h, w))
+                assert called == [1]
+                assert (
+                    F.cosine_similarity(out_hooked.float().flatten(), out_ref.float().flatten(), dim=0).item() > 0.99995
+                )
+            finally:
+                handle.remove()

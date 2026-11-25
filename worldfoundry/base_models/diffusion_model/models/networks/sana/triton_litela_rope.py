@@ -304,11 +304,252 @@ def _load_triton_kernels() -> dict[str, Any]:
             out_ptrs = out_b_base + offs_n.to(tl.int64)[:, None] * stride_out_n + (q_head_col + offs_d)[None, :]
             tl.store(out_ptr + out_ptrs, out_val, mask=nd_mask)
 
+    @triton.jit
+    def _sana_rms_norm_kernel(
+        x_ptr,
+        w_ptr,
+        out_ptr,
+        stride_x,
+        stride_out,
+        eps,
+        features: tl.constexpr,
+        block: tl.constexpr,
+    ):
+        """Single-pass Hopper RMSNorm matching ``(x.float() * rstd * w.float()).to(x.dtype)``."""
+        row = tl.program_id(0).to(tl.int64)
+        cols = tl.arange(0, block)
+        mask = cols < features
+        x = tl.load(x_ptr + row * stride_x + cols, mask=mask, other=0.0).to(tl.float32)
+        w = tl.load(w_ptr + cols, mask=mask, other=0.0).to(tl.float32)
+        rstd = tl.rsqrt(tl.sum(x * x, axis=0) * (1.0 / features) + eps)
+        y = (x * rstd * w).to(out_ptr.dtype.element_ty)
+        tl.store(out_ptr + row * stride_out + cols, y, mask=mask)
+
+    @triton.jit
+    def _sana_litela_prep_kv_swizzled_kernel(
+        qkv_ptr,
+        k_rstd_ptr,
+        k_weight_ptr,
+        cos_ptr,
+        sin_ptr,
+        k_rot_ptr,
+        v_out_ptr,
+        ksum_part_ptr,
+        seq_len,
+        stride_qkv_b,
+        stride_qkv_n,
+        stride_cos_b,
+        stride_cos_n,
+        stride_sin_b,
+        stride_sin_n,
+        hidden_dim: tl.constexpr,
+        num_heads: tl.constexpr,
+        head_dim: tl.constexpr,
+        half_dim: tl.constexpr,
+        block_d: tl.constexpr,
+        block_half: tl.constexpr,
+        block_n: tl.constexpr,
+        tiles_per_cta: tl.constexpr,
+        num_chunks: tl.constexpr,
+        cos_batch_broadcast: tl.constexpr,
+        has_k_norm: tl.constexpr,
+        use_fp64_rope: tl.constexpr,
+    ):
+        """L2-swizzled ``K`` norm+ReLU+RoPE, ``V`` pack, and ``k_sum`` partial reduction."""
+        bh = tl.program_id(0).to(tl.int64)
+        chunk_id = tl.program_id(1).to(tl.int64)
+        b = bh // num_heads
+        h = bh % num_heads
+        b_freq = tl.zeros((), dtype=tl.int64) if cos_batch_broadcast else b
+
+        n_base = chunk_id * (block_n * tiles_per_cta)
+        offs_d = tl.arange(0, block_d)
+        d_mask = offs_d < head_dim
+        offs_half = tl.arange(0, block_half)
+        half_mask = offs_half < half_dim
+
+        if has_k_norm:
+            kw_d = tl.load(k_weight_ptr + h * head_dim + offs_d, mask=d_mask, other=0.0).to(tl.float32)
+
+        ksum_acc = tl.zeros((block_d,), dtype=tl.float32)
+        qkv_b = b * stride_qkv_b
+        k_col = hidden_dim + h * head_dim
+        v_col = 2 * hidden_dim + h * head_dim
+        cos_b = b_freq * stride_cos_b
+        sin_b = b_freq * stride_sin_b
+        rstd_b = b * seq_len
+        out_bh = bh * seq_len * head_dim
+
+        for ti in tl.static_range(0, tiles_per_cta):
+            offs_n = n_base + ti * block_n + tl.arange(0, block_n)
+            n_mask = offs_n < seq_len
+            nd_mask = n_mask[:, None] & d_mask[None, :]
+            nh_mask = n_mask[:, None] & half_mask[None, :]
+            offs_n64 = offs_n.to(tl.int64)
+            row_ptrs = qkv_b + offs_n64[:, None] * stride_qkv_n
+
+            k_in = tl.load(qkv_ptr + row_ptrs + (k_col + offs_d)[None, :], mask=nd_mask, other=0.0)
+            v_in = tl.load(qkv_ptr + row_ptrs + (v_col + offs_d)[None, :], mask=nd_mask, other=0.0)
+
+            if has_k_norm:
+                rstd = tl.load(k_rstd_ptr + rstd_b + offs_n64, mask=n_mask, other=0.0)[:, None]
+                k_n = (k_in.to(tl.float32) * rstd * kw_d[None, :]).to(k_in.dtype)
+            else:
+                k_n = k_in
+
+            k_relu = tl.where(nd_mask, tl.maximum(k_n.to(tl.float32), 0.0), 0.0)
+            ksum_acc += tl.sum(k_relu, axis=0)
+
+            ke, ko = tl.split(tl.reshape(k_relu, (block_n, block_half, 2)))
+            cos_offs = cos_b + offs_n64[:, None] * stride_cos_n + offs_half[None, :]
+            sin_offs = sin_b + offs_n64[:, None] * stride_sin_n + offs_half[None, :]
+            if use_fp64_rope:
+                c = tl.load(cos_ptr + cos_offs, mask=nh_mask, other=1.0).to(tl.float64)
+                s = tl.load(sin_ptr + sin_offs, mask=nh_mask, other=0.0).to(tl.float64)
+                ke_64 = ke.to(tl.float64)
+                ko_64 = ko.to(tl.float64)
+                kr_e = (ke_64 * c - ko_64 * s).to(k_in.dtype)
+                kr_o = (ko_64 * c + ke_64 * s).to(k_in.dtype)
+            else:
+                c = tl.load(cos_ptr + cos_offs, mask=nh_mask, other=1.0).to(tl.float32)
+                s = tl.load(sin_ptr + sin_offs, mask=nh_mask, other=0.0).to(tl.float32)
+                kr_e = (ke * c - ko * s).to(k_in.dtype)
+                kr_o = (ko * c + ke * s).to(k_in.dtype)
+
+            k_rot = tl.reshape(tl.join(kr_e, kr_o), (block_n, block_d))
+            out_ptrs = out_bh + offs_n64[:, None] * head_dim + offs_d[None, :]
+            tl.store(k_rot_ptr + out_ptrs, k_rot, mask=nd_mask)
+            tl.store(v_out_ptr + out_ptrs, v_in, mask=nd_mask)
+
+        tl.store(ksum_part_ptr + (bh * num_chunks + chunk_id) * head_dim + offs_d, ksum_acc, mask=d_mask)
+
+    @triton.jit
+    def _sana_litela_prep_q_denom_swizzled_kernel(
+        qkv_ptr,
+        q_rstd_ptr,
+        q_weight_ptr,
+        cos_ptr,
+        sin_ptr,
+        ksum_ptr,
+        q_rot_ptr,
+        inv_denom_ptr,
+        seq_len,
+        stride_qkv_b,
+        stride_qkv_n,
+        stride_cos_b,
+        stride_cos_n,
+        stride_sin_b,
+        stride_sin_n,
+        eps,
+        num_heads: tl.constexpr,
+        head_dim: tl.constexpr,
+        half_dim: tl.constexpr,
+        block_d: tl.constexpr,
+        block_half: tl.constexpr,
+        block_n: tl.constexpr,
+        cos_batch_broadcast: tl.constexpr,
+        has_q_norm: tl.constexpr,
+        use_fp64_rope: tl.constexpr,
+    ):
+        """L2-swizzled ``Q`` norm+ReLU+RoPE and inverse linear-attention denominator."""
+        bh = tl.program_id(0).to(tl.int64)
+        pid_n = tl.program_id(1).to(tl.int64)
+        b = bh // num_heads
+        h = bh % num_heads
+        b_freq = tl.zeros((), dtype=tl.int64) if cos_batch_broadcast else b
+
+        offs_n = pid_n * block_n + tl.arange(0, block_n)
+        n_mask = offs_n < seq_len
+        offs_n64 = offs_n.to(tl.int64)
+        offs_d = tl.arange(0, block_d)
+        d_mask = offs_d < head_dim
+        offs_half = tl.arange(0, block_half)
+        half_mask = offs_half < half_dim
+        nd_mask = n_mask[:, None] & d_mask[None, :]
+        nh_mask = n_mask[:, None] & half_mask[None, :]
+
+        ksum_d = tl.load(ksum_ptr + bh * head_dim + offs_d, mask=d_mask, other=0.0).to(tl.float32)
+        q_col = h * head_dim
+        row_ptrs = b * stride_qkv_b + offs_n64[:, None] * stride_qkv_n
+        q_in = tl.load(qkv_ptr + row_ptrs + (q_col + offs_d)[None, :], mask=nd_mask, other=0.0)
+        if has_q_norm:
+            qw_d = tl.load(q_weight_ptr + q_col + offs_d, mask=d_mask, other=0.0).to(tl.float32)
+            rstd = tl.load(q_rstd_ptr + b * seq_len + offs_n64, mask=n_mask, other=0.0)[:, None]
+            q_n = (q_in.to(tl.float32) * rstd * qw_d[None, :]).to(q_in.dtype)
+        else:
+            q_n = q_in
+
+        q_relu = tl.where(nd_mask, tl.maximum(q_n.to(tl.float32), 0.0), 0.0)
+        denom = tl.sum(q_relu * ksum_d[None, :], axis=1) + eps
+        tl.store(inv_denom_ptr + bh * seq_len + offs_n64, 1.0 / denom, mask=n_mask)
+
+        qe, qo = tl.split(tl.reshape(q_relu, (block_n, block_half, 2)))
+        cos_offs = b_freq * stride_cos_b + offs_n64[:, None] * stride_cos_n + offs_half[None, :]
+        sin_offs = b_freq * stride_sin_b + offs_n64[:, None] * stride_sin_n + offs_half[None, :]
+        if use_fp64_rope:
+            c = tl.load(cos_ptr + cos_offs, mask=nh_mask, other=1.0).to(tl.float64)
+            s = tl.load(sin_ptr + sin_offs, mask=nh_mask, other=0.0).to(tl.float64)
+            qe_64 = qe.to(tl.float64)
+            qo_64 = qo.to(tl.float64)
+            qr_e = (qe_64 * c - qo_64 * s).to(q_in.dtype)
+            qr_o = (qo_64 * c + qe_64 * s).to(q_in.dtype)
+        else:
+            c = tl.load(cos_ptr + cos_offs, mask=nh_mask, other=1.0).to(tl.float32)
+            s = tl.load(sin_ptr + sin_offs, mask=nh_mask, other=0.0).to(tl.float32)
+            qr_e = (qe * c - qo * s).to(q_in.dtype)
+            qr_o = (qo * c + qe * s).to(q_in.dtype)
+
+        q_rot = tl.reshape(tl.join(qr_e, qr_o), (block_n, block_d))
+        out_ptrs = (bh * seq_len + offs_n64)[:, None] * head_dim + offs_d[None, :]
+        tl.store(q_rot_ptr + out_ptrs, q_rot, mask=nd_mask)
+
+    @triton.jit
+    def _sana_litela_div_transpose_swizzled_kernel(
+        num_hi_ptr,
+        num_lo_ptr,
+        inv_denom_ptr,
+        out_ptr,
+        seq_len,
+        stride_out_b,
+        stride_out_n,
+        num_heads: tl.constexpr,
+        head_dim: tl.constexpr,
+        block_d: tl.constexpr,
+        block_n: tl.constexpr,
+        has_lo: tl.constexpr,
+    ):
+        """Combine Dual-BF16 numerator, divide by denominator, and scatter to ``[B, N, C]``."""
+        bh = tl.program_id(0).to(tl.int64)
+        pid_n = tl.program_id(1).to(tl.int64)
+        b = bh // num_heads
+        h = bh % num_heads
+
+        offs_n = pid_n * block_n + tl.arange(0, block_n)
+        n_mask = offs_n < seq_len
+        offs_n64 = offs_n.to(tl.int64)
+        offs_d = tl.arange(0, block_d)
+        d_mask = offs_d < head_dim
+        nd_mask = n_mask[:, None] & d_mask[None, :]
+
+        in_ptrs = (bh * seq_len + offs_n64)[:, None] * head_dim + offs_d[None, :]
+        num = tl.load(num_hi_ptr + in_ptrs, mask=nd_mask, other=0.0).to(tl.float32)
+        if has_lo:
+            num += tl.load(num_lo_ptr + in_ptrs, mask=nd_mask, other=0.0).to(tl.float32)
+        inv_d = tl.load(inv_denom_ptr + bh * seq_len + offs_n64, mask=n_mask, other=0.0)[:, None]
+        val = (num * inv_d).to(out_ptr.dtype.element_ty)
+
+        out_ptrs = b * stride_out_b + offs_n64[:, None] * stride_out_n + (h * head_dim + offs_d)[None, :]
+        tl.store(out_ptr + out_ptrs, val, mask=nd_mask)
+
     return {
         "triton": triton,
+        "rms_norm": _sana_rms_norm_kernel,
         "qk_rstd": _sana_qk_rstd_kernel,
         "kv_splitk": _sana_litela_kv_splitk_kernel,
         "q_apply_div": _sana_litela_q_apply_div_kernel,
+        "prep_kv": _sana_litela_prep_kv_swizzled_kernel,
+        "prep_q_denom": _sana_litela_prep_q_denom_swizzled_kernel,
+        "div_transpose": _sana_litela_div_transpose_swizzled_kernel,
     }
 
 
@@ -323,6 +564,69 @@ def _select_num_splits(batch_heads: int, seq_len: int) -> int:
     if batch_heads * 32 >= 1024:
         return 32
     return 64
+
+
+@torch.library.custom_op("worldfoundry::sana_rms_norm_fwd", mutates_args=(), device_types="cuda")
+def _sana_rms_norm_fwd_op(x: torch.Tensor, weight: torch.Tensor, eps: float) -> torch.Tensor:
+    kernels = _load_triton_kernels()
+    triton = kernels["triton"]
+    features = int(x.shape[-1])
+    out = torch.empty(x.shape, device=x.device, dtype=x.dtype)
+    if x.numel() == 0:
+        return out
+    if x.ndim == 2:
+        mat = x
+    elif x.is_contiguous():
+        mat = x.view(-1, features)
+    elif x.ndim == 3 and (x.shape[0] == 1 or x.stride(0) == x.shape[1] * x.stride(1)):
+        mat = x.as_strided((x.shape[0] * x.shape[1], features), (x.stride(1), 1))
+    else:
+        mat = x.contiguous().view(-1, features)
+    rows = int(mat.shape[0])
+    out_2d = out.view(rows, features)
+    w_c = weight if weight.is_contiguous() else weight.contiguous()
+    block = max(16, triton.next_power_of_2(features))
+    num_warps = 4 if block <= 1024 else 8
+    kernels["rms_norm"][(rows,)](
+        mat,
+        w_c,
+        out_2d,
+        mat.stride(0),
+        out_2d.stride(0),
+        float(eps),
+        features=features,
+        block=block,
+        num_warps=num_warps,
+    )
+    return out
+
+
+@_sana_rms_norm_fwd_op.register_fake
+def _sana_rms_norm_fwd_fake(x: torch.Tensor, weight: torch.Tensor, eps: float) -> torch.Tensor:
+    del weight, eps
+    return torch.empty(x.shape, device=x.device, dtype=x.dtype)
+
+
+def can_use_sana_rms_norm(x: torch.Tensor, weight: torch.Tensor) -> bool:
+    """Return True when the single-pass Hopper Triton SANA RMSNorm op is eligible."""
+    if not x.is_cuda or torch.is_grad_enabled():
+        return False
+    if x.ndim < 2 or x.dtype not in (torch.bfloat16, torch.float16) or x.stride(-1) != 1:
+        return False
+    features = int(x.shape[-1])
+    if features <= 0 or features > 4096:
+        return False
+    return (
+        weight.device == x.device
+        and weight.ndim == 1
+        and weight.shape[0] == features
+        and weight.dtype in _SUPPORTED_DTYPES
+    )
+
+
+def fused_sana_rms_norm(x: torch.Tensor, weight: torch.Tensor, eps: float = 1e-6) -> torch.Tensor:
+    """Single-pass lossless Hopper Triton RMSNorm matching FP32 weight-mul semantics."""
+    return _sana_rms_norm_fwd_op(x, weight, float(eps))
 
 
 @torch.library.custom_op("worldfoundry::sana_litela_relu_rope_fwd", mutates_args=(), device_types="cuda")
@@ -383,11 +687,119 @@ def _sana_litela_relu_rope_fwd_op(
     bh = b * num_heads
     block_d = triton.next_power_of_2(head_dim)
     block_half = block_d // 2
+    use_fp64_rope = cos_3d.dtype == torch.float64 or sin_3d.dtype == torch.float64
+    cos_batch_broadcast = cos_3d.shape[0] == 1 and b > 1
+
+    # On long sequences (N >= 1024), Hopper cuBLAS ``bmm(..., out_dtype=fp32)``
+    # with L2-swizzled Triton prep/scatter reaches ~2x higher throughput than
+    # streaming Triton ``tl.dot`` while keeping FP32 Dual-BF16 accuracy (>120 dB).
+    # Restrict Dual-split to BF16 (8-bit exponent matches FP32, zero overflow risk).
+    use_hybrid_cublas = n >= 1024 and (
+        qkv_c.dtype == torch.bfloat16 or (qkv_c.dtype == torch.float16 and not use_fp32_attention)
+    )
+    if use_hybrid_cublas:
+        k_rot = torch.empty((bh, n, head_dim), device=qkv.device, dtype=qkv_c.dtype)
+        v_out = torch.empty((bh, n, head_dim), device=qkv.device, dtype=qkv_c.dtype)
+        bn_prep = 32
+        tpc_prep = 8
+        num_chunks = triton.cdiv(n, bn_prep * tpc_prep)
+        ksum_part = torch.empty((bh, num_chunks, head_dim), device=qkv.device, dtype=torch.float32)
+        kernels["prep_kv"][(bh, num_chunks)](
+            qkv_c,
+            k_rstd,
+            kw_c,
+            cos_3d,
+            sin_3d,
+            k_rot,
+            v_out,
+            ksum_part,
+            n,
+            qkv_c.stride(0),
+            qkv_c.stride(1),
+            cos_3d.stride(0),
+            cos_3d.stride(1),
+            sin_3d.stride(0),
+            sin_3d.stride(1),
+            hidden_dim=c,
+            num_heads=num_heads,
+            head_dim=head_dim,
+            half_dim=head_dim // 2,
+            block_d=block_d,
+            block_half=block_half,
+            block_n=bn_prep,
+            tiles_per_cta=tpc_prep,
+            num_chunks=num_chunks,
+            cos_batch_broadcast=cos_batch_broadcast,
+            has_k_norm=has_k_norm,
+            use_fp64_rope=use_fp64_rope,
+            num_warps=4,
+        )
+        ksum = ksum_part.sum(dim=1).contiguous()
+        kv_f32 = torch.bmm(k_rot.transpose(1, 2), v_out, out_dtype=torch.float32)
+
+        q_rot = torch.empty((bh, n, head_dim), device=qkv.device, dtype=qkv_c.dtype)
+        inv_denom = torch.empty((bh, n), device=qkv.device, dtype=torch.float32)
+        kernels["prep_q_denom"][(bh, triton.cdiv(n, bn_prep))](
+            qkv_c,
+            q_rstd,
+            qw_c,
+            cos_3d,
+            sin_3d,
+            ksum,
+            q_rot,
+            inv_denom,
+            n,
+            qkv_c.stride(0),
+            qkv_c.stride(1),
+            cos_3d.stride(0),
+            cos_3d.stride(1),
+            sin_3d.stride(0),
+            sin_3d.stride(1),
+            float(attn_eps),
+            num_heads=num_heads,
+            head_dim=head_dim,
+            half_dim=head_dim // 2,
+            block_d=block_d,
+            block_half=block_half,
+            block_n=bn_prep,
+            cos_batch_broadcast=cos_batch_broadcast,
+            has_q_norm=has_q_norm,
+            use_fp64_rope=use_fp64_rope,
+            num_warps=4,
+        )
+
+        if use_fp32_attention and qkv_c.dtype == torch.bfloat16:
+            kv_hi = kv_f32.to(torch.bfloat16)
+            kv_lo = (kv_f32 - kv_hi.float()).to(torch.bfloat16)
+            num_hi = torch.bmm(q_rot, kv_hi, out_dtype=torch.float32)
+            num_lo = torch.bmm(q_rot, kv_lo)
+            has_lo = True
+        else:
+            kv_low = kv_f32.to(qkv_c.dtype)
+            num_hi = torch.bmm(q_rot, kv_low, out_dtype=torch.float32)
+            num_lo = num_hi
+            has_lo = False
+
+        kernels["div_transpose"][(bh, triton.cdiv(n, bn_prep))](
+            num_hi,
+            num_lo,
+            inv_denom,
+            out,
+            n,
+            out.stride(0),
+            out.stride(1),
+            num_heads=num_heads,
+            head_dim=head_dim,
+            block_d=block_d,
+            block_n=bn_prep,
+            has_lo=has_lo,
+            num_warps=4,
+        )
+        return out
+
     num_splits = _select_num_splits(bh, n)
     block_n = 128 if block_d <= 64 else 64
     num_warps_dot = 4 if block_d <= 64 else 8
-    use_fp64_rope = cos_3d.dtype == torch.float64 or sin_3d.dtype == torch.float64
-    cos_batch_broadcast = cos_3d.shape[0] == 1 and b > 1
 
     partial_kv = torch.empty((b, num_heads, num_splits, block_d, block_d), device=qkv.device, dtype=torch.float32)
     partial_ksum = torch.empty((b, num_heads, num_splits, block_d), device=qkv.device, dtype=torch.float32)
@@ -543,4 +955,9 @@ def fused_sana_litela_relu_rope(
     )
 
 
-__all__ = ["can_use_triton_litela_relu_rope", "fused_sana_litela_relu_rope"]
+__all__ = [
+    "can_use_sana_rms_norm",
+    "can_use_triton_litela_relu_rope",
+    "fused_sana_litela_relu_rope",
+    "fused_sana_rms_norm",
+]

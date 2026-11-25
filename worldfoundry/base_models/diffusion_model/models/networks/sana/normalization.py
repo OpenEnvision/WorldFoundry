@@ -241,6 +241,14 @@ class RMSNorm(torch.nn.Module):
 
         """
         if self._use_fused_rms_norm and not self.training and (self.norm_dim == -1 or self.norm_dim == x.dim() - 1):
+            if x.is_cuda and not torch.is_grad_enabled() and x.dtype in (torch.bfloat16, torch.float16):
+                from worldfoundry.base_models.diffusion_model.models.networks.sana.triton_litela_rope import (
+                    can_use_sana_rms_norm,
+                    fused_sana_rms_norm,
+                )
+
+                if can_use_sana_rms_norm(x, self.weight):
+                    return fused_sana_rms_norm(x, self.weight, float(self.eps))
             import torch.nn.functional as F
 
             weight = self.weight if self.weight.dtype == torch.float32 else self.weight.float()

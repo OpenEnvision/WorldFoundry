@@ -41,6 +41,12 @@ def _load_triton_kernels() -> dict[str, Any]:
     import triton
     import triton.language as tl
 
+    _LOG2E = tl.constexpr(1.4426950408889634)
+
+    @triton.jit
+    def _fast_silu(x):
+        return x / (1.0 + tl.math.exp2(-x * _LOG2E))
+
     @triton.jit
     def _sana_silu_dwconv3x3_glu_nhwc_kernel(
         h_ptr,
@@ -59,20 +65,21 @@ def _load_triton_kernels() -> dict[str, Any]:
         block_c: tl.constexpr,
         has_bias: tl.constexpr,
     ):
-        """4-column vertical sliding-window fused ``silu -> 3x3 dwconv -> GLU`` (NHWC).
+        """4-row horizontal sliding-window fused ``silu -> 3x3 dwconv -> GLU`` (NHWC).
 
-        Grid: ``(cdiv(c_mid, block_c), cdiv(width, 4), bt_size)``.
-        Each CTA owns ``4`` consecutive columns ``w0..w3`` and ``block_c`` paired
-        ``(a, g)`` channels, sweeping ``h = 0..height-1`` with a 3-row sliding
-        register window ``(top, mid, bot)`` in the input precision.
+        Grid: ``(cdiv(height, 4), cdiv(c_mid, block_c), bt_size)``.
+        Each CTA owns ``4`` consecutive rows ``h0..h3`` and ``block_c`` paired
+        ``(a, g)`` channels, sweeping horizontally along ``w = 0..width-1``
+        (``width``-times smaller stride than vertical sweeps for L2 cache reuse)
+        with a 3-column sliding register window ``(left, mid, right)``.
         """
-        cb = tl.program_id(0).to(tl.int64)
-        wb = tl.program_id(1).to(tl.int64)
+        hb = tl.program_id(0).to(tl.int64)
+        cb = tl.program_id(1).to(tl.int64)
         bt = tl.program_id(2).to(tl.int64)
-        w0 = wb * 4
-        w1 = w0 + 1
-        w2 = w0 + 2
-        w3 = w0 + 3
+        h0 = hb * 4
+        h1 = h0 + 1
+        h2 = h0 + 2
+        h3 = h0 + 3
 
         c_offs = cb * block_c + tl.arange(0, block_c)
         c_mask = c_offs < c_mid
@@ -107,33 +114,19 @@ def _load_triton_kernels() -> dict[str, Any]:
             bg = tl.zeros((block_c,), dtype=tl.float32)
 
         bt_base = bt * s_bt
-        v0 = (w0 - 1) >= 0
-        v1 = w0 < width
-        v2 = w1 < width
-        v3 = w2 < width
-        v4 = w3 < width
-        v5 = (w3 + 1) < width
+        v0 = (h0 - 1) >= 0
+        v1 = h0 < height
+        v2 = h1 < height
+        v3 = h2 < height
+        v4 = h3 < height
+        v5 = (h3 + 1) < height
 
-        b0 = bt_base + (w0 - 1) * s_w
-        b1 = bt_base + w0 * s_w
-        b2 = bt_base + w1 * s_w
-        b3 = bt_base + w2 * s_w
-        b4 = bt_base + w3 * s_w
-        b5 = bt_base + (w3 + 1) * s_w
-
-        z = tl.zeros((block_c,), dtype=in_ty)
-        a0_t = z
-        a1_t = z
-        a2_t = z
-        a3_t = z
-        a4_t = z
-        a5_t = z
-        g0_t = z
-        g1_t = z
-        g2_t = z
-        g3_t = z
-        g4_t = z
-        g5_t = z
+        r0 = bt_base + (h0 - 1) * s_h
+        r1 = bt_base + h0 * s_h
+        r2 = bt_base + h1 * s_h
+        r3 = bt_base + h2 * s_h
+        r4 = bt_base + h3 * s_h
+        r5 = bt_base + (h3 + 1) * s_h
 
         m0 = v0 & c_mask
         m1 = v1 & c_mask
@@ -142,90 +135,82 @@ def _load_triton_kernels() -> dict[str, Any]:
         m4 = v4 & c_mask
         m5 = v5 & c_mask
 
-        # Load row h=0 into mid registers (silu(0) == 0 preserves zero padding).
-        x = tl.load(h_ptr + b0 + c_offs, mask=m0, other=0.0).to(tl.float32)
-        a0_m = (x * tl.sigmoid(x)).to(in_ty)
-        x = tl.load(h_ptr + b1 + c_offs, mask=m1, other=0.0).to(tl.float32)
-        a1_m = (x * tl.sigmoid(x)).to(in_ty)
-        x = tl.load(h_ptr + b2 + c_offs, mask=m2, other=0.0).to(tl.float32)
-        a2_m = (x * tl.sigmoid(x)).to(in_ty)
-        x = tl.load(h_ptr + b3 + c_offs, mask=m3, other=0.0).to(tl.float32)
-        a3_m = (x * tl.sigmoid(x)).to(in_ty)
-        x = tl.load(h_ptr + b4 + c_offs, mask=m4, other=0.0).to(tl.float32)
-        a4_m = (x * tl.sigmoid(x)).to(in_ty)
-        x = tl.load(h_ptr + b5 + c_offs, mask=m5, other=0.0).to(tl.float32)
-        a5_m = (x * tl.sigmoid(x)).to(in_ty)
+        z = tl.zeros((block_c,), dtype=in_ty)
+        a0_l = z
+        a1_l = z
+        a2_l = z
+        a3_l = z
+        a4_l = z
+        a5_l = z
+        g0_l = z
+        g1_l = z
+        g2_l = z
+        g3_l = z
+        g4_l = z
+        g5_l = z
 
-        x = tl.load(h_ptr + b0 + gc, mask=m0, other=0.0).to(tl.float32)
-        g0_m = (x * tl.sigmoid(x)).to(in_ty)
-        x = tl.load(h_ptr + b1 + gc, mask=m1, other=0.0).to(tl.float32)
-        g1_m = (x * tl.sigmoid(x)).to(in_ty)
-        x = tl.load(h_ptr + b2 + gc, mask=m2, other=0.0).to(tl.float32)
-        g2_m = (x * tl.sigmoid(x)).to(in_ty)
-        x = tl.load(h_ptr + b3 + gc, mask=m3, other=0.0).to(tl.float32)
-        g3_m = (x * tl.sigmoid(x)).to(in_ty)
-        x = tl.load(h_ptr + b4 + gc, mask=m4, other=0.0).to(tl.float32)
-        g4_m = (x * tl.sigmoid(x)).to(in_ty)
-        x = tl.load(h_ptr + b5 + gc, mask=m5, other=0.0).to(tl.float32)
-        g5_m = (x * tl.sigmoid(x)).to(in_ty)
+        # Load column w=0 into mid registers (silu(0) == 0 preserves zero padding).
+        a0_m = _fast_silu(tl.load(h_ptr + r0 + c_offs, mask=m0, other=0.0).to(tl.float32)).to(in_ty)
+        a1_m = _fast_silu(tl.load(h_ptr + r1 + c_offs, mask=m1, other=0.0).to(tl.float32)).to(in_ty)
+        a2_m = _fast_silu(tl.load(h_ptr + r2 + c_offs, mask=m2, other=0.0).to(tl.float32)).to(in_ty)
+        a3_m = _fast_silu(tl.load(h_ptr + r3 + c_offs, mask=m3, other=0.0).to(tl.float32)).to(in_ty)
+        a4_m = _fast_silu(tl.load(h_ptr + r4 + c_offs, mask=m4, other=0.0).to(tl.float32)).to(in_ty)
+        a5_m = _fast_silu(tl.load(h_ptr + r5 + c_offs, mask=m5, other=0.0).to(tl.float32)).to(in_ty)
 
-        ob0 = bt * o_bt + w0 * o_w + c_offs
-        ob1 = bt * o_bt + w1 * o_w + c_offs
-        ob2 = bt * o_bt + w2 * o_w + c_offs
-        ob3 = bt * o_bt + w3 * o_w + c_offs
+        g0_m = _fast_silu(tl.load(h_ptr + r0 + gc, mask=m0, other=0.0).to(tl.float32)).to(in_ty)
+        g1_m = _fast_silu(tl.load(h_ptr + r1 + gc, mask=m1, other=0.0).to(tl.float32)).to(in_ty)
+        g2_m = _fast_silu(tl.load(h_ptr + r2 + gc, mask=m2, other=0.0).to(tl.float32)).to(in_ty)
+        g3_m = _fast_silu(tl.load(h_ptr + r3 + gc, mask=m3, other=0.0).to(tl.float32)).to(in_ty)
+        g4_m = _fast_silu(tl.load(h_ptr + r4 + gc, mask=m4, other=0.0).to(tl.float32)).to(in_ty)
+        g5_m = _fast_silu(tl.load(h_ptr + r5 + gc, mask=m5, other=0.0).to(tl.float32)).to(in_ty)
 
-        for h in range(height):
-            h_nxt = h + 1
-            has_b = h_nxt < height
-            ho = h_nxt * s_h
-            mb0 = (v0 & has_b) & c_mask
-            mb1 = (v1 & has_b) & c_mask
-            mb2 = (v2 & has_b) & c_mask
-            mb3 = (v3 & has_b) & c_mask
-            mb4 = (v4 & has_b) & c_mask
-            mb5 = (v5 & has_b) & c_mask
+        or0 = bt * o_bt + h0 * o_h + c_offs
+        or1 = bt * o_bt + h1 * o_h + c_offs
+        or2 = bt * o_bt + h2 * o_h + c_offs
+        or3 = bt * o_bt + h3 * o_h + c_offs
+        s_w64 = tl.full((), s_w, tl.int64)
+        o_w64 = tl.full((), o_w, tl.int64)
 
-            x = tl.load(h_ptr + b0 + ho + c_offs, mask=mb0, other=0.0).to(tl.float32)
-            a0_b = (x * tl.sigmoid(x)).to(in_ty)
-            x = tl.load(h_ptr + b1 + ho + c_offs, mask=mb1, other=0.0).to(tl.float32)
-            a1_b = (x * tl.sigmoid(x)).to(in_ty)
-            x = tl.load(h_ptr + b2 + ho + c_offs, mask=mb2, other=0.0).to(tl.float32)
-            a2_b = (x * tl.sigmoid(x)).to(in_ty)
-            x = tl.load(h_ptr + b3 + ho + c_offs, mask=mb3, other=0.0).to(tl.float32)
-            a3_b = (x * tl.sigmoid(x)).to(in_ty)
-            x = tl.load(h_ptr + b4 + ho + c_offs, mask=mb4, other=0.0).to(tl.float32)
-            a4_b = (x * tl.sigmoid(x)).to(in_ty)
-            x = tl.load(h_ptr + b5 + ho + c_offs, mask=mb5, other=0.0).to(tl.float32)
-            a5_b = (x * tl.sigmoid(x)).to(in_ty)
+        for w in range(width):
+            w_nxt = w + 1
+            has_r = w_nxt < width
+            wo = w_nxt * s_w64
+            mr0 = (v0 & has_r) & c_mask
+            mr1 = (v1 & has_r) & c_mask
+            mr2 = (v2 & has_r) & c_mask
+            mr3 = (v3 & has_r) & c_mask
+            mr4 = (v4 & has_r) & c_mask
+            mr5 = (v5 & has_r) & c_mask
 
-            x = tl.load(h_ptr + b0 + ho + gc, mask=mb0, other=0.0).to(tl.float32)
-            g0_b = (x * tl.sigmoid(x)).to(in_ty)
-            x = tl.load(h_ptr + b1 + ho + gc, mask=mb1, other=0.0).to(tl.float32)
-            g1_b = (x * tl.sigmoid(x)).to(in_ty)
-            x = tl.load(h_ptr + b2 + ho + gc, mask=mb2, other=0.0).to(tl.float32)
-            g2_b = (x * tl.sigmoid(x)).to(in_ty)
-            x = tl.load(h_ptr + b3 + ho + gc, mask=mb3, other=0.0).to(tl.float32)
-            g3_b = (x * tl.sigmoid(x)).to(in_ty)
-            x = tl.load(h_ptr + b4 + ho + gc, mask=mb4, other=0.0).to(tl.float32)
-            g4_b = (x * tl.sigmoid(x)).to(in_ty)
-            x = tl.load(h_ptr + b5 + ho + gc, mask=mb5, other=0.0).to(tl.float32)
-            g5_b = (x * tl.sigmoid(x)).to(in_ty)
+            a0_r = _fast_silu(tl.load(h_ptr + r0 + wo + c_offs, mask=mr0, other=0.0).to(tl.float32)).to(in_ty)
+            a1_r = _fast_silu(tl.load(h_ptr + r1 + wo + c_offs, mask=mr1, other=0.0).to(tl.float32)).to(in_ty)
+            a2_r = _fast_silu(tl.load(h_ptr + r2 + wo + c_offs, mask=mr2, other=0.0).to(tl.float32)).to(in_ty)
+            a3_r = _fast_silu(tl.load(h_ptr + r3 + wo + c_offs, mask=mr3, other=0.0).to(tl.float32)).to(in_ty)
+            a4_r = _fast_silu(tl.load(h_ptr + r4 + wo + c_offs, mask=mr4, other=0.0).to(tl.float32)).to(in_ty)
+            a5_r = _fast_silu(tl.load(h_ptr + r5 + wo + c_offs, mask=mr5, other=0.0).to(tl.float32)).to(in_ty)
 
-            out_h_off = h * o_h
+            g0_r = _fast_silu(tl.load(h_ptr + r0 + wo + gc, mask=mr0, other=0.0).to(tl.float32)).to(in_ty)
+            g1_r = _fast_silu(tl.load(h_ptr + r1 + wo + gc, mask=mr1, other=0.0).to(tl.float32)).to(in_ty)
+            g2_r = _fast_silu(tl.load(h_ptr + r2 + wo + gc, mask=mr2, other=0.0).to(tl.float32)).to(in_ty)
+            g3_r = _fast_silu(tl.load(h_ptr + r3 + wo + gc, mask=mr3, other=0.0).to(tl.float32)).to(in_ty)
+            g4_r = _fast_silu(tl.load(h_ptr + r4 + wo + gc, mask=mr4, other=0.0).to(tl.float32)).to(in_ty)
+            g5_r = _fast_silu(tl.load(h_ptr + r5 + wo + gc, mask=mr5, other=0.0).to(tl.float32)).to(in_ty)
 
-            # Column w0
+            ow_off = w * o_w64
+
+            # Row h0
             aa = (
                 (
                     ba
-                    + a0_t.to(tl.float32) * wa00
-                    + a1_t.to(tl.float32) * wa01
-                    + a2_t.to(tl.float32) * wa02
-                    + a0_m.to(tl.float32) * wa10
+                    + a0_l.to(tl.float32) * wa00
+                    + a0_m.to(tl.float32) * wa01
+                    + a0_r.to(tl.float32) * wa02
+                    + a1_l.to(tl.float32) * wa10
                     + a1_m.to(tl.float32) * wa11
-                    + a2_m.to(tl.float32) * wa12
-                    + a0_b.to(tl.float32) * wa20
-                    + a1_b.to(tl.float32) * wa21
-                    + a2_b.to(tl.float32) * wa22
+                    + a1_r.to(tl.float32) * wa12
+                    + a2_l.to(tl.float32) * wa20
+                    + a2_m.to(tl.float32) * wa21
+                    + a2_r.to(tl.float32) * wa22
                 )
                 .to(in_ty)
                 .to(tl.float32)
@@ -233,34 +218,34 @@ def _load_triton_kernels() -> dict[str, Any]:
             gg = (
                 (
                     bg
-                    + g0_t.to(tl.float32) * wg00
-                    + g1_t.to(tl.float32) * wg01
-                    + g2_t.to(tl.float32) * wg02
-                    + g0_m.to(tl.float32) * wg10
+                    + g0_l.to(tl.float32) * wg00
+                    + g0_m.to(tl.float32) * wg01
+                    + g0_r.to(tl.float32) * wg02
+                    + g1_l.to(tl.float32) * wg10
                     + g1_m.to(tl.float32) * wg11
-                    + g2_m.to(tl.float32) * wg12
-                    + g0_b.to(tl.float32) * wg20
-                    + g1_b.to(tl.float32) * wg21
-                    + g2_b.to(tl.float32) * wg22
+                    + g1_r.to(tl.float32) * wg12
+                    + g2_l.to(tl.float32) * wg20
+                    + g2_m.to(tl.float32) * wg21
+                    + g2_r.to(tl.float32) * wg22
                 )
                 .to(in_ty)
                 .to(tl.float32)
             )
-            tl.store(out_ptr + ob0 + out_h_off, (aa * (gg * tl.sigmoid(gg))).to(in_ty), mask=m1)
+            tl.store(out_ptr + or0 + ow_off, (aa * _fast_silu(gg)).to(in_ty), mask=m1)
 
-            # Column w1
+            # Row h1
             aa = (
                 (
                     ba
-                    + a1_t.to(tl.float32) * wa00
-                    + a2_t.to(tl.float32) * wa01
-                    + a3_t.to(tl.float32) * wa02
-                    + a1_m.to(tl.float32) * wa10
+                    + a1_l.to(tl.float32) * wa00
+                    + a1_m.to(tl.float32) * wa01
+                    + a1_r.to(tl.float32) * wa02
+                    + a2_l.to(tl.float32) * wa10
                     + a2_m.to(tl.float32) * wa11
-                    + a3_m.to(tl.float32) * wa12
-                    + a1_b.to(tl.float32) * wa20
-                    + a2_b.to(tl.float32) * wa21
-                    + a3_b.to(tl.float32) * wa22
+                    + a2_r.to(tl.float32) * wa12
+                    + a3_l.to(tl.float32) * wa20
+                    + a3_m.to(tl.float32) * wa21
+                    + a3_r.to(tl.float32) * wa22
                 )
                 .to(in_ty)
                 .to(tl.float32)
@@ -268,34 +253,34 @@ def _load_triton_kernels() -> dict[str, Any]:
             gg = (
                 (
                     bg
-                    + g1_t.to(tl.float32) * wg00
-                    + g2_t.to(tl.float32) * wg01
-                    + g3_t.to(tl.float32) * wg02
-                    + g1_m.to(tl.float32) * wg10
+                    + g1_l.to(tl.float32) * wg00
+                    + g1_m.to(tl.float32) * wg01
+                    + g1_r.to(tl.float32) * wg02
+                    + g2_l.to(tl.float32) * wg10
                     + g2_m.to(tl.float32) * wg11
-                    + g3_m.to(tl.float32) * wg12
-                    + g1_b.to(tl.float32) * wg20
-                    + g2_b.to(tl.float32) * wg21
-                    + g3_b.to(tl.float32) * wg22
+                    + g2_r.to(tl.float32) * wg12
+                    + g3_l.to(tl.float32) * wg20
+                    + g3_m.to(tl.float32) * wg21
+                    + g3_r.to(tl.float32) * wg22
                 )
                 .to(in_ty)
                 .to(tl.float32)
             )
-            tl.store(out_ptr + ob1 + out_h_off, (aa * (gg * tl.sigmoid(gg))).to(in_ty), mask=m2)
+            tl.store(out_ptr + or1 + ow_off, (aa * _fast_silu(gg)).to(in_ty), mask=m2)
 
-            # Column w2
+            # Row h2
             aa = (
                 (
                     ba
-                    + a2_t.to(tl.float32) * wa00
-                    + a3_t.to(tl.float32) * wa01
-                    + a4_t.to(tl.float32) * wa02
-                    + a2_m.to(tl.float32) * wa10
+                    + a2_l.to(tl.float32) * wa00
+                    + a2_m.to(tl.float32) * wa01
+                    + a2_r.to(tl.float32) * wa02
+                    + a3_l.to(tl.float32) * wa10
                     + a3_m.to(tl.float32) * wa11
-                    + a4_m.to(tl.float32) * wa12
-                    + a2_b.to(tl.float32) * wa20
-                    + a3_b.to(tl.float32) * wa21
-                    + a4_b.to(tl.float32) * wa22
+                    + a3_r.to(tl.float32) * wa12
+                    + a4_l.to(tl.float32) * wa20
+                    + a4_m.to(tl.float32) * wa21
+                    + a4_r.to(tl.float32) * wa22
                 )
                 .to(in_ty)
                 .to(tl.float32)
@@ -303,34 +288,34 @@ def _load_triton_kernels() -> dict[str, Any]:
             gg = (
                 (
                     bg
-                    + g2_t.to(tl.float32) * wg00
-                    + g3_t.to(tl.float32) * wg01
-                    + g4_t.to(tl.float32) * wg02
-                    + g2_m.to(tl.float32) * wg10
+                    + g2_l.to(tl.float32) * wg00
+                    + g2_m.to(tl.float32) * wg01
+                    + g2_r.to(tl.float32) * wg02
+                    + g3_l.to(tl.float32) * wg10
                     + g3_m.to(tl.float32) * wg11
-                    + g4_m.to(tl.float32) * wg12
-                    + g2_b.to(tl.float32) * wg20
-                    + g3_b.to(tl.float32) * wg21
-                    + g4_b.to(tl.float32) * wg22
+                    + g3_r.to(tl.float32) * wg12
+                    + g4_l.to(tl.float32) * wg20
+                    + g4_m.to(tl.float32) * wg21
+                    + g4_r.to(tl.float32) * wg22
                 )
                 .to(in_ty)
                 .to(tl.float32)
             )
-            tl.store(out_ptr + ob2 + out_h_off, (aa * (gg * tl.sigmoid(gg))).to(in_ty), mask=m3)
+            tl.store(out_ptr + or2 + ow_off, (aa * _fast_silu(gg)).to(in_ty), mask=m3)
 
-            # Column w3
+            # Row h3
             aa = (
                 (
                     ba
-                    + a3_t.to(tl.float32) * wa00
-                    + a4_t.to(tl.float32) * wa01
-                    + a5_t.to(tl.float32) * wa02
-                    + a3_m.to(tl.float32) * wa10
+                    + a3_l.to(tl.float32) * wa00
+                    + a3_m.to(tl.float32) * wa01
+                    + a3_r.to(tl.float32) * wa02
+                    + a4_l.to(tl.float32) * wa10
                     + a4_m.to(tl.float32) * wa11
-                    + a5_m.to(tl.float32) * wa12
-                    + a3_b.to(tl.float32) * wa20
-                    + a4_b.to(tl.float32) * wa21
-                    + a5_b.to(tl.float32) * wa22
+                    + a4_r.to(tl.float32) * wa12
+                    + a5_l.to(tl.float32) * wa20
+                    + a5_m.to(tl.float32) * wa21
+                    + a5_r.to(tl.float32) * wa22
                 )
                 .to(in_ty)
                 .to(tl.float32)
@@ -338,45 +323,45 @@ def _load_triton_kernels() -> dict[str, Any]:
             gg = (
                 (
                     bg
-                    + g3_t.to(tl.float32) * wg00
-                    + g4_t.to(tl.float32) * wg01
-                    + g5_t.to(tl.float32) * wg02
-                    + g3_m.to(tl.float32) * wg10
+                    + g3_l.to(tl.float32) * wg00
+                    + g3_m.to(tl.float32) * wg01
+                    + g3_r.to(tl.float32) * wg02
+                    + g4_l.to(tl.float32) * wg10
                     + g4_m.to(tl.float32) * wg11
-                    + g5_m.to(tl.float32) * wg12
-                    + g3_b.to(tl.float32) * wg20
-                    + g4_b.to(tl.float32) * wg21
-                    + g5_b.to(tl.float32) * wg22
+                    + g4_r.to(tl.float32) * wg12
+                    + g5_l.to(tl.float32) * wg20
+                    + g5_m.to(tl.float32) * wg21
+                    + g5_r.to(tl.float32) * wg22
                 )
                 .to(in_ty)
                 .to(tl.float32)
             )
-            tl.store(out_ptr + ob3 + out_h_off, (aa * (gg * tl.sigmoid(gg))).to(in_ty), mask=m4)
+            tl.store(out_ptr + or3 + ow_off, (aa * _fast_silu(gg)).to(in_ty), mask=m4)
 
-            a0_t = a0_m
-            a1_t = a1_m
-            a2_t = a2_m
-            a3_t = a3_m
-            a4_t = a4_m
-            a5_t = a5_m
-            a0_m = a0_b
-            a1_m = a1_b
-            a2_m = a2_b
-            a3_m = a3_b
-            a4_m = a4_b
-            a5_m = a5_b
-            g0_t = g0_m
-            g1_t = g1_m
-            g2_t = g2_m
-            g3_t = g3_m
-            g4_t = g4_m
-            g5_t = g5_m
-            g0_m = g0_b
-            g1_m = g1_b
-            g2_m = g2_b
-            g3_m = g3_b
-            g4_m = g4_b
-            g5_m = g5_b
+            a0_l = a0_m
+            a1_l = a1_m
+            a2_l = a2_m
+            a3_l = a3_m
+            a4_l = a4_m
+            a5_l = a5_m
+            a0_m = a0_r
+            a1_m = a1_r
+            a2_m = a2_r
+            a3_m = a3_r
+            a4_m = a4_r
+            a5_m = a5_r
+            g0_l = g0_m
+            g1_l = g1_m
+            g2_l = g2_m
+            g3_l = g3_m
+            g4_l = g4_m
+            g5_l = g5_m
+            g0_m = g0_r
+            g1_m = g1_r
+            g2_m = g2_r
+            g3_m = g3_r
+            g4_m = g4_r
+            g5_m = g5_r
 
     return {
         "triton": triton,
@@ -404,8 +389,9 @@ def _sana_silu_dwconv3x3_glu_nhwc_op(
     has_bias = dw_bias is not None
     b_c = dw_bias.contiguous() if dw_bias is not None else w_flat
 
-    block_c = 64
-    grid = (triton.cdiv(c_mid, block_c), triton.cdiv(width, 4), bt)
+    block_c = 64 if c_mid <= 64 else 128
+    num_warps = 2 if block_c == 64 else 4
+    grid = (triton.cdiv(height, 4), triton.cdiv(c_mid, block_c), bt)
     kernels["dwconv_glu"][grid](
         h_c,
         w_flat,
@@ -422,7 +408,7 @@ def _sana_silu_dwconv3x3_glu_nhwc_op(
         out.stride(2),
         block_c=block_c,
         has_bias=has_bias,
-        num_warps=2,
+        num_warps=num_warps,
     )
     return out
 
