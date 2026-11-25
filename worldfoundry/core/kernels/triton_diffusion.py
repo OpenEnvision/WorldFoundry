@@ -383,7 +383,7 @@ def _residual_gate_kernel(
     cover the last dimension (eligibility caps features at 8192).
     """
 
-    row = tl.program_id(0)
+    row = tl.program_id(0).to(tl.int64)
     cols = tl.arange(0, block)
     mask = (row < rows) & (cols < features)
     offsets = row * features + cols
@@ -397,7 +397,7 @@ def _residual_gate_kernel(
     # following add.  Restore that BF16/FP16 rounding boundary while retaining
     # a single launch.
     if round_product_bf16:
-        product = _round_float32_to_bfloat16(product)
+        product = _round_float32_to_bfloat16_ptx(product)
     elif round_product_fp16:
         product = _round_float32_to_float16(product)
     tl.store(out_ptr + offsets, residual + product.to(tl.float32), mask=mask)
@@ -523,69 +523,66 @@ def _qk_rmsnorm_rope_kernel(
     freq_stride_s,
     freq_stride_d,
     sequence,
-    heads,
+    heads: tl.constexpr,
     eps,
     rope_fp32: tl.constexpr,
-    head_dim: tl.constexpr,
-    block: tl.constexpr,
+    half_dim: tl.constexpr,
+    block_half: tl.constexpr,
+    block_h: tl.constexpr,
 ):
-    """Per-head RMSNorm then non-interleaved RoPE; one program per ``(B, S, H)``.
+    """Head-tiled per-head RMSNorm + non-interleaved RoPE; ``grid = (B*S, 2)``.
 
-    ``block`` is ``next_power_of_2(head_dim)``. ``rope_fp32`` re-promotes after
-    the RMSNorm dtype cut so Wan's fp32 rotary path stays bit-compatible.
+    Splits Q (pid(1) == 0) and K (pid(1) == 1) across CTAs and tiles ``block_h``
+    heads per iteration so ``cos``/``sin`` and RMSNorm weights are loaded once
+    per token while keeping register pressure low (zero local-memory spills).
     """
 
-    row = tl.program_id(0)
-    batch = row // (sequence * heads)
-    sequence_head = row % (sequence * heads)
-    seq = sequence_head // heads
-    head = sequence_head % heads
-    cols = tl.arange(0, block)
-    mask = cols < head_dim
-    q_offsets = batch * sequence * q_stride_s + seq * q_stride_s + head * q_stride_h + cols
-    k_offsets = batch * sequence * k_stride_s + seq * k_stride_s + head * k_stride_h + cols
+    tok = tl.program_id(0).to(tl.int64)
+    is_k = tl.program_id(1)
+    batch = tok // sequence
+    seq = tok % sequence
 
-    q_input = tl.load(q_ptr + q_offsets, mask=mask, other=0.0)
-    k_input = tl.load(k_ptr + k_offsets, mask=mask, other=0.0)
-    q_float = q_input.to(tl.float32)
-    k_float = k_input.to(tl.float32)
-    q_rstd = tl.rsqrt(tl.sum(q_float * q_float, axis=0) / head_dim + eps)
-    k_rstd = tl.rsqrt(tl.sum(k_float * k_float, axis=0) / head_dim + eps)
-    half = head_dim // 2
-    pair_cols = cols % half
-    pair_offsets = batch * sequence * q_stride_s + seq * q_stride_s + head * q_stride_h + pair_cols
-    k_pair_offsets = batch * sequence * k_stride_s + seq * k_stride_s + head * k_stride_h + pair_cols
-    q_a = tl.load(q_ptr + pair_offsets, mask=pair_cols < half, other=0.0).to(tl.float32)
-    q_b = tl.load(q_ptr + pair_offsets + half, mask=pair_cols < half, other=0.0).to(tl.float32)
-    k_a = tl.load(k_ptr + k_pair_offsets, mask=pair_cols < half, other=0.0).to(tl.float32)
-    k_b = tl.load(k_ptr + k_pair_offsets + half, mask=pair_cols < half, other=0.0).to(tl.float32)
-    q_weight_a = tl.load(q_weight_ptr + pair_cols, mask=pair_cols < half, other=0.0).to(tl.float32)
-    q_weight_b = tl.load(q_weight_ptr + pair_cols + half, mask=pair_cols < half, other=0.0).to(tl.float32)
-    k_weight_a = tl.load(k_weight_ptr + pair_cols, mask=pair_cols < half, other=0.0).to(tl.float32)
-    k_weight_b = tl.load(k_weight_ptr + pair_cols + half, mask=pair_cols < half, other=0.0).to(tl.float32)
-    # Match torch RMSNorm's output cast before RoPE.  Wan's fp32 strategy
-    # promotes that rounded result again for the rotary arithmetic.
-    q_a = (q_a * q_rstd * q_weight_a).to(q_input.dtype)
-    q_b = (q_b * q_rstd * q_weight_b).to(q_input.dtype)
-    k_a = (k_a * k_rstd * k_weight_a).to(k_input.dtype)
-    k_b = (k_b * k_rstd * k_weight_b).to(k_input.dtype)
-    if rope_fp32:
-        q_a = q_a.to(tl.float32)
-        q_b = q_b.to(tl.float32)
-        k_a = k_a.to(tl.float32)
-        k_b = k_b.to(tl.float32)
+    offs = tl.arange(0, block_half)
+    d_mask = offs < half_dim
+    freq = tl.load(freqs_ptr + seq * freq_stride_s + offs * freq_stride_d, mask=d_mask, other=0.0).to(tl.float32)
+    cosine = tl.cos(freq)[None, :]
+    sine = tl.sin(freq)[None, :]
 
-    freq = tl.load(
-        freqs_ptr + seq * freq_stride_s + pair_cols * freq_stride_d,
-        mask=pair_cols < half,
-        other=0.0,
-    ).to(tl.float32)
-    cosine = tl.cos(freq)
-    sine = tl.sin(freq)
-    rotated_q = tl.where(cols < half, q_a * cosine - q_b * sine, q_b * cosine + q_a * sine)
-    rotated_k = tl.where(cols < half, k_a * cosine - k_b * sine, k_b * cosine + k_a * sine)
-    tl.store(q_out_ptr + q_offsets, rotated_q, mask=mask)
-    tl.store(k_out_ptr + k_offsets, rotated_k, mask=mask)
+    if is_k == 0:
+        in_ptr = q_ptr
+        out_ptr = q_out_ptr
+        stride_s = q_stride_s
+        stride_h = q_stride_h
+        w0 = tl.load(q_weight_ptr + offs, mask=d_mask, other=0.0).to(tl.float32)[None, :]
+        w1 = tl.load(q_weight_ptr + half_dim + offs, mask=d_mask, other=0.0).to(tl.float32)[None, :]
+    else:
+        in_ptr = k_ptr
+        out_ptr = k_out_ptr
+        stride_s = k_stride_s
+        stride_h = k_stride_h
+        w0 = tl.load(k_weight_ptr + offs, mask=d_mask, other=0.0).to(tl.float32)[None, :]
+        w1 = tl.load(k_weight_ptr + half_dim + offs, mask=d_mask, other=0.0).to(tl.float32)[None, :]
+
+    tok_base = (batch * sequence + seq) * stride_s
+    head_dim: tl.constexpr = 2 * half_dim
+    for h_start in tl.static_range(0, heads, block_h):
+        hs = h_start + tl.arange(0, block_h)
+        mask = (hs < heads)[:, None] & d_mask[None, :]
+        row_base = tok_base + hs[:, None] * stride_h
+        x0_in = tl.load(in_ptr + row_base + offs[None, :], mask=mask, other=0.0)
+        x1_in = tl.load(in_ptr + row_base + half_dim + offs[None, :], mask=mask, other=0.0)
+        x0_f = x0_in.to(tl.float32)
+        x1_f = x1_in.to(tl.float32)
+        rstd = tl.rsqrt(tl.sum(x0_f * x0_f + x1_f * x1_f, axis=1) / head_dim + eps)[:, None]
+        # Match Wan/Gamma RMSNorm contract: round normalized activation to input
+        # dtype before multiplying by the learned weight.
+        xa = ((x0_f * rstd).to(x0_in.dtype).to(tl.float32) * w0).to(x0_in.dtype)
+        xb = ((x1_f * rstd).to(x1_in.dtype).to(tl.float32) * w1).to(x1_in.dtype)
+        if rope_fp32:
+            xa = xa.to(tl.float32)
+            xb = xb.to(tl.float32)
+        tl.store(out_ptr + row_base + offs[None, :], xa * cosine - xb * sine, mask=mask)
+        tl.store(out_ptr + row_base + half_dim + offs[None, :], xb * cosine + xa * sine, mask=mask)
 
 
 @triton.jit
@@ -604,6 +601,7 @@ def _hidden_qk_rmsnorm_rope_3d_kernel(
     k_seq_stride,
     hidden_size: tl.constexpr,
     head_dim: tl.constexpr,
+    pairs_per_head: tl.constexpr,
     valid_tokens,
     sequence_offset,
     start_frame,
@@ -617,104 +615,183 @@ def _hidden_qk_rmsnorm_rope_3d_kernel(
     freq_stride_position,
     freq_stride_pair,
     freq_stride_component,
-    block_pairs: tl.constexpr,
+    BLOCK_N: tl.constexpr,
+    FAST_HEAD_FREQ: tl.constexpr,
+    SINGLE_PASS: tl.constexpr,
     USE_FP64: tl.constexpr = False,
 ):
-    """Fuse full-hidden Q/K RMSNorm with packed interleaved 3D RoPE in one pass."""
+    """Split-Q/K register-safe full-hidden RMSNorm + packed interleaved 3D RoPE.
 
-    row = tl.program_id(0)
+    Uses ``grid = (B*S, 2)`` (Q on pid(1)==0, K on pid(1)==1), 128-bit contiguous
+    loads/stores with in-register ``reshape``/``split``/``join`` de-interleaving,
+    and loads the per-head 3D frequency table once per CTA when ``pairs_per_head``
+    is a power of two.
+    """
+
+    row = tl.program_id(0).to(tl.int64)
+    is_k = tl.program_id(1)
     batch_idx = row // sequence
     local_token = row % sequence
     global_token = sequence_offset + local_token
 
-    pair_index = tl.arange(0, block_pairs)
-    even_col = pair_index * 2
-    odd_col = even_col + 1
-    pair_mask = odd_col < hidden_size
-    rotate_mask = pair_mask & (even_col >= store_feature_start) & (odd_col < store_feature_end)
+    if is_k == 0:
+        in_base = q_ptr + batch_idx * q_batch_stride + local_token * q_seq_stride
+        out_base = q_out_ptr + row * hidden_size
+        w_ptr = q_weight_ptr
+    else:
+        in_base = k_ptr + batch_idx * k_batch_stride + local_token * k_seq_stride
+        out_base = k_out_ptr + row * hidden_size
+        w_ptr = k_weight_ptr
 
-    q_row_base = batch_idx * q_batch_stride + local_token * q_seq_stride
-    k_row_base = batch_idx * k_batch_stride + local_token * k_seq_stride
-    q_even_input = tl.load(q_ptr + q_row_base + even_col, mask=pair_mask, other=0.0)
-    q_odd_input = tl.load(q_ptr + q_row_base + odd_col, mask=pair_mask, other=0.0)
-    k_even_input = tl.load(k_ptr + k_row_base + even_col, mask=pair_mask, other=0.0)
-    k_odd_input = tl.load(k_ptr + k_row_base + odd_col, mask=pair_mask, other=0.0)
-
-    q_even_f = q_even_input.to(tl.float32)
-    q_odd_f = q_odd_input.to(tl.float32)
-    k_even_f = k_even_input.to(tl.float32)
-    k_odd_f = k_odd_input.to(tl.float32)
-    q_sq_sum = tl.sum(q_even_f * q_even_f + q_odd_f * q_odd_f, axis=0)
-    k_sq_sum = tl.sum(k_even_f * k_even_f + k_odd_f * k_odd_f, axis=0)
-    q_rstd = tl.rsqrt(q_sq_sum / hidden_size + eps)
-    k_rstd = tl.rsqrt(k_sq_sum / hidden_size + eps)
-
-    q_weight_even = tl.load(q_weight_ptr + even_col, mask=pair_mask, other=0.0).to(tl.float32)
-    q_weight_odd = tl.load(q_weight_ptr + odd_col, mask=pair_mask, other=0.0).to(tl.float32)
-    k_weight_even = tl.load(k_weight_ptr + even_col, mask=pair_mask, other=0.0).to(tl.float32)
-    k_weight_odd = tl.load(k_weight_ptr + odd_col, mask=pair_mask, other=0.0).to(tl.float32)
-
-    # WanRMSNorm rounds the normalized value to the projection dtype before
-    # multiplying by the learned weight.
-    q_even = (q_even_f * q_rstd).to(q_even_input.dtype)
-    q_odd = (q_odd_f * q_rstd).to(q_odd_input.dtype)
-    k_even = (k_even_f * k_rstd).to(k_even_input.dtype)
-    k_odd = (k_odd_f * k_rstd).to(k_odd_input.dtype)
-    q_even = (q_even.to(tl.float32) * q_weight_even).to(q_even_input.dtype)
-    q_odd = (q_odd.to(tl.float32) * q_weight_odd).to(q_odd_input.dtype)
-    k_even = (k_even.to(tl.float32) * k_weight_even).to(k_even_input.dtype)
-    k_odd = (k_odd.to(tl.float32) * k_weight_odd).to(k_odd_input.dtype)
-
-    pairs_per_head = head_dim // 2
-    pair_in_head = pair_index % pairs_per_head
+    BLOCK_PAIRS: tl.constexpr = BLOCK_N // 2
     spatial_plane = height * width
     temporal_position = start_frame + global_token // spatial_plane
     spatial_position = global_token % spatial_plane
     height_position = spatial_position // width
     width_position = spatial_position % width
-    rope_position = tl.where(
-        pair_in_head < temporal_pairs,
-        temporal_position,
-        tl.where(pair_in_head < temporal_pairs + height_pairs, height_position, width_position),
-    )
     valid = global_token < valid_tokens
-    freq_base = rope_position * freq_stride_position + pair_in_head * freq_stride_pair
-    if USE_FP64:
-        cosine = tl.load(
-            freqs_ptr + freq_base,
-            mask=pair_mask & valid,
-            other=1.0,
-        ).to(tl.float64)
-        sine = tl.load(
-            freqs_ptr + freq_base + freq_stride_component,
-            mask=pair_mask & valid,
-            other=0.0,
-        ).to(tl.float64)
-        rotated_q_even = (q_even.to(tl.float64) * cosine - q_odd.to(tl.float64) * sine).to(q_even_input.dtype)
-        rotated_q_odd = (q_odd.to(tl.float64) * cosine + q_even.to(tl.float64) * sine).to(q_odd_input.dtype)
-        rotated_k_even = (k_even.to(tl.float64) * cosine - k_odd.to(tl.float64) * sine).to(k_even_input.dtype)
-        rotated_k_odd = (k_odd.to(tl.float64) * cosine + k_even.to(tl.float64) * sine).to(k_odd_input.dtype)
+
+    if SINGLE_PASS:
+        cols = tl.arange(0, BLOCK_N)
+        mask = cols < hidden_size
+        x_raw = tl.load(in_base + cols, mask=mask, other=0.0)
+        x_f = x_raw.to(tl.float32)
+        rstd = tl.rsqrt(tl.sum(x_f * x_f, axis=0) / hidden_size + eps)
+        w_f = tl.load(w_ptr + cols, mask=mask, other=0.0).to(tl.float32)
+        # WanRMSNorm rounds the normalized value to the projection dtype before
+        # multiplying by the learned weight.
+        normed = ((x_f * rstd).to(x_raw.dtype).to(tl.float32) * w_f).to(x_raw.dtype)
+        xe, xo = tl.split(tl.reshape(normed, (BLOCK_PAIRS, 2)))
+        p_idx = tl.arange(0, BLOCK_PAIRS)
+        even_col = p_idx * 2
+        odd_col = even_col + 1
+        rot_mask = (even_col >= store_feature_start) & (odd_col < store_feature_end)
+        if FAST_HEAD_FREQ:
+            HEADS_TILE: tl.constexpr = BLOCK_PAIRS // pairs_per_head
+            p_head = tl.arange(0, pairs_per_head)
+            rope_pos_h = tl.where(
+                p_head < temporal_pairs,
+                temporal_position,
+                tl.where(p_head < temporal_pairs + height_pairs, height_position, width_position),
+            )
+            fb_h = rope_pos_h * freq_stride_position + p_head * freq_stride_pair
+            if USE_FP64:
+                c_h = tl.load(freqs_ptr + fb_h, mask=valid, other=1.0).to(tl.float64)[None, :]
+                s_h = tl.load(freqs_ptr + fb_h + freq_stride_component, mask=valid, other=0.0).to(tl.float64)[None, :]
+            else:
+                c_h = tl.load(freqs_ptr + fb_h, mask=valid, other=1.0).to(tl.float32)[None, :]
+                s_h = tl.load(freqs_ptr + fb_h + freq_stride_component, mask=valid, other=0.0).to(tl.float32)[None, :]
+            xe2 = tl.reshape(xe, (HEADS_TILE, pairs_per_head))
+            xo2 = tl.reshape(xo, (HEADS_TILE, pairs_per_head))
+            rot2 = tl.reshape(rot_mask, (HEADS_TILE, pairs_per_head))
+            if USE_FP64:
+                re = (xe2.to(tl.float64) * c_h - xo2.to(tl.float64) * s_h).to(x_raw.dtype)
+                ro = (xo2.to(tl.float64) * c_h + xe2.to(tl.float64) * s_h).to(x_raw.dtype)
+            else:
+                re = (xe2.to(tl.float32) * c_h - xo2.to(tl.float32) * s_h).to(x_raw.dtype)
+                ro = (xo2.to(tl.float32) * c_h + xe2.to(tl.float32) * s_h).to(x_raw.dtype)
+            out_e = tl.where(rot2, re, xe2)
+            out_o = tl.where(rot2, ro, xo2)
+            out_vec = tl.reshape(tl.join(out_e, out_o), (BLOCK_N,))
+        else:
+            p_mask = odd_col < hidden_size
+            p_in = p_idx % pairs_per_head
+            rope_pos = tl.where(
+                p_in < temporal_pairs,
+                temporal_position,
+                tl.where(p_in < temporal_pairs + height_pairs, height_position, width_position),
+            )
+            fb = rope_pos * freq_stride_position + p_in * freq_stride_pair
+            if USE_FP64:
+                c = tl.load(freqs_ptr + fb, mask=p_mask & valid, other=1.0).to(tl.float64)
+                s = tl.load(freqs_ptr + fb + freq_stride_component, mask=p_mask & valid, other=0.0).to(tl.float64)
+                re = (xe.to(tl.float64) * c - xo.to(tl.float64) * s).to(x_raw.dtype)
+                ro = (xo.to(tl.float64) * c + xe.to(tl.float64) * s).to(x_raw.dtype)
+            else:
+                c = tl.load(freqs_ptr + fb, mask=p_mask & valid, other=1.0).to(tl.float32)
+                s = tl.load(freqs_ptr + fb + freq_stride_component, mask=p_mask & valid, other=0.0).to(tl.float32)
+                re = (xe.to(tl.float32) * c - xo.to(tl.float32) * s).to(x_raw.dtype)
+                ro = (xo.to(tl.float32) * c + xe.to(tl.float32) * s).to(x_raw.dtype)
+            out_vec = tl.reshape(tl.join(tl.where(rot_mask, re, xe), tl.where(rot_mask, ro, xo)), (BLOCK_N,))
+        tl.store(out_base + cols, out_vec, mask=mask)
     else:
-        cosine = tl.load(
-            freqs_ptr + freq_base,
-            mask=pair_mask & valid,
-            other=1.0,
-        ).to(tl.float32)
-        sine = tl.load(
-            freqs_ptr + freq_base + freq_stride_component,
-            mask=pair_mask & valid,
-            other=0.0,
-        ).to(tl.float32)
-        rotated_q_even = q_even.to(tl.float32) * cosine - q_odd.to(tl.float32) * sine
-        rotated_q_odd = q_odd.to(tl.float32) * cosine + q_even.to(tl.float32) * sine
-        rotated_k_even = k_even.to(tl.float32) * cosine - k_odd.to(tl.float32) * sine
-        rotated_k_odd = k_odd.to(tl.float32) * cosine + k_even.to(tl.float32) * sine
-    out_even_offsets = row.to(tl.int64) * hidden_size + even_col
-    out_odd_offsets = row.to(tl.int64) * hidden_size + odd_col
-    tl.store(q_out_ptr + out_even_offsets, tl.where(rotate_mask, rotated_q_even, q_even), mask=pair_mask)
-    tl.store(q_out_ptr + out_odd_offsets, tl.where(rotate_mask, rotated_q_odd, q_odd), mask=pair_mask)
-    tl.store(k_out_ptr + out_even_offsets, tl.where(rotate_mask, rotated_k_even, k_even), mask=pair_mask)
-    tl.store(k_out_ptr + out_odd_offsets, tl.where(rotate_mask, rotated_k_odd, k_odd), mask=pair_mask)
+        sq_acc = tl.zeros((), dtype=tl.float32)
+        for start in tl.static_range(0, hidden_size, BLOCK_N):
+            cols = start + tl.arange(0, BLOCK_N)
+            mask = cols < hidden_size
+            x_f = tl.load(in_base + cols, mask=mask, other=0.0).to(tl.float32)
+            sq_acc += tl.sum(x_f * x_f, axis=0)
+        rstd = tl.rsqrt(sq_acc / hidden_size + eps)
+
+        if FAST_HEAD_FREQ:
+            HEADS_TILE: tl.constexpr = BLOCK_PAIRS // pairs_per_head
+            p_head = tl.arange(0, pairs_per_head)
+            rope_pos_h = tl.where(
+                p_head < temporal_pairs,
+                temporal_position,
+                tl.where(p_head < temporal_pairs + height_pairs, height_position, width_position),
+            )
+            fb_h = rope_pos_h * freq_stride_position + p_head * freq_stride_pair
+            if USE_FP64:
+                c_h = tl.load(freqs_ptr + fb_h, mask=valid, other=1.0).to(tl.float64)[None, :]
+                s_h = tl.load(freqs_ptr + fb_h + freq_stride_component, mask=valid, other=0.0).to(tl.float64)[None, :]
+            else:
+                c_h = tl.load(freqs_ptr + fb_h, mask=valid, other=1.0).to(tl.float32)[None, :]
+                s_h = tl.load(freqs_ptr + fb_h + freq_stride_component, mask=valid, other=0.0).to(tl.float32)[None, :]
+            for start in tl.static_range(0, hidden_size, BLOCK_N):
+                cols = start + tl.arange(0, BLOCK_N)
+                mask = cols < hidden_size
+                x_raw = tl.load(in_base + cols, mask=mask, other=0.0)
+                w_f = tl.load(w_ptr + cols, mask=mask, other=0.0).to(tl.float32)
+                normed = ((x_raw.to(tl.float32) * rstd).to(x_raw.dtype).to(tl.float32) * w_f).to(x_raw.dtype)
+                xe, xo = tl.split(tl.reshape(normed, (BLOCK_PAIRS, 2)))
+                p_idx = (start // 2) + tl.arange(0, BLOCK_PAIRS)
+                even_col = p_idx * 2
+                odd_col = even_col + 1
+                rot_mask = (even_col >= store_feature_start) & (odd_col < store_feature_end)
+                xe2 = tl.reshape(xe, (HEADS_TILE, pairs_per_head))
+                xo2 = tl.reshape(xo, (HEADS_TILE, pairs_per_head))
+                rot2 = tl.reshape(rot_mask, (HEADS_TILE, pairs_per_head))
+                if USE_FP64:
+                    re = (xe2.to(tl.float64) * c_h - xo2.to(tl.float64) * s_h).to(x_raw.dtype)
+                    ro = (xo2.to(tl.float64) * c_h + xe2.to(tl.float64) * s_h).to(x_raw.dtype)
+                else:
+                    re = (xe2.to(tl.float32) * c_h - xo2.to(tl.float32) * s_h).to(x_raw.dtype)
+                    ro = (xo2.to(tl.float32) * c_h + xe2.to(tl.float32) * s_h).to(x_raw.dtype)
+                out_vec = tl.reshape(tl.join(tl.where(rot2, re, xe2), tl.where(rot2, ro, xo2)), (BLOCK_N,))
+                tl.store(out_base + cols, out_vec, mask=mask)
+        else:
+            for start in tl.static_range(0, hidden_size, BLOCK_N):
+                cols = start + tl.arange(0, BLOCK_N)
+                mask = cols < hidden_size
+                x_raw = tl.load(in_base + cols, mask=mask, other=0.0)
+                w_f = tl.load(w_ptr + cols, mask=mask, other=0.0).to(tl.float32)
+                normed = ((x_raw.to(tl.float32) * rstd).to(x_raw.dtype).to(tl.float32) * w_f).to(x_raw.dtype)
+                xe, xo = tl.split(tl.reshape(normed, (BLOCK_PAIRS, 2)))
+                p_idx = (start // 2) + tl.arange(0, BLOCK_PAIRS)
+                even_col = p_idx * 2
+                odd_col = even_col + 1
+                rot_mask = (even_col >= store_feature_start) & (odd_col < store_feature_end)
+                p_mask = odd_col < hidden_size
+                p_in = p_idx % pairs_per_head
+                rope_pos = tl.where(
+                    p_in < temporal_pairs,
+                    temporal_position,
+                    tl.where(p_in < temporal_pairs + height_pairs, height_position, width_position),
+                )
+                fb = rope_pos * freq_stride_position + p_in * freq_stride_pair
+                if USE_FP64:
+                    c = tl.load(freqs_ptr + fb, mask=p_mask & valid, other=1.0).to(tl.float64)
+                    s = tl.load(freqs_ptr + fb + freq_stride_component, mask=p_mask & valid, other=0.0).to(tl.float64)
+                    re = (xe.to(tl.float64) * c - xo.to(tl.float64) * s).to(x_raw.dtype)
+                    ro = (xo.to(tl.float64) * c + xe.to(tl.float64) * s).to(x_raw.dtype)
+                else:
+                    c = tl.load(freqs_ptr + fb, mask=p_mask & valid, other=1.0).to(tl.float32)
+                    s = tl.load(freqs_ptr + fb + freq_stride_component, mask=p_mask & valid, other=0.0).to(tl.float32)
+                    re = (xe.to(tl.float32) * c - xo.to(tl.float32) * s).to(x_raw.dtype)
+                    ro = (xo.to(tl.float32) * c + xe.to(tl.float32) * s).to(x_raw.dtype)
+                out_vec = tl.reshape(tl.join(tl.where(rot_mask, re, xe), tl.where(rot_mask, ro, xo)), (BLOCK_N,))
+                tl.store(out_base + cols, out_vec, mask=mask)
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -737,6 +814,22 @@ def _num_warps(block: int) -> int:
     """Use 8 warps once the feature tile exceeds 256 so wide AdaLN rows stay occupied."""
 
     if block <= 256:
+        return 4
+    return 8
+
+
+def _norm_num_warps(features: int, block: int) -> int:
+    """Hopper-calibrated warp count for row-wise norm+AdaLN kernels.
+
+    Avoids excess cross-warp reduction sync on medium/padded widths (1536, 2048,
+    3072, 5120) while keeping 8 warps for exact 4096-wide rows.
+    """
+
+    if block <= 256:
+        return 4
+    if features <= 1536:
+        return 2
+    if features <= 3072 or features > 4096:
         return 4
     return 8
 
@@ -994,7 +1087,7 @@ def rms_norm_scale_shift(
         has_weight=weight is not None,
         round_modulation=modulation_dtype in {torch.float16, torch.bfloat16},
         block=block,
-        num_warps=_num_warps(block),
+        num_warps=_norm_num_warps(features, block),
     )
     return output
 
@@ -1008,13 +1101,16 @@ def qk_rmsnorm_rope(
     eps: float,
     rope_fp32: bool,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    """Launch per-head RMSNorm+RoPE; *q* and *k* must already be ``[B, S, H, D]``."""
+    """Launch head-tiled per-head RMSNorm+RoPE; *q* and *k* must already be ``[B, S, H, D]``."""
 
     batch, sequence, heads, head_dim = q.shape
-    block = triton.next_power_of_2(head_dim)
+    half_dim = head_dim // 2
+    block_half = triton.next_power_of_2(half_dim)
+    max_block_h = 4 if head_dim >= 256 else 8
+    block_h = min(triton.next_power_of_2(heads), max_block_h)
     q_output = torch.empty_like(q)
     k_output = torch.empty_like(k)
-    _qk_rmsnorm_rope_kernel[(batch * sequence * heads,)](
+    _qk_rmsnorm_rope_kernel[(batch * sequence, 2)](
         q,
         k,
         q_output,
@@ -1029,12 +1125,13 @@ def qk_rmsnorm_rope(
         freqs.stride(0),
         freqs.stride(3),
         sequence,
-        heads,
-        float(eps),
+        heads=heads,
+        eps=float(eps),
         rope_fp32=bool(rope_fp32),
-        head_dim=head_dim,
-        block=block,
-        num_warps=_num_warps(block),
+        half_dim=half_dim,
+        block_half=block_half,
+        block_h=block_h,
+        num_warps=4,
     )
     return q_output, k_output
 
@@ -1065,11 +1162,14 @@ def hidden_qk_rmsnorm_rope_3d(
     height_pairs = complex_dim // 3
     real_freqs = torch.view_as_real(freqs) if freqs.is_complex() else freqs
     use_fp64 = real_freqs.dtype == torch.float64
-    block_pairs = triton.next_power_of_2(hidden_size // 2)
+    single_pass = hidden_size <= 2048
+    block_n = max(2, triton.next_power_of_2(hidden_size)) if single_pass else 2048
+    block_pairs = block_n // 2
+    fast_head_freq = complex_dim > 0 and (complex_dim & (complex_dim - 1)) == 0 and block_pairs >= complex_dim
     q_output = torch.empty(q.shape, device=q.device, dtype=q.dtype)
     k_output = torch.empty(k.shape, device=k.device, dtype=k.dtype)
-    warps = 16 if block_pairs >= 4096 else _num_warps(block_pairs * 2)
-    _hidden_qk_rmsnorm_rope_3d_kernel[(q.shape[0] * q.shape[1],)](
+    warps = 2 if (use_fp64 or block_n <= 2048) else 4
+    _hidden_qk_rmsnorm_rope_3d_kernel[(q.shape[0] * q.shape[1], 2)](
         q,
         k,
         q_output,
@@ -1084,6 +1184,7 @@ def hidden_qk_rmsnorm_rope_3d(
         k.stride(1),
         hidden_size=hidden_size,
         head_dim=head_dim,
+        pairs_per_head=complex_dim,
         valid_tokens=int(valid_tokens),
         sequence_offset=int(sequence_offset),
         start_frame=int(start_frame),
@@ -1097,7 +1198,9 @@ def hidden_qk_rmsnorm_rope_3d(
         freq_stride_position=real_freqs.stride(0),
         freq_stride_pair=real_freqs.stride(1),
         freq_stride_component=real_freqs.stride(2),
-        block_pairs=block_pairs,
+        BLOCK_N=block_n,
+        FAST_HEAD_FREQ=fast_head_freq,
+        SINGLE_PASS=single_pass,
         USE_FP64=use_fp64,
         num_warps=warps,
     )
@@ -1122,40 +1225,102 @@ def _real_rope_bshd_kernel(
     sin_stride_s,
     HEAD_DIM: tl.constexpr,
     PAIRS: tl.constexpr,
-    BLOCK_PAIRS: tl.constexpr,
+    BLOCK_D: tl.constexpr,
+    BLOCK_H: tl.constexpr,
     USE_FP64: tl.constexpr,
 ):
-    """Single-pass real-valued RoPE on ``[B, S, H, D]`` keeping FP64/FP32 math in registers."""
+    """Head-tiled real-valued RoPE on ``[B, S, H, D]`` with 128-bit contiguous loads/stores."""
     token_row = tl.program_id(0).to(tl.int64)
-    head_idx = tl.program_id(1).to(tl.int64)
+    head_block = tl.program_id(1).to(tl.int64)
     batch_idx = token_row // seq_len
     seq_idx = token_row % seq_len
 
-    pair_offsets = tl.arange(0, BLOCK_PAIRS)
-    mask = pair_offsets < PAIRS
-    even_col = pair_offsets * 2
-    odd_col = even_col + 1
+    hs = head_block * BLOCK_H + tl.arange(0, BLOCK_H)
+    h_mask = hs < num_heads
+    cols = tl.arange(0, BLOCK_D)
+    d_mask = cols < HEAD_DIM
+    mask = h_mask[:, None] & d_mask[None, :]
+    BLOCK_PAIRS: tl.constexpr = BLOCK_D // 2
+    p_offs = tl.arange(0, BLOCK_PAIRS)
+    p_mask = p_offs < PAIRS
 
-    x_base = batch_idx * x_stride_b + seq_idx * x_stride_s + head_idx * x_stride_h
-    out_base = batch_idx * out_stride_b + seq_idx * out_stride_s + head_idx * out_stride_h
-
-    x_even_raw = tl.load(x_ptr + x_base + even_col, mask=mask, other=0.0)
-    x_odd_raw = tl.load(x_ptr + x_base + odd_col, mask=mask, other=0.0)
+    x_base = x_ptr + batch_idx * x_stride_b + seq_idx * x_stride_s + hs[:, None] * x_stride_h
+    out_base = out_ptr + batch_idx * out_stride_b + seq_idx * out_stride_s + hs[:, None] * out_stride_h
+    x_raw = tl.load(x_base + cols[None, :], mask=mask, other=0.0)
+    x_even_raw, x_odd_raw = tl.split(tl.reshape(x_raw, (BLOCK_H, BLOCK_PAIRS, 2)))
     if USE_FP64:
         x_even = x_even_raw.to(tl.float64)
         x_odd = x_odd_raw.to(tl.float64)
-        c = tl.load(cos_ptr + seq_idx * cos_stride_s + pair_offsets, mask=mask, other=1.0).to(tl.float64)
-        s = tl.load(sin_ptr + seq_idx * sin_stride_s + pair_offsets, mask=mask, other=0.0).to(tl.float64)
+        c = tl.load(cos_ptr + seq_idx * cos_stride_s + p_offs, mask=p_mask, other=1.0).to(tl.float64)[None, :]
+        s = tl.load(sin_ptr + seq_idx * sin_stride_s + p_offs, mask=p_mask, other=0.0).to(tl.float64)[None, :]
     else:
         x_even = x_even_raw.to(tl.float32)
         x_odd = x_odd_raw.to(tl.float32)
-        c = tl.load(cos_ptr + seq_idx * cos_stride_s + pair_offsets, mask=mask, other=1.0).to(tl.float32)
-        s = tl.load(sin_ptr + seq_idx * sin_stride_s + pair_offsets, mask=mask, other=0.0).to(tl.float32)
+        c = tl.load(cos_ptr + seq_idx * cos_stride_s + p_offs, mask=p_mask, other=1.0).to(tl.float32)[None, :]
+        s = tl.load(sin_ptr + seq_idx * sin_stride_s + p_offs, mask=p_mask, other=0.0).to(tl.float32)[None, :]
 
-    rot_even = (x_even * c - x_odd * s).to(x_even_raw.dtype)
-    rot_odd = (x_even * s + x_odd * c).to(x_odd_raw.dtype)
-    tl.store(out_ptr + out_base + even_col, rot_even, mask=mask)
-    tl.store(out_ptr + out_base + odd_col, rot_odd, mask=mask)
+    rot_even = (x_even * c - x_odd * s).to(x_raw.dtype)
+    rot_odd = (x_even * s + x_odd * c).to(x_raw.dtype)
+    tl.store(out_base + cols[None, :], tl.reshape(tl.join(rot_even, rot_odd), (BLOCK_H, BLOCK_D)), mask=mask)
+
+
+@triton.jit
+def _real_rope_bshd_1cta_kernel(
+    x_ptr,
+    cos_ptr,
+    sin_ptr,
+    out_ptr,
+    seq_len,
+    NUM_HEADS: tl.constexpr,
+    x_stride_b,
+    x_stride_s,
+    x_stride_h,
+    out_stride_b,
+    out_stride_s,
+    out_stride_h,
+    cos_stride_s,
+    sin_stride_s,
+    HEAD_DIM: tl.constexpr,
+    PAIRS: tl.constexpr,
+    BLOCK_D: tl.constexpr,
+    BLOCK_H: tl.constexpr,
+    USE_FP64: tl.constexpr,
+):
+    """Single-CTA-per-token real RoPE amortizing FP64/FP32 cos/sin across all heads."""
+    token_row = tl.program_id(0).to(tl.int64)
+    batch_idx = token_row // seq_len
+    seq_idx = token_row % seq_len
+
+    cols = tl.arange(0, BLOCK_D)
+    d_mask = cols < HEAD_DIM
+    BLOCK_PAIRS: tl.constexpr = BLOCK_D // 2
+    p_offs = tl.arange(0, BLOCK_PAIRS)
+    p_mask = p_offs < PAIRS
+    if USE_FP64:
+        c = tl.load(cos_ptr + seq_idx * cos_stride_s + p_offs, mask=p_mask, other=1.0).to(tl.float64)[None, :]
+        s = tl.load(sin_ptr + seq_idx * sin_stride_s + p_offs, mask=p_mask, other=0.0).to(tl.float64)[None, :]
+    else:
+        c = tl.load(cos_ptr + seq_idx * cos_stride_s + p_offs, mask=p_mask, other=1.0).to(tl.float32)[None, :]
+        s = tl.load(sin_ptr + seq_idx * sin_stride_s + p_offs, mask=p_mask, other=0.0).to(tl.float32)[None, :]
+
+    x_tok = x_ptr + batch_idx * x_stride_b + seq_idx * x_stride_s
+    out_tok = out_ptr + batch_idx * out_stride_b + seq_idx * out_stride_s
+    for h_start in tl.static_range(0, NUM_HEADS, BLOCK_H):
+        hs = h_start + tl.arange(0, BLOCK_H)
+        mask = (hs < NUM_HEADS)[:, None] & d_mask[None, :]
+        x_raw = tl.load(x_tok + hs[:, None] * x_stride_h + cols[None, :], mask=mask, other=0.0)
+        x_even_raw, x_odd_raw = tl.split(tl.reshape(x_raw, (BLOCK_H, BLOCK_PAIRS, 2)))
+        if USE_FP64:
+            rot_even = (x_even_raw.to(tl.float64) * c - x_odd_raw.to(tl.float64) * s).to(x_raw.dtype)
+            rot_odd = (x_even_raw.to(tl.float64) * s + x_odd_raw.to(tl.float64) * c).to(x_raw.dtype)
+        else:
+            rot_even = (x_even_raw.to(tl.float32) * c - x_odd_raw.to(tl.float32) * s).to(x_raw.dtype)
+            rot_odd = (x_even_raw.to(tl.float32) * s + x_odd_raw.to(tl.float32) * c).to(x_raw.dtype)
+        tl.store(
+            out_tok + hs[:, None] * out_stride_h + cols[None, :],
+            tl.reshape(tl.join(rot_even, rot_odd), (BLOCK_H, BLOCK_D)),
+            mask=mask,
+        )
 
 
 def apply_real_rope_bshd(
@@ -1166,32 +1331,64 @@ def apply_real_rope_bshd(
     """Apply real-valued ``(cos, sin)`` RoPE in one Triton pass with register-resident FP64/FP32."""
     b, s, h, d = x.shape
     pairs = d // 2
-    block_pairs = triton.next_power_of_2(pairs)
+    block_d = max(2, triton.next_power_of_2(d))
     cos_2d = cos.reshape(s, pairs).contiguous()
     sin_2d = sin.reshape(s, pairs).contiguous()
     out = torch.empty((b, s, h, d), device=x.device, dtype=x.dtype)
     use_fp64 = cos.dtype == torch.float64
-    _real_rope_bshd_kernel[(b * s, h)](
-        x,
-        cos_2d,
-        sin_2d,
-        out,
-        s,
-        h,
-        x.stride(0),
-        x.stride(1),
-        x.stride(2),
-        out.stride(0),
-        out.stride(1),
-        out.stride(2),
-        cos_2d.stride(0),
-        sin_2d.stride(0),
-        HEAD_DIM=d,
-        PAIRS=pairs,
-        BLOCK_PAIRS=block_pairs,
-        USE_FP64=use_fp64,
-        num_warps=2 if block_pairs <= 64 else 4,
-    )
+    total_tokens = b * s
+    if total_tokens >= 512:
+        if d <= 128 and h <= 32 and (h & (h - 1)) == 0:
+            block_h = max(1, h)
+        else:
+            block_h = 16 if d <= 128 else 8
+            block_h = min(block_h, triton.next_power_of_2(h))
+        _real_rope_bshd_1cta_kernel[(total_tokens,)](
+            x,
+            cos_2d,
+            sin_2d,
+            out,
+            s,
+            NUM_HEADS=h,
+            x_stride_b=x.stride(0),
+            x_stride_s=x.stride(1),
+            x_stride_h=x.stride(2),
+            out_stride_b=out.stride(0),
+            out_stride_s=out.stride(1),
+            out_stride_h=out.stride(2),
+            cos_stride_s=cos_2d.stride(0),
+            sin_stride_s=sin_2d.stride(0),
+            HEAD_DIM=d,
+            PAIRS=pairs,
+            BLOCK_D=block_d,
+            BLOCK_H=block_h,
+            USE_FP64=use_fp64,
+            num_warps=4,
+        )
+    else:
+        block_h = min(8 if d <= 128 else 4, triton.next_power_of_2(h))
+        _real_rope_bshd_kernel[(total_tokens, triton.cdiv(h, block_h))](
+            x,
+            cos_2d,
+            sin_2d,
+            out,
+            s,
+            h,
+            x.stride(0),
+            x.stride(1),
+            x.stride(2),
+            out.stride(0),
+            out.stride(1),
+            out.stride(2),
+            cos_2d.stride(0),
+            sin_2d.stride(0),
+            HEAD_DIM=d,
+            PAIRS=pairs,
+            BLOCK_D=block_d,
+            BLOCK_H=block_h,
+            USE_FP64=use_fp64,
+            num_warps=4,
+        )
     return out
 
 
@@ -1236,7 +1433,7 @@ def fused_layer_norm_scale_shift(
         round_product_bf16=product_dtype == torch.bfloat16,
         round_product_fp16=product_dtype == torch.float16,
         block=block,
-        num_warps=_num_warps(block),
+        num_warps=_norm_num_warps(features, block),
         enable_fp_fusion=False,
     )
     return output
@@ -1516,78 +1713,145 @@ def _hidden_qk_rmsnorm_rope_freqs_kernel(
     k_seq_stride,
     hidden_size: tl.constexpr,
     head_dim: tl.constexpr,
+    pairs_per_head: tl.constexpr,
     eps,
     freq_stride_pos,
     freq_stride_pair,
     freq_stride_comp,
-    block_pairs: tl.constexpr,
+    BLOCK_N: tl.constexpr,
+    FAST_HEAD_FREQ: tl.constexpr,
+    SINGLE_PASS: tl.constexpr,
     USE_FP64: tl.constexpr = True,
 ):
-    """Fuse full-hidden Q/K RMSNorm with pre-indexed per-token interleaved RoPE in one pass."""
+    """Split-Q/K register-safe full-hidden RMSNorm + pre-indexed interleaved RoPE.
+
+    Splits Q (pid(1) == 0) and K (pid(1) == 1) into independent CTAs, uses
+    128-bit contiguous loads/stores with in-register ``reshape``/``split``/``join``
+    de-interleaving, tiles columns at ``BLOCK_N`` for wide hidden dims (zero spills),
+    and broadcasts per-head ``(cos, sin)`` loaded once per CTA.
+    """
 
     row = tl.program_id(0).to(tl.int64)
+    is_k = tl.program_id(1)
     batch_idx = row // sequence
     local_token = row % sequence
 
-    pair_index = tl.arange(0, block_pairs)
-    even_col = pair_index * 2
-    odd_col = even_col + 1
-    pair_mask = odd_col < hidden_size
-
-    q_row_base = batch_idx * q_batch_stride + local_token * q_seq_stride
-    k_row_base = batch_idx * k_batch_stride + local_token * k_seq_stride
-    q_even_input = tl.load(q_ptr + q_row_base + even_col, mask=pair_mask, other=0.0)
-    q_odd_input = tl.load(q_ptr + q_row_base + odd_col, mask=pair_mask, other=0.0)
-    k_even_input = tl.load(k_ptr + k_row_base + even_col, mask=pair_mask, other=0.0)
-    k_odd_input = tl.load(k_ptr + k_row_base + odd_col, mask=pair_mask, other=0.0)
-
-    q_even_f = q_even_input.to(tl.float32)
-    q_odd_f = q_odd_input.to(tl.float32)
-    k_even_f = k_even_input.to(tl.float32)
-    k_odd_f = k_odd_input.to(tl.float32)
-    q_sq_sum = tl.sum(q_even_f * q_even_f + q_odd_f * q_odd_f, axis=0)
-    k_sq_sum = tl.sum(k_even_f * k_even_f + k_odd_f * k_odd_f, axis=0)
-    q_rstd = tl.rsqrt(q_sq_sum / hidden_size + eps)
-    k_rstd = tl.rsqrt(k_sq_sum / hidden_size + eps)
-
-    q_weight_even = tl.load(q_weight_ptr + even_col, mask=pair_mask, other=0.0).to(tl.float32)
-    q_weight_odd = tl.load(q_weight_ptr + odd_col, mask=pair_mask, other=0.0).to(tl.float32)
-    k_weight_even = tl.load(k_weight_ptr + even_col, mask=pair_mask, other=0.0).to(tl.float32)
-    k_weight_odd = tl.load(k_weight_ptr + odd_col, mask=pair_mask, other=0.0).to(tl.float32)
-
-    q_even = (q_even_f * q_rstd).to(q_even_input.dtype)
-    q_odd = (q_odd_f * q_rstd).to(q_odd_input.dtype)
-    k_even = (k_even_f * k_rstd).to(k_even_input.dtype)
-    k_odd = (k_odd_f * k_rstd).to(k_odd_input.dtype)
-    q_even = (q_even.to(tl.float32) * q_weight_even).to(q_even_input.dtype)
-    q_odd = (q_odd.to(tl.float32) * q_weight_odd).to(q_odd_input.dtype)
-    k_even = (k_even.to(tl.float32) * k_weight_even).to(k_even_input.dtype)
-    k_odd = (k_odd.to(tl.float32) * k_weight_odd).to(k_odd_input.dtype)
-
-    pairs_per_head = head_dim // 2
-    pair_in_head = pair_index % pairs_per_head
-    freq_base = local_token * freq_stride_pos + pair_in_head * freq_stride_pair
-    if USE_FP64:
-        cosine = tl.load(freqs_ptr + freq_base, mask=pair_mask, other=1.0).to(tl.float64)
-        sine = tl.load(freqs_ptr + freq_base + freq_stride_comp, mask=pair_mask, other=0.0).to(tl.float64)
-        rotated_q_even = (q_even.to(tl.float64) * cosine - q_odd.to(tl.float64) * sine).to(q_even_input.dtype)
-        rotated_q_odd = (q_odd.to(tl.float64) * cosine + q_even.to(tl.float64) * sine).to(q_odd_input.dtype)
-        rotated_k_even = (k_even.to(tl.float64) * cosine - k_odd.to(tl.float64) * sine).to(k_even_input.dtype)
-        rotated_k_odd = (k_odd.to(tl.float64) * cosine + k_even.to(tl.float64) * sine).to(k_odd_input.dtype)
+    if is_k == 0:
+        in_base = q_ptr + batch_idx * q_batch_stride + local_token * q_seq_stride
+        out_base = q_out_ptr + row * hidden_size
+        w_ptr = q_weight_ptr
     else:
-        cosine = tl.load(freqs_ptr + freq_base, mask=pair_mask, other=1.0).to(tl.float32)
-        sine = tl.load(freqs_ptr + freq_base + freq_stride_comp, mask=pair_mask, other=0.0).to(tl.float32)
-        rotated_q_even = (q_even.to(tl.float32) * cosine - q_odd.to(tl.float32) * sine).to(q_even_input.dtype)
-        rotated_q_odd = (q_odd.to(tl.float32) * cosine + q_even.to(tl.float32) * sine).to(q_odd_input.dtype)
-        rotated_k_even = (k_even.to(tl.float32) * cosine - k_odd.to(tl.float32) * sine).to(k_even_input.dtype)
-        rotated_k_odd = (k_odd.to(tl.float32) * cosine + k_even.to(tl.float32) * sine).to(k_odd_input.dtype)
+        in_base = k_ptr + batch_idx * k_batch_stride + local_token * k_seq_stride
+        out_base = k_out_ptr + row * hidden_size
+        w_ptr = k_weight_ptr
 
-    out_even_offsets = row * hidden_size + even_col
-    out_odd_offsets = row * hidden_size + odd_col
-    tl.store(q_out_ptr + out_even_offsets, rotated_q_even, mask=pair_mask)
-    tl.store(q_out_ptr + out_odd_offsets, rotated_q_odd, mask=pair_mask)
-    tl.store(k_out_ptr + out_even_offsets, rotated_k_even, mask=pair_mask)
-    tl.store(k_out_ptr + out_odd_offsets, rotated_k_odd, mask=pair_mask)
+    BLOCK_PAIRS: tl.constexpr = BLOCK_N // 2
+
+    if SINGLE_PASS:
+        cols = tl.arange(0, BLOCK_N)
+        mask = cols < hidden_size
+        x_raw = tl.load(in_base + cols, mask=mask, other=0.0)
+        x_f = x_raw.to(tl.float32)
+        rstd = tl.rsqrt(tl.sum(x_f * x_f, axis=0) / hidden_size + eps)
+        w_f = tl.load(w_ptr + cols, mask=mask, other=0.0).to(tl.float32)
+        normed = ((x_f * rstd).to(x_raw.dtype).to(tl.float32) * w_f).to(x_raw.dtype)
+        xe, xo = tl.split(tl.reshape(normed, (BLOCK_PAIRS, 2)))
+        if FAST_HEAD_FREQ:
+            HEADS_TILE: tl.constexpr = BLOCK_PAIRS // pairs_per_head
+            f_idx = tl.arange(0, pairs_per_head * 2)
+            f_raw = tl.load(freqs_ptr + local_token * freq_stride_pos + f_idx)
+            c_raw, s_raw = tl.split(tl.reshape(f_raw, (pairs_per_head, 2)))
+            xe2 = tl.reshape(xe, (HEADS_TILE, pairs_per_head))
+            xo2 = tl.reshape(xo, (HEADS_TILE, pairs_per_head))
+            if USE_FP64:
+                c_b = c_raw.to(tl.float64)[None, :]
+                s_b = s_raw.to(tl.float64)[None, :]
+                re = (xe2.to(tl.float64) * c_b - xo2.to(tl.float64) * s_b).to(x_raw.dtype)
+                ro = (xo2.to(tl.float64) * c_b + xe2.to(tl.float64) * s_b).to(x_raw.dtype)
+            else:
+                c_b = c_raw.to(tl.float32)[None, :]
+                s_b = s_raw.to(tl.float32)[None, :]
+                re = (xe2.to(tl.float32) * c_b - xo2.to(tl.float32) * s_b).to(x_raw.dtype)
+                ro = (xo2.to(tl.float32) * c_b + xe2.to(tl.float32) * s_b).to(x_raw.dtype)
+            out_vec = tl.reshape(tl.join(re, ro), (BLOCK_N,))
+        else:
+            p_idx = tl.arange(0, BLOCK_PAIRS)
+            p_mask = p_idx < (hidden_size // 2)
+            p_in = p_idx % pairs_per_head
+            fb = local_token * freq_stride_pos + p_in * freq_stride_pair
+            if USE_FP64:
+                c = tl.load(freqs_ptr + fb, mask=p_mask, other=1.0).to(tl.float64)
+                s = tl.load(freqs_ptr + fb + freq_stride_comp, mask=p_mask, other=0.0).to(tl.float64)
+                re = (xe.to(tl.float64) * c - xo.to(tl.float64) * s).to(x_raw.dtype)
+                ro = (xo.to(tl.float64) * c + xe.to(tl.float64) * s).to(x_raw.dtype)
+            else:
+                c = tl.load(freqs_ptr + fb, mask=p_mask, other=1.0).to(tl.float32)
+                s = tl.load(freqs_ptr + fb + freq_stride_comp, mask=p_mask, other=0.0).to(tl.float32)
+                re = (xe.to(tl.float32) * c - xo.to(tl.float32) * s).to(x_raw.dtype)
+                ro = (xo.to(tl.float32) * c + xe.to(tl.float32) * s).to(x_raw.dtype)
+            out_vec = tl.reshape(tl.join(re, ro), (BLOCK_N,))
+        tl.store(out_base + cols, out_vec, mask=mask)
+    else:
+        sq_acc = tl.zeros((), dtype=tl.float32)
+        for start in tl.static_range(0, hidden_size, BLOCK_N):
+            cols = start + tl.arange(0, BLOCK_N)
+            mask = cols < hidden_size
+            x_f = tl.load(in_base + cols, mask=mask, other=0.0).to(tl.float32)
+            sq_acc += tl.sum(x_f * x_f, axis=0)
+        rstd = tl.rsqrt(sq_acc / hidden_size + eps)
+
+        if FAST_HEAD_FREQ:
+            HEADS_TILE: tl.constexpr = BLOCK_PAIRS // pairs_per_head
+            f_idx = tl.arange(0, pairs_per_head * 2)
+            f_raw = tl.load(freqs_ptr + local_token * freq_stride_pos + f_idx)
+            c_raw, s_raw = tl.split(tl.reshape(f_raw, (pairs_per_head, 2)))
+            if USE_FP64:
+                c_b = c_raw.to(tl.float64)[None, :]
+                s_b = s_raw.to(tl.float64)[None, :]
+            else:
+                c_b = c_raw.to(tl.float32)[None, :]
+                s_b = s_raw.to(tl.float32)[None, :]
+            for start in tl.static_range(0, hidden_size, BLOCK_N):
+                cols = start + tl.arange(0, BLOCK_N)
+                mask = cols < hidden_size
+                x_raw = tl.load(in_base + cols, mask=mask, other=0.0)
+                w_f = tl.load(w_ptr + cols, mask=mask, other=0.0).to(tl.float32)
+                normed = ((x_raw.to(tl.float32) * rstd).to(x_raw.dtype).to(tl.float32) * w_f).to(x_raw.dtype)
+                xe, xo = tl.split(tl.reshape(normed, (BLOCK_PAIRS, 2)))
+                xe2 = tl.reshape(xe, (HEADS_TILE, pairs_per_head))
+                xo2 = tl.reshape(xo, (HEADS_TILE, pairs_per_head))
+                if USE_FP64:
+                    re = (xe2.to(tl.float64) * c_b - xo2.to(tl.float64) * s_b).to(x_raw.dtype)
+                    ro = (xo2.to(tl.float64) * c_b + xe2.to(tl.float64) * s_b).to(x_raw.dtype)
+                else:
+                    re = (xe2.to(tl.float32) * c_b - xo2.to(tl.float32) * s_b).to(x_raw.dtype)
+                    ro = (xo2.to(tl.float32) * c_b + xe2.to(tl.float32) * s_b).to(x_raw.dtype)
+                out_vec = tl.reshape(tl.join(re, ro), (BLOCK_N,))
+                tl.store(out_base + cols, out_vec, mask=mask)
+        else:
+            for start in tl.static_range(0, hidden_size, BLOCK_N):
+                cols = start + tl.arange(0, BLOCK_N)
+                mask = cols < hidden_size
+                x_raw = tl.load(in_base + cols, mask=mask, other=0.0)
+                w_f = tl.load(w_ptr + cols, mask=mask, other=0.0).to(tl.float32)
+                normed = ((x_raw.to(tl.float32) * rstd).to(x_raw.dtype).to(tl.float32) * w_f).to(x_raw.dtype)
+                xe, xo = tl.split(tl.reshape(normed, (BLOCK_PAIRS, 2)))
+                p_idx = (start // 2) + tl.arange(0, BLOCK_PAIRS)
+                p_mask = p_idx < (hidden_size // 2)
+                p_in = p_idx % pairs_per_head
+                fb = local_token * freq_stride_pos + p_in * freq_stride_pair
+                if USE_FP64:
+                    c = tl.load(freqs_ptr + fb, mask=p_mask, other=1.0).to(tl.float64)
+                    s = tl.load(freqs_ptr + fb + freq_stride_comp, mask=p_mask, other=0.0).to(tl.float64)
+                    re = (xe.to(tl.float64) * c - xo.to(tl.float64) * s).to(x_raw.dtype)
+                    ro = (xo.to(tl.float64) * c + xe.to(tl.float64) * s).to(x_raw.dtype)
+                else:
+                    c = tl.load(freqs_ptr + fb, mask=p_mask, other=1.0).to(tl.float32)
+                    s = tl.load(freqs_ptr + fb + freq_stride_comp, mask=p_mask, other=0.0).to(tl.float32)
+                    re = (xe.to(tl.float32) * c - xo.to(tl.float32) * s).to(x_raw.dtype)
+                    ro = (xo.to(tl.float32) * c + xe.to(tl.float32) * s).to(x_raw.dtype)
+                out_vec = tl.reshape(tl.join(re, ro), (BLOCK_N,))
+                tl.store(out_base + cols, out_vec, mask=mask)
 
 
 def hidden_qk_rmsnorm_rope_freqs(
@@ -1605,6 +1869,7 @@ def hidden_qk_rmsnorm_rope_freqs(
 
     hidden_size = int(q.shape[-1])
     head_dim = hidden_size // int(num_heads)
+    pairs_per_head = head_dim // 2
     if freqs.is_complex():
         freqs_2d = freqs.squeeze(1) if freqs.ndim == 3 and freqs.shape[1] == 1 else freqs
         real_freqs = torch.view_as_real(freqs_2d)
@@ -1617,11 +1882,20 @@ def hidden_qk_rmsnorm_rope_freqs(
         if normalized_precision not in {"fp32", "fp64"}:
             raise ValueError(f"unsupported RoPE precision: {precision!r}")
         use_fp64 = normalized_precision == "fp64"
-    block_pairs = triton.next_power_of_2(hidden_size // 2)
+    single_pass = hidden_size <= 2048
+    block_n = max(2, triton.next_power_of_2(hidden_size)) if single_pass else 2048
+    block_pairs = block_n // 2
+    fast_head_freq = (
+        pairs_per_head > 0
+        and (pairs_per_head & (pairs_per_head - 1)) == 0
+        and block_pairs >= pairs_per_head
+        and real_freqs.stride(2) == 1
+        and real_freqs.stride(1) == 2
+    )
     q_output = torch.empty(q.shape, device=q.device, dtype=q.dtype)
     k_output = torch.empty(k.shape, device=k.device, dtype=k.dtype)
-    warps = 16 if block_pairs >= 4096 else _num_warps(block_pairs * 2)
-    _hidden_qk_rmsnorm_rope_freqs_kernel[(q.shape[0] * q.shape[1],)](
+    warps = 2 if use_fp64 else (2 if hidden_size <= 3072 else 4)
+    _hidden_qk_rmsnorm_rope_freqs_kernel[(q.shape[0] * q.shape[1], 2)](
         q,
         k,
         q_output,
@@ -1636,11 +1910,14 @@ def hidden_qk_rmsnorm_rope_freqs(
         k.stride(1),
         hidden_size=hidden_size,
         head_dim=head_dim,
+        pairs_per_head=pairs_per_head,
         eps=float(eps),
         freq_stride_pos=real_freqs.stride(0),
         freq_stride_pair=real_freqs.stride(1),
         freq_stride_comp=real_freqs.stride(2),
-        block_pairs=block_pairs,
+        BLOCK_N=block_n,
+        FAST_HEAD_FREQ=fast_head_freq,
+        SINGLE_PASS=single_pass,
         USE_FP64=use_fp64,
         num_warps=warps,
     )
