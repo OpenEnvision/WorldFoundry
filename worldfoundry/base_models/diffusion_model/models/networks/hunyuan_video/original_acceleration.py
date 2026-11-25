@@ -63,9 +63,12 @@ from worldfoundry.core.acceleration.quantization.linear import (
 )
 from worldfoundry.core.attention.backends.probe import attention_backend_capability
 from worldfoundry.core.execution.graphs.piecewise_graph import PiecewiseBlockGraphRunner
-from worldfoundry.core.kernels.diffusion import (
-    fused_layer_norm_scale_shift,
-    residual_gate_add,
+from worldfoundry.core.kernels.triton_dit_block_ops import (
+    fused_dit_dual_res_gate_add,
+    fused_dit_layernorm_adaln,
+    fused_dit_res_gate_ln_adaln,
+    fused_hunyuan_double_qkv_rmsnorm_rope_hopper,
+    fused_hunyuan_qkv_rmsnorm_rope_hopper,
 )
 
 # Published 4th-degree HunyuanVideo TeaCache rescaling polynomial (highest degree first).
@@ -1496,68 +1499,15 @@ def fused_hunyuan_qkv_rmsnorm_rope(
     eps: float = 1e-6,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """Fused QKV split + per-head QK-RMSNorm + interleaved 3D-RoPE for HunyuanVideo."""
-    b, seq_len, three_c = qkv.shape
-    head_dim = three_c // (3 * num_heads)
-    has_rope = freqs_cis is not None and (rope_len is None or rope_len > 0)
-    eff_rope_len = seq_len if rope_len is None else min(int(rope_len), seq_len)
-
-    if (
-        head_dim > 0
-        and (head_dim & (head_dim - 1)) == 0
-        and head_dim >= 2
-        and head_dim <= 256
-        and qkv.ndim == 3
-        and q_weight.shape == (head_dim,)
-        and k_weight.shape == (head_dim,)
-        and _triton_cuda_ok(qkv, q_weight, k_weight)
-    ):
-        if has_rope:
-            assert freqs_cis is not None
-            cos, sin = freqs_cis
-            cos_ok = (
-                cos.device == qkv.device
-                and sin.device == qkv.device
-                and cos.ndim == 2
-                and sin.shape == cos.shape
-                and cos.shape[0] >= eff_rope_len
-                and cos.shape[1] == head_dim
-                and cos.stride(-1) == 1
-                and sin.stride(-1) == 1
-            )
-            if cos_ok:
-                return _hunyuan_qkv_rmsnorm_rope_op(
-                    qkv,
-                    q_weight,
-                    k_weight,
-                    cos,
-                    sin,
-                    int(num_heads),
-                    int(eff_rope_len),
-                    True,
-                    float(eps),
-                )
-        else:
-            dummy = q_weight.unsqueeze(0)
-            return _hunyuan_qkv_rmsnorm_rope_op(
-                qkv,
-                q_weight,
-                k_weight,
-                dummy,
-                dummy,
-                int(num_heads),
-                0,
-                False,
-                float(eps),
-            )
-
-    # Exact portable fallback.
-    q, k, v = qkv.reshape(b, seq_len, 3, num_heads, head_dim).unbind(dim=2)
-    q = _rms_norm_ref(q, q_weight, eps)
-    k = _rms_norm_ref(k, k_weight, eps)
-    if has_rope:
-        assert freqs_cis is not None
-        q, k = _apply_interleaved_rope_ref(q, k, freqs_cis[0], freqs_cis[1], eff_rope_len)
-    return q.contiguous(), k.contiguous(), v.contiguous()
+    return fused_hunyuan_qkv_rmsnorm_rope_hopper(
+        qkv,
+        q_weight,
+        k_weight,
+        freqs_cis,
+        num_heads=num_heads,
+        rope_len=rope_len,
+        eps=eps,
+    )
 
 
 def fused_hunyuan_double_qkv_rmsnorm_rope(
@@ -1573,79 +1523,16 @@ def fused_hunyuan_double_qkv_rmsnorm_rope(
     eps: float = 1e-6,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """Fused double-stream QKV split + QK-RMSNorm + video 3D-RoPE -> joint [B, L, H, D]."""
-    b, img_len, three_c = qkv_img.shape
-    head_dim = three_c // (3 * num_heads)
-    has_rope = freqs_cis is not None and img_len > 0
-
-    if (
-        head_dim > 0
-        and (head_dim & (head_dim - 1)) == 0
-        and head_dim >= 2
-        and head_dim <= 256
-        and qkv_img.ndim == 3
-        and qkv_txt.ndim == 3
-        and qkv_img.shape[0] == qkv_txt.shape[0]
-        and qkv_img.shape[2] == qkv_txt.shape[2]
-        and qkv_img.dtype == qkv_txt.dtype
-        and qw_img.shape == (head_dim,)
-        and kw_img.shape == (head_dim,)
-        and qw_txt.shape == (head_dim,)
-        and kw_txt.shape == (head_dim,)
-        and _triton_cuda_ok(qkv_img, qkv_txt, qw_img, kw_img, qw_txt, kw_txt)
-    ):
-        if has_rope:
-            assert freqs_cis is not None
-            cos, sin = freqs_cis
-            cos_ok = (
-                cos.device == qkv_img.device
-                and sin.device == qkv_img.device
-                and cos.ndim == 2
-                and sin.shape == cos.shape
-                and cos.shape[0] >= img_len
-                and cos.shape[1] == head_dim
-                and cos.stride(-1) == 1
-                and sin.stride(-1) == 1
-            )
-            if cos_ok:
-                return _hunyuan_double_qkv_rmsnorm_rope_op(
-                    qkv_img,
-                    qkv_txt,
-                    qw_img,
-                    kw_img,
-                    qw_txt,
-                    kw_txt,
-                    cos,
-                    sin,
-                    int(num_heads),
-                    True,
-                    float(eps),
-                )
-        else:
-            dummy = qw_img.unsqueeze(0)
-            return _hunyuan_double_qkv_rmsnorm_rope_op(
-                qkv_img,
-                qkv_txt,
-                qw_img,
-                kw_img,
-                qw_txt,
-                kw_txt,
-                dummy,
-                dummy,
-                int(num_heads),
-                False,
-                float(eps),
-            )
-
-    q_a, k_a, v_a = fused_hunyuan_qkv_rmsnorm_rope(
-        qkv_img, qw_img, kw_img, freqs_cis, num_heads=num_heads, rope_len=img_len, eps=eps
-    )
-    q_b, k_b, v_b = fused_hunyuan_qkv_rmsnorm_rope(
-        qkv_txt, qw_txt, kw_txt, None, num_heads=num_heads, rope_len=0, eps=eps
-    )
-    return (
-        torch.cat((q_a, q_b), dim=1),
-        torch.cat((k_a, k_b), dim=1),
-        torch.cat((v_a, v_b), dim=1),
+    return fused_hunyuan_double_qkv_rmsnorm_rope_hopper(
+        qkv_img,
+        qkv_txt,
+        qw_img,
+        kw_img,
+        qw_txt,
+        kw_txt,
+        freqs_cis,
+        num_heads=num_heads,
+        eps=eps,
     )
 
 
@@ -1659,23 +1546,7 @@ def fused_hunyuan_residual_gate_layernorm_scale_shift(
     eps: float = 1e-6,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Fuse ``x_out = x + update * gate`` and ``LN(x_out) * (1 + scale) + shift``."""
-    features = int(x.shape[-1])
-    if (
-        x.ndim == 3
-        and update.shape == x.shape
-        and gate.ndim == 2
-        and scale.ndim == 2
-        and shift.ndim == 2
-        and gate.shape == scale.shape == shift.shape == (x.shape[0], features)
-        and 0 < features <= 8192
-        and x.dtype == update.dtype
-        and _triton_cuda_ok(x, update, gate, scale, shift)
-    ):
-        return _hunyuan_res_gate_ln_adaln_op(x, update, gate, scale, shift, float(eps))
-
-    x_out = residual_gate_add(x, update, gate.unsqueeze(1))
-    norm_out = fused_layer_norm_scale_shift(x_out, scale.unsqueeze(1), shift.unsqueeze(1), eps=eps)
-    return x_out, norm_out
+    return fused_dit_res_gate_ln_adaln(x, update, gate, scale, shift, eps=eps)
 
 
 def fused_hunyuan_dual_residual_gate_add(
@@ -1685,19 +1556,7 @@ def fused_hunyuan_dual_residual_gate_add(
     gate: torch.Tensor,
 ) -> torch.Tensor:
     """Fuse ``x + (a + b_term) * gate`` for ``MMSingleStreamBlock``."""
-    features = int(x.shape[-1])
-    if (
-        x.ndim == 3
-        and a.shape == x.shape
-        and b_term.shape == x.shape
-        and gate.ndim == 2
-        and gate.shape == (x.shape[0], features)
-        and 0 < features <= 8192
-        and x.dtype == a.dtype == b_term.dtype
-        and _triton_cuda_ok(x, a, b_term, gate)
-    ):
-        return _hunyuan_dual_res_gate_add_op(x, a, b_term, gate)
-    return x + (a + b_term) * gate.unsqueeze(1)
+    return fused_dit_dual_res_gate_add(x, a, b_term, gate)
 
 
 def fused_hunyuan_layernorm_scale_shift_fp8(
@@ -1826,7 +1685,7 @@ def run_adaln_linear(
             if runtime is not None and not _is_compiling():
                 runtime.adaln_fp8_calls += 1
             return cast(Any, linear)._forward_quantized(codes, scales, x.shape, x.dtype)
-    norm_x = fused_layer_norm_scale_shift(x, scale.unsqueeze(1), shift.unsqueeze(1), eps=eps)
+    norm_x = fused_dit_layernorm_adaln(x, scale, shift, eps=eps)
     if runtime is not None and not _is_compiling():
         runtime.adaln_calls += 1
     return linear(norm_x)
@@ -2917,10 +2776,10 @@ class Hunyuan13BAccelerationRuntime:
         comp_a = double_blocks[0].component_a
         mod1_shift, mod1_scale, _, _, _, _ = comp_a.mod(vec).chunk(6, dim=-1)
         if self.config.fused_ops:
-            return fused_layer_norm_scale_shift(
+            return fused_dit_layernorm_adaln(
                 img,
-                mod1_scale.unsqueeze(1),
-                mod1_shift.unsqueeze(1),
+                mod1_scale,
+                mod1_shift,
                 eps=float(comp_a.norm1.eps),
             )
         return comp_a.norm1(img) * (1.0 + mod1_scale.unsqueeze(1)) + mod1_shift.unsqueeze(1)
