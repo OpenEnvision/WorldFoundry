@@ -31,6 +31,10 @@ import torch.nn.functional as F
 
 from worldfoundry.base_models.diffusion_model.models.networks.sana.activation import build_act, get_act_name
 from worldfoundry.base_models.diffusion_model.models.networks.sana.normalization import build_norm, get_norm_name
+from worldfoundry.base_models.diffusion_model.models.networks.sana.triton_glumbconv import (
+    can_use_sana_silu_dwconv3x3_glu,
+    fused_sana_silu_dwconv3x3_glu_nhwc,
+)
 from worldfoundry.core.kernels import silu_mul
 from worldfoundry.core.nn import get_same_padding, val2tuple
 from worldfoundry.core.nn.blocks.layers import Mlp
@@ -201,18 +205,30 @@ class GLUMBConv(nn.Module):
         )
 
     def _apply_spatial_fused_nhwc(self, x_nhwc: torch.Tensor) -> torch.Tensor:
-        """NHWC fused inverted bottleneck: F.linear -> channels_last depthwise conv -> silu_mul -> F.linear."""
+        """NHWC fused inverted bottleneck: F.linear -> fused silu+dwconv+GLU -> F.linear."""
         inv_conv = self.inverted_conv.conv
+        dw_conv = self.depth_conv.conv
         pt_conv = self.point_conv.conv
         assert inv_conv is not None and pt_conv is not None
         inv_w = inv_conv.weight.squeeze(-1).squeeze(-1)
-        h = F.silu(F.linear(x_nhwc, inv_w, inv_conv.bias))
-        # Permute NHWC -> NCHW view that is already channels_last contiguous!
-        h_nchw = h.permute(0, 3, 1, 2)
-        h_dw = self.depth_conv(h_nchw).permute(0, 2, 3, 1)
-        # Note operand order: GLUMBConv computes a * silu(g) where a, g = chunk(2)
-        a, g = h_dw.chunk(2, dim=-1)
-        gated = silu_mul(g.contiguous(), a.contiguous())
+        h_linear = F.linear(x_nhwc, inv_w, inv_conv.bias)
+        if (
+            isinstance(dw_conv, nn.Conv2d)
+            and not self.depth_conv._forward_hooks
+            and not self.depth_conv._forward_pre_hooks
+            and not self.inverted_conv._forward_hooks
+            and not self.inverted_conv._forward_pre_hooks
+            and can_use_sana_silu_dwconv3x3_glu(h_linear, dw_conv)
+        ):
+            gated = fused_sana_silu_dwconv3x3_glu_nhwc(h_linear, dw_conv.weight, dw_conv.bias)
+        else:
+            h = F.silu(h_linear)
+            # Permute NHWC -> NCHW view that is already channels_last contiguous!
+            h_nchw = h.permute(0, 3, 1, 2)
+            h_dw = self.depth_conv(h_nchw).permute(0, 2, 3, 1)
+            # Note operand order: GLUMBConv computes a * silu(g) where a, g = chunk(2)
+            a, g = h_dw.chunk(2, dim=-1)
+            gated = silu_mul(g.contiguous(), a.contiguous())
         pt_w = pt_conv.weight.squeeze(-1).squeeze(-1)
         return F.linear(gated, pt_w, pt_conv.bias)
 
