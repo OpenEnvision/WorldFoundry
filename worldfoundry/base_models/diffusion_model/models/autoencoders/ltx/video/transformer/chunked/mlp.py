@@ -19,6 +19,7 @@ from ..swiglu import (
     token_intervals,
     triton_swiglu_available,
 )
+from ..triton_diffvae_ops import diffvae_rmsnorm_modulate_into
 
 
 def _channel_affine_bc(scale: torch.Tensor, shift: torch.Tensor, dim: int) -> tuple[torch.Tensor, torch.Tensor]:
@@ -88,8 +89,7 @@ def _chunked_residual_modulated_impl(
         n = end - start
         xc = x_flat[start:end]
         y = y_buf[:n]
-        y.copy_(F.rms_norm(xc, (dim,), norm_weight, eps))
-        y.mul_(1.0 + s).add_(sh)
+        diffvae_rmsnorm_modulate_into(xc, norm_weight, s, sh, y, eps=eps)
 
         ws = workspace[:n]
         if use_dual:

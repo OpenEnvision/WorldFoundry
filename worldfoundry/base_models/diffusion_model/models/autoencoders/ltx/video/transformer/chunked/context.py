@@ -11,6 +11,8 @@ import torch.nn.functional as F
 from einops import rearrange
 from torch import nn
 
+from ..triton_diffvae_ops import diffvae_pixel_shuffle_add_w_slice, triton_diffvae_ops_available
+
 
 def _upsample_then_ctx(
     feat: torch.Tensor,
@@ -37,6 +39,35 @@ def _upsample_then_ctx(
     return F.linear(up, ctx_w, ctx_b)
 
 
+def _compose_upsample_ctx_weights(
+    up_w: torch.Tensor,
+    up_b: torch.Tensor,
+    ctx_w: torch.Tensor,
+    ctx_b: torch.Tensor | None,
+    stride: tuple[int, int, int],
+    dtype: torch.dtype,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Compose ``context_proj(pixel_shuffle(upsample_proj(feat)))`` into a single linear map.
+
+    The output channels are ordered ``(p1 * p2 * p3, c_out)`` so each sub-voxel's
+    ``c_out`` vector is contiguous for single-pass Triton pixel-shuffle + residual add.
+    """
+    p1, p2, p3 = stride
+    s_tot = p1 * p2 * p3
+    c_mid = up_w.shape[0] // s_tot
+    c_in = up_w.shape[1]
+    c_out = ctx_w.shape[0]
+    up_w_s = up_w.view(c_mid, s_tot, c_in).permute(1, 0, 2).float()
+    up_b_s = up_b.view(c_mid, s_tot).t().float()
+    ctx_w_f = ctx_w.float()
+    w_eff = torch.einsum("oc,sci->soi", ctx_w_f, up_w_s).reshape(s_tot * c_out, c_in).to(dtype).contiguous()
+    b_eff = torch.einsum("oc,sc->so", ctx_w_f, up_b_s)
+    if ctx_b is not None:
+        b_eff = b_eff + ctx_b.float().unsqueeze(0)
+    b_eff = b_eff.reshape(s_tot * c_out).to(dtype).contiguous()
+    return w_eff, b_eff
+
+
 def deferred(
     x: torch.Tensor,
     stage4_feat: torch.Tensor,
@@ -51,9 +82,63 @@ def deferred(
     Returns ``x`` (mutated).
     """
     assert upsample_proj.bias is not None
-    p3 = stride[2]
+    p1, p2, p3 = stride
     up_w, up_b = upsample_proj.weight, upsample_proj.bias
     ctx_w, ctx_b = context_proj.weight, context_proj.bias
+
+    can_fuse_triton = (
+        triton_diffvae_ops_available()
+        and x.is_cuda
+        and stage4_feat.is_cuda
+        and x.device == stage4_feat.device
+        and x.dtype == stage4_feat.dtype
+        and x.dtype in (torch.bfloat16, torch.float16, torch.float32)
+        and x.is_contiguous()
+        and not x.requires_grad
+        and not stage4_feat.requires_grad
+        and not torch.is_grad_enabled()
+        and not upsample_proj._forward_hooks
+        and not upsample_proj._forward_pre_hooks
+        and not context_proj._forward_hooks
+        and not context_proj._forward_pre_hooks
+        and up_w.shape[0] % (p1 * p2 * p3) == 0
+        and ctx_w.shape[1] == up_w.shape[0] // (p1 * p2 * p3)
+        and ctx_w.shape[0] == x.shape[-1]
+    )
+    if can_fuse_triton:
+        w_eff, b_eff = _compose_upsample_ctx_weights(up_w, up_b, ctx_w, ctx_b, stride, x.dtype)
+        w_eff_t = w_eff.t()
+        c_in = up_w.shape[1]
+        feat_chunks = [stage4_feat] if w_chunks <= 1 else list(torch.chunk(stage4_feat, w_chunks, dim=3))
+        w_hi = x.shape[3]
+        lo = 0
+        for feat_chunk in feat_chunks:
+            hi = min(w_hi, lo + feat_chunk.shape[3] * p3)
+            _, t_in, h_in, w_in, _ = feat_chunk.shape
+            y_2d = torch.addmm(b_eff, feat_chunk.contiguous().reshape(-1, c_in), w_eff_t)
+            if not diffvae_pixel_shuffle_add_w_slice(
+                x,
+                y_2d,
+                lo,
+                hi - lo,
+                t_in,
+                h_in,
+                w_in,
+                stride,
+                drop_leading_frame=drop_leading_frame,
+            ):
+                ctx = _upsample_then_ctx(
+                    feat_chunk,
+                    up_w,
+                    up_b,
+                    ctx_w,
+                    ctx_b,
+                    stride,
+                    drop_leading_frame=drop_leading_frame,
+                )
+                x[:, :, :, lo:hi, :].add_(ctx[:, :, :, : hi - lo, :])
+            lo = hi
+        return x
 
     if w_chunks <= 1:
         x.add_(

@@ -18,6 +18,7 @@ from __future__ import annotations
 import torch
 
 from .rope_math import DEFAULT_ABS_ROPE_NUM_TILES, h_positions, rot_abs_axis_impl, t_positions
+from .triton_diffvae_ops import _can_use_rmsnorm_3d_abs_rope, diffvae_rmsnorm_3d_abs_rope
 
 
 def _apply_opaque_rope_slab(
@@ -97,6 +98,15 @@ def _abs_rope_op(
     compute_dtype_is_bf16: bool,
 ) -> torch.Tensor:
     """Opaque out-of-place abs-RoPE: Dynamo sees one node."""
+    if _can_use_rmsnorm_3d_abs_rope(x, None, inv_t, inv_h, inv_w, d_t, d_h, d_w, None, None):
+        return diffvae_rmsnorm_3d_abs_rope(
+            x,
+            None,
+            (d_t, d_h, d_w),
+            (inv_t, inv_h, inv_w),
+            do_rmsnorm=False,
+            rope_compute_bf16=compute_dtype_is_bf16,
+        )
     compute_dtype = torch.bfloat16 if compute_dtype_is_bf16 else torch.float32
     return _apply_opaque_tiled_rope(
         x,
@@ -164,6 +174,16 @@ def _abs_rope_at_t_op(
     compute_dtype_is_bf16: bool,
 ) -> torch.Tensor:
     """Opaque abs-RoPE with caller-supplied (possibly fractional) first-axis positions."""
+    if _can_use_rmsnorm_3d_abs_rope(x, None, inv_t, inv_h, inv_w, d_t, d_h, d_w, t_pos, None):
+        return diffvae_rmsnorm_3d_abs_rope(
+            x,
+            None,
+            (d_t, d_h, d_w),
+            (inv_t, inv_h, inv_w),
+            t_pos=t_pos,
+            do_rmsnorm=False,
+            rope_compute_bf16=compute_dtype_is_bf16,
+        )
     compute_dtype = torch.bfloat16 if compute_dtype_is_bf16 else torch.float32
     return _apply_opaque_tiled_rope(
         x,
@@ -213,6 +233,10 @@ def _det_project_qkv(attn: object, x: torch.Tensor) -> tuple[torch.Tensor, torch
     return q, k, v
 
 
+def _can_fuse_det_norm(norm_mod: object) -> bool:
+    return isinstance(norm_mod, torch.nn.RMSNorm) and not norm_mod._forward_hooks and not norm_mod._forward_pre_hooks
+
+
 def det_qkv_rope_at_times(
     attn: object,
     x: torch.Tensor,
@@ -227,11 +251,42 @@ def det_qkv_rope_at_times(
     """
     if t_pos.ndim != 1 or t_pos.shape[0] != x.shape[1]:
         raise ValueError(f"t_pos must be ({x.shape[1]},) to match the plane axis, got {tuple(t_pos.shape)}")
-    q, k, v = _det_project_qkv(attn, x)
-
     inv_freqs, num_tiles, compute_dtype = _rope_config(attn, x)
     d_t, d_h, d_w = attn.rope_dim_split  # type: ignore[attr-defined]
     positions = t_pos.to(device=x.device, dtype=torch.float32)
+    q_norm = attn.q_norm  # type: ignore[attr-defined]
+    k_norm = attn.k_norm  # type: ignore[attr-defined]
+    if _can_fuse_det_norm(q_norm) and _can_fuse_det_norm(k_norm):
+        q, k, v = attn.project_qkv(x)  # type: ignore[attr-defined]
+        if _can_use_rmsnorm_3d_abs_rope(q, q_norm.weight, *inv_freqs, d_t, d_h, d_w, positions, None):
+            eps_q = float(q_norm.eps) if q_norm.eps is not None else float(torch.finfo(q.dtype).eps)
+            eps_k = float(k_norm.eps) if k_norm.eps is not None else float(torch.finfo(k.dtype).eps)
+            rope_bf16 = compute_dtype == torch.bfloat16
+            q = diffvae_rmsnorm_3d_abs_rope(
+                q,
+                q_norm.weight,
+                (d_t, d_h, d_w),
+                inv_freqs,  # type: ignore[arg-type]
+                t_pos=positions,
+                eps=eps_q,
+                attn_scale=float(attn.scale),  # type: ignore[attr-defined]
+                do_rmsnorm=True,
+                rope_compute_bf16=rope_bf16,
+            )
+            k = diffvae_rmsnorm_3d_abs_rope(
+                k,
+                k_norm.weight,
+                (d_t, d_h, d_w),
+                inv_freqs,  # type: ignore[arg-type]
+                t_pos=positions,
+                eps=eps_k,
+                attn_scale=1.0,
+                do_rmsnorm=True,
+                rope_compute_bf16=rope_bf16,
+            )
+            return q, k, v
+    q, k, v = _det_project_qkv(attn, x)
+
     rotated = [
         _abs_rope_at_t_op(
             tensor,
@@ -250,18 +305,48 @@ def det_qkv_rope_at_times(
 
 def det_qkv_rope(attn: object, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """Q/K/V proj + norm/scale + opaque full-volume abs-RoPE."""
-    q, k, v = _det_project_qkv(attn, x)
     inv_freqs, num_tiles, compute_dtype = _rope_config(attn, x)
+    d_t, d_h, d_w = attn.rope_dim_split  # type: ignore[attr-defined]
+    q_norm = attn.q_norm  # type: ignore[attr-defined]
+    k_norm = attn.k_norm  # type: ignore[attr-defined]
+    if _can_fuse_det_norm(q_norm) and _can_fuse_det_norm(k_norm):
+        q, k, v = attn.project_qkv(x)  # type: ignore[attr-defined]
+        if _can_use_rmsnorm_3d_abs_rope(q, q_norm.weight, *inv_freqs, d_t, d_h, d_w, None, None):
+            eps_q = float(q_norm.eps) if q_norm.eps is not None else float(torch.finfo(q.dtype).eps)
+            eps_k = float(k_norm.eps) if k_norm.eps is not None else float(torch.finfo(k.dtype).eps)
+            rope_bf16 = compute_dtype == torch.bfloat16
+            q = diffvae_rmsnorm_3d_abs_rope(
+                q,
+                q_norm.weight,
+                (d_t, d_h, d_w),
+                inv_freqs,  # type: ignore[arg-type]
+                eps=eps_q,
+                attn_scale=float(attn.scale),  # type: ignore[attr-defined]
+                do_rmsnorm=True,
+                rope_compute_bf16=rope_bf16,
+            )
+            k = diffvae_rmsnorm_3d_abs_rope(
+                k,
+                k_norm.weight,
+                (d_t, d_h, d_w),
+                inv_freqs,  # type: ignore[arg-type]
+                eps=eps_k,
+                attn_scale=1.0,
+                do_rmsnorm=True,
+                rope_compute_bf16=rope_bf16,
+            )
+            return q, k, v
+    q, k, v = _det_project_qkv(attn, x)
     q = _apply_opaque_abs_rope(
         q,
-        attn.rope_dim_split,  # type: ignore[attr-defined]
+        (d_t, d_h, d_w),
         inv_freqs,
         num_tiles=num_tiles,
         compute_dtype=compute_dtype,
     )
     k = _apply_opaque_abs_rope(
         k,
-        attn.rope_dim_split,  # type: ignore[attr-defined]
+        (d_t, d_h, d_w),
         inv_freqs,
         num_tiles=num_tiles,
         compute_dtype=compute_dtype,
