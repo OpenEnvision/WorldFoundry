@@ -5,7 +5,7 @@ behavior is in :mod:`.fast`.  No VACE or action encoder here.
 """
 
 import math
-from typing import ClassVar
+from typing import Any, ClassVar
 
 import torch
 import torch.nn as nn
@@ -20,6 +20,14 @@ from worldfoundry.core.kernels import (
 
 # isort: split
 
+from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.forcing.fast_kernels import (
+    sf_fast_kernels_enabled,
+    sf_layernorm_adaln,
+    sf_residual_add_layernorm_adaln,
+    sf_residual_gate_add,
+    sf_residual_gate_add_layernorm,
+    sf_rmsnorm,
+)
 from worldfoundry.base_models.diffusion_model.optimizations.camera_condition import (
     apply_camera_modulation,
     camera_condition_for_block,
@@ -30,6 +38,10 @@ from worldfoundry.base_models.diffusion_model.optimizations.camera_condition imp
 from .attention import flash_attention
 
 __all__ = ["WanModel"]
+
+
+def _module_has_hooks(module: nn.Module) -> bool:
+    return bool(getattr(module, "_forward_hooks", None) or getattr(module, "_forward_pre_hooks", None))
 
 
 def sinusoidal_embedding_1d(dim, position):
@@ -186,6 +198,8 @@ class WanSelfAttention(nn.Module):
 class WanCrossAttention(WanSelfAttention):
     """Wan text cross-attention (optional KV cache)."""
 
+    _worldfoundry_sf_fast_kernels: bool | None = None
+
     def forward(self, x, context, context_lens):
         r"""
         Args:
@@ -194,10 +208,36 @@ class WanCrossAttention(WanSelfAttention):
             context_lens(Tensor): Shape [B]
         """
         b, n, d = x.size(0), self.num_heads, self.head_dim
+        use_fast_rms = (
+            x.is_cuda
+            and not torch.is_grad_enabled()
+            and not self.training
+            and sf_fast_kernels_enabled(self.__dict__.get("_worldfoundry_sf_fast_kernels"))
+        )
+        norm_q_any: Any = self.norm_q
+        norm_k_any: Any = self.norm_k
 
         # compute query, key, value
-        q = self.norm_q(self.q(x)).view(b, -1, n, d)
-        k = self.norm_k(self.k(context)).view(b, -1, n, d)
+        q_raw = self.q(x)
+        k_raw = self.k(context)
+        if (
+            use_fast_rms
+            and hasattr(norm_q_any, "weight")
+            and hasattr(norm_q_any, "eps")
+            and not _module_has_hooks(self.norm_q)
+        ):
+            q = sf_rmsnorm(q_raw, norm_q_any.weight, eps=float(norm_q_any.eps)).view(b, -1, n, d)
+        else:
+            q = self.norm_q(q_raw).view(b, -1, n, d)
+        if (
+            use_fast_rms
+            and hasattr(norm_k_any, "weight")
+            and hasattr(norm_k_any, "eps")
+            and not _module_has_hooks(self.norm_k)
+        ):
+            k = sf_rmsnorm(k_raw, norm_k_any.weight, eps=float(norm_k_any.eps)).view(b, -1, n, d)
+        else:
+            k = self.norm_k(k_raw).view(b, -1, n, d)
         v = self.v(context).view(b, -1, n, d)
 
         # compute attention
@@ -211,6 +251,8 @@ class WanCrossAttention(WanSelfAttention):
 
 class WanAttentionBlock(nn.Module):
     """Wan transformer block: AdaLN self-attn, cross-attn, then AdaLN FFN."""
+
+    _worldfoundry_sf_fast_kernels: bool | None = None
 
     def __init__(self, dim, ffn_dim, num_heads, window_size=(-1, -1), qk_norm=True, cross_attn_norm=False, eps=1e-6):
         super().__init__()
@@ -258,51 +300,97 @@ class WanAttentionBlock(nn.Module):
             freqs(Tensor): Rope freqs, shape [1024, C / num_heads / 2]
         """
         assert e.dtype == torch.float32
+        mod_frames = int(e.shape[1])
+        seq_len_tok = int(x.shape[1])
         with torch.amp.autocast("cuda", dtype=torch.float32):
             e = (self.modulation.unsqueeze(0) + e).chunk(6, dim=2)
         assert e[0].dtype == torch.float32
 
+        use_fast = (
+            x.is_cuda
+            and not torch.is_grad_enabled()
+            and not self.training
+            and sf_fast_kernels_enabled(self.__dict__.get("_worldfoundry_sf_fast_kernels"))
+            and mod_frames > 0
+            and (seq_len_tok % mod_frames == 0)
+        )
+        mod_frame_seq = seq_len_tok // mod_frames if mod_frames > 0 else seq_len_tok
+
         # self-attention
-        y = self.self_attn(
-            layer_norm_scale_shift(
+        if _module_has_hooks(self.norm1):
+            with torch.amp.autocast("cuda", dtype=torch.float32):
+                sa_in = (self.norm1(x).float() * (1 + e[1].squeeze(2)) + e[0].squeeze(2)).to(x.dtype)
+        elif use_fast:
+            sa_in = sf_layernorm_adaln(
+                x, e[1], e[0], num_frames=mod_frames, frame_seq=mod_frame_seq, eps=float(self.norm1.eps)
+            )
+        else:
+            sa_in = layer_norm_scale_shift(
                 x,
                 e[1].squeeze(2),
                 e[0].squeeze(2),
                 eps=self.norm1.eps,
                 upcast=True,
-            ),
-            seq_lens,
-            grid_sizes,
-            freqs,
-        )
-        with torch.amp.autocast("cuda", dtype=torch.float32):
-            x = residual_gate_add(x, y, e[2].squeeze(2))
-
-        x = apply_camera_modulation(self, x, dit_cond_dict)
-
-        # cross-attention & ffn function
-        def cross_attn_ffn(x, context, context_lens, e):
-            """Second half of the block: cross-attn then gated FFN."""
-            x = x + self.cross_attn(self.norm3(x), context, context_lens)
-            y = self.ffn(
-                layer_norm_scale_shift(
-                    x,
-                    e[4].squeeze(2),
-                    e[3].squeeze(2),
-                    eps=self.norm2.eps,
-                    upcast=True,
-                )
             )
-            with torch.amp.autocast("cuda", dtype=torch.float32):
-                x = residual_gate_add(x, y, e[5].squeeze(2))
-            return x
+        y = self.self_attn(sa_in, seq_lens, grid_sizes, freqs)
 
-        x = cross_attn_ffn(x, context, context_lens, e)
+        has_cam = dit_cond_dict is not None and "c2ws_plucker_emb" in dit_cond_dict
+        norm3_any: Any = self.norm3
+        if (
+            use_fast
+            and not has_cam
+            and not _module_has_hooks(self.norm3)
+            and hasattr(norm3_any, "weight")
+            and hasattr(norm3_any, "eps")
+        ):
+            x_out_dtype = torch.promote_types(x.dtype, torch.promote_types(y.dtype, e[2].dtype))
+            w3 = norm3_any.weight if norm3_any.weight.dtype == x_out_dtype else norm3_any.weight.to(x_out_dtype)
+            b3_raw = getattr(norm3_any, "bias", None)
+            b3 = None if b3_raw is None else (b3_raw if b3_raw.dtype == x_out_dtype else b3_raw.to(x_out_dtype))
+            x, x_ca_in = sf_residual_gate_add_layernorm(
+                x, y, e[2], w3, b3, num_frames=mod_frames, frame_seq=mod_frame_seq, eps=float(norm3_any.eps)
+            )
+        else:
+            if use_fast:
+                x = sf_residual_gate_add(x, y, e[2], num_frames=mod_frames, frame_seq=mod_frame_seq)
+            else:
+                with torch.amp.autocast("cuda", dtype=torch.float32):
+                    x = residual_gate_add(x, y, e[2].squeeze(2))
+            x = apply_camera_modulation(self, x, dit_cond_dict)
+            x_ca_in = self.norm3(x)
+
+        ca_out = self.cross_attn(x_ca_in, context, context_lens)
+        if _module_has_hooks(self.norm2):
+            x = x + ca_out
+            with torch.amp.autocast("cuda", dtype=torch.float32):
+                ffn_in = (self.norm2(x).float() * (1 + e[4].squeeze(2)) + e[3].squeeze(2)).to(x.dtype)
+        elif use_fast:
+            x, ffn_in = sf_residual_add_layernorm_adaln(
+                x, ca_out, e[4], e[3], num_frames=mod_frames, frame_seq=mod_frame_seq, eps=float(self.norm2.eps)
+            )
+        else:
+            x = x + ca_out
+            ffn_in = layer_norm_scale_shift(
+                x,
+                e[4].squeeze(2),
+                e[3].squeeze(2),
+                eps=self.norm2.eps,
+                upcast=True,
+            )
+
+        y_ffn = self.ffn(ffn_in)
+        if use_fast:
+            x = sf_residual_gate_add(x, y_ffn, e[5], num_frames=mod_frames, frame_seq=mod_frame_seq)
+        else:
+            with torch.amp.autocast("cuda", dtype=torch.float32):
+                x = residual_gate_add(x, y_ffn, e[5].squeeze(2))
         return x
 
 
 class Head(nn.Module):
     """AdaLN-modulated output projection from tokens to packed patch voxels."""
+
+    _worldfoundry_sf_fast_kernels: bool | None = None
 
     def __init__(self, dim, out_dim, patch_size, eps=1e-6):
         super().__init__()
@@ -326,17 +414,37 @@ class Head(nn.Module):
             e(Tensor): Shape [B, L1, C]
         """
         assert e.dtype == torch.float32
+        mod_frames = int(e.shape[1])
+        seq_len_tok = int(x.shape[1])
         with torch.amp.autocast("cuda", dtype=torch.float32):
             e = (self.modulation.unsqueeze(0) + e.unsqueeze(2)).chunk(2, dim=2)
-            x = self.head(
-                layer_norm_scale_shift(
+            if _module_has_hooks(self.norm):
+                h = (self.norm(x).float() * (1 + e[1].squeeze(2)) + e[0].squeeze(2)).to(x.dtype)
+            elif (
+                x.is_cuda
+                and not torch.is_grad_enabled()
+                and not self.training
+                and sf_fast_kernels_enabled(self.__dict__.get("_worldfoundry_sf_fast_kernels"))
+                and mod_frames > 0
+                and (seq_len_tok % mod_frames == 0)
+            ):
+                h = sf_layernorm_adaln(
+                    x,
+                    e[1],
+                    e[0],
+                    num_frames=mod_frames,
+                    frame_seq=seq_len_tok // mod_frames,
+                    eps=float(self.norm.eps),
+                )
+            else:
+                h = layer_norm_scale_shift(
                     x,
                     e[1].squeeze(2),
                     e[0].squeeze(2),
                     eps=self.norm.eps,
                     upcast=True,
                 )
-            )
+            x = self.head(h)
         return x
 
 
@@ -508,14 +616,19 @@ class WanModel(nn.Module, NativeConfigMixin):
         assert seq_lens.max() <= seq_len
         x = torch.cat([torch.cat([u, u.new_zeros(1, seq_len - u.size(1), u.size(2))], dim=1) for u in x])
 
-        # time embeddings
-        if t.dim() == 1:
-            t = t.expand(t.size(0), seq_len)
+        # time embeddings — broadcast scalar [B] timesteps as [B, 1, ...] to avoid
+        # 32k+ redundant MLP rows and ~51 GB/step FP32 e0 materialization.
         with torch.amp.autocast("cuda", dtype=torch.float32):
-            bt = t.size(0)
-            t = t.flatten()
-            e = self.time_embedding(sinusoidal_embedding_1d(self.freq_dim, t).unflatten(0, (bt, seq_len)).float())
-            e0 = self.time_projection(e).unflatten(2, (6, self.dim))
+            if t.dim() == 1:
+                bt = int(t.size(0))
+                e = self.time_embedding(sinusoidal_embedding_1d(self.freq_dim, t).float()).unflatten(0, (bt, 1))
+                e0 = self.time_projection(e).unflatten(2, (6, self.dim))
+            else:
+                bt, t_len = int(t.size(0)), int(t.size(1))
+                e = self.time_embedding(
+                    sinusoidal_embedding_1d(self.freq_dim, t.flatten()).unflatten(0, (bt, t_len)).float()
+                )
+                e0 = self.time_projection(e).unflatten(2, (6, self.dim))
             assert e.dtype == torch.float32 and e0.dtype == torch.float32
 
         # context

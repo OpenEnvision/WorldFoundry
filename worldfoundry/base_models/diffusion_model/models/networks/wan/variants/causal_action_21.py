@@ -8,7 +8,7 @@ Adds action + causal attention.  No VACE or linear attn.
 """
 
 import math
-from typing import ClassVar
+from typing import Any, ClassVar
 
 import torch
 import torch.distributed as dist
@@ -26,10 +26,47 @@ from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.actio
 )
 from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.action_attention_21 import attention
 from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.action_conditioning_21 import ActionModule
+from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.forcing.fast_kernels import (
+    sf_fast_kernels_enabled,
+    sf_layernorm_adaln,
+    sf_qk_rmsnorm_rope_write_kv,
+    sf_residual_add_layernorm_adaln,
+    sf_residual_gate_add,
+    sf_residual_gate_add_layernorm,
+)
 from worldfoundry.base_models.diffusion_model.optimizations.qkv_fusion import project_fused_qkv
 from worldfoundry.core.model_loading.model_configuration import NativeConfigMixin, register_to_config
 
 from .causal_cache import commit_kv_cache_positions, read_kv_cache_positions
+
+
+def _module_has_hooks(module: nn.Module) -> bool:
+    return bool(getattr(module, "_forward_hooks", None) or getattr(module, "_forward_pre_hooks", None))
+
+
+def _build_action21_rope_cos_sin(
+    freqs: torch.Tensor,
+    num_frames: int,
+    h_grid: int,
+    w_grid: int,
+    start_frame: int,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    c = int(freqs.shape[1])
+    t_dim = c - 2 * (c // 3)
+    s_dim = c // 3
+    f_t, f_h, f_w = freqs.split([t_dim, s_dim, s_dim], dim=1)
+    freqs_3d = torch.cat(
+        [
+            f_t[start_frame : start_frame + num_frames]
+            .view(num_frames, 1, 1, t_dim)
+            .expand(num_frames, h_grid, w_grid, t_dim),
+            f_h[:h_grid].view(1, h_grid, 1, s_dim).expand(num_frames, h_grid, w_grid, s_dim),
+            f_w[:w_grid].view(1, 1, w_grid, s_dim).expand(num_frames, h_grid, w_grid, s_dim),
+        ],
+        dim=-1,
+    ).reshape(1, num_frames * h_grid * w_grid, 1, c)
+    return freqs_3d.real.to(torch.float64).contiguous(), freqs_3d.imag.to(torch.float64).contiguous()
+
 
 # wan 1.3B model has a weird channel / head configurations and require max-autotune to work with flexattention
 # see https://github.com/pytorch/pytorch/issues/133254
@@ -97,7 +134,20 @@ class CausalWanSelfAttention(nn.Module):
         self.norm_q = WanRMSNorm(dim, eps=eps) if qk_norm else nn.Identity()
         self.norm_k = WanRMSNorm(dim, eps=eps) if qk_norm else nn.Identity()
 
-    def forward(self, x, seq_lens, grid_sizes, freqs, block_mask, kv_cache=None, current_start=0, cache_start=None):
+    def forward(
+        self,
+        x,
+        seq_lens,
+        grid_sizes,
+        freqs,
+        block_mask,
+        kv_cache=None,
+        current_start=0,
+        cache_start=None,
+        *,
+        precomputed_rope=None,
+        frame_seqlen=None,
+    ):
         r"""
         Args:
             x(Tensor): Shape [B, L, C] # num_heads, C / num_heads]
@@ -110,21 +160,16 @@ class CausalWanSelfAttention(nn.Module):
         if cache_start is None:
             cache_start = current_start
 
-        # query, key, value function
-        def qkv_fn(x):
-            """Project and reshape QKV to ``[B, L, H, D]``."""
-            if getattr(self, "_qkv_fused", False):
-                q, k, v = project_fused_qkv(self.qkv, x)
-            else:
-                q, k, v = self.q(x), self.k(x), self.v(x)
-            q = self.norm_q(q).view(b, s, n, d)
-            k = self.norm_k(k).view(b, s, n, d)
-            v = v.view(b, s, n, d)
-            return q, k, v
-
-        q, k, v = qkv_fn(x)  # B, F, HW, C
+        # Project QKV
+        if getattr(self, "_qkv_fused", False):
+            q_proj, k_proj, v_proj = project_fused_qkv(self.qkv, x)
+        else:
+            q_proj, k_proj, v_proj = self.q(x), self.k(x), self.v(x)
 
         if kv_cache is None:
+            q = self.norm_q(q_proj).view(b, s, n, d)
+            k = self.norm_k(k_proj).view(b, s, n, d)
+            v = v_proj.view(b, s, n, d)
             roped_query = rope_apply(q, grid_sizes, freqs).type_as(v)
             roped_key = rope_apply(k, grid_sizes, freqs).type_as(v)
 
@@ -158,16 +203,14 @@ class CausalWanSelfAttention(nn.Module):
             )[:, :, : q.shape[1]].transpose(2, 1)
         else:
             assert grid_sizes.ndim == 1
-            frame_seqlen = math.prod(grid_sizes[1:]).item()
+            if frame_seqlen is None:
+                frame_seqlen = math.prod(grid_sizes[1:]).item()
             current_start_frame = current_start // frame_seqlen
-            roped_query = causal_rope_apply(q, grid_sizes, freqs, start_frame=current_start_frame).type_as(v)
-            roped_key = causal_rope_apply(k, grid_sizes, freqs, start_frame=current_start_frame).type_as(v)
-
-            current_end = current_start + roped_query.shape[1]
+            current_end = current_start + s
             sink_tokens = self.sink_size * frame_seqlen
 
             kv_cache_size = kv_cache["k"].shape[1]
-            num_new_tokens = roped_query.shape[1]
+            num_new_tokens = s
             cached_global_end, cached_local_end = read_kv_cache_positions(kv_cache)
 
             if (current_end > cached_global_end) and (num_new_tokens + cached_local_end > kv_cache_size):
@@ -179,18 +222,58 @@ class CausalWanSelfAttention(nn.Module):
                 kv_cache["v"][:, sink_tokens : sink_tokens + num_rolled_tokens] = kv_cache["v"][
                     :, sink_tokens + num_evicted_tokens : sink_tokens + num_evicted_tokens + num_rolled_tokens
                 ].clone()
-                # Insert the new keys/values at the end
                 local_end_index = cached_local_end + current_end - cached_global_end - num_evicted_tokens
-                local_start_index = local_end_index - num_new_tokens
-                kv_cache["k"][:, local_start_index:local_end_index] = roped_key
-                kv_cache["v"][:, local_start_index:local_end_index] = v
             else:
-                # Assign new keys/values directly up to current_end
                 local_end_index = cached_local_end + current_end - cached_global_end
-                local_start_index = local_end_index - num_new_tokens
+            local_start_index = local_end_index - num_new_tokens
 
+            use_fused_qk = (
+                x.is_cuda
+                and not torch.is_grad_enabled()
+                and precomputed_rope is not None
+                and not _module_has_hooks(self.norm_q)
+                and not _module_has_hooks(self.norm_k)
+                and (
+                    (not self.qk_norm)
+                    or (
+                        hasattr(self.norm_q, "weight")
+                        and hasattr(self.norm_k, "weight")
+                        and hasattr(self.norm_q, "eps")
+                    )
+                )
+                and sf_fast_kernels_enabled(self.__dict__.get("_worldfoundry_sf_fast_kernels"))
+            )
+            if use_fused_qk:
+                rope_cos, rope_sin = precomputed_rope
+                norm_q_any: Any = self.norm_q
+                norm_k_any: Any = self.norm_k
+                q_w: torch.Tensor | None = norm_q_any.weight if self.qk_norm else None
+                k_w: torch.Tensor | None = norm_k_any.weight if self.qk_norm else None
+                roped_query = sf_qk_rmsnorm_rope_write_kv(
+                    q_proj,
+                    k_proj,
+                    v_proj,
+                    q_w,
+                    k_w,
+                    rope_cos,
+                    rope_sin,
+                    kv_cache["k"],
+                    kv_cache["v"],
+                    dst_start=local_start_index,
+                    num_heads=n,
+                    head_dim=d,
+                    eps=float(self.eps),
+                    rotate_k=True,
+                )
+            else:
+                q = self.norm_q(q_proj).view(b, s, n, d)
+                k = self.norm_k(k_proj).view(b, s, n, d)
+                v = v_proj.view(b, s, n, d)
+                roped_query = causal_rope_apply(q, grid_sizes, freqs, start_frame=current_start_frame).type_as(v)
+                roped_key = causal_rope_apply(k, grid_sizes, freqs, start_frame=current_start_frame).type_as(v)
                 kv_cache["k"][:, local_start_index:local_end_index] = roped_key
                 kv_cache["v"][:, local_start_index:local_end_index] = v
+
             x = attention(
                 roped_query,
                 kv_cache["k"][:, max(0, local_end_index - self.max_attention_size) : local_end_index],
@@ -266,6 +349,9 @@ class CausalWanAttentionBlock(nn.Module):
         current_start=0,
         cache_start=None,
         context_lens=None,
+        *,
+        precomputed_rope=None,
+        frame_seqlen_hint=None,
     ):
         r"""
         Args:
@@ -279,9 +365,22 @@ class CausalWanAttentionBlock(nn.Module):
         num_frames, frame_seqlen = e.shape[1], x.shape[1] // e.shape[1]
 
         e = (self.modulation.unsqueeze(1) + e).chunk(6, dim=2)
+        use_fast = (
+            x.is_cuda
+            and not torch.is_grad_enabled()
+            and not self.training
+            and sf_fast_kernels_enabled(self.__dict__.get("_worldfoundry_sf_fast_kernels"))
+        )
+
+        if use_fast and not _module_has_hooks(self.norm1):
+            sa_in = sf_layernorm_adaln(
+                x, e[1], e[0], num_frames=num_frames, frame_seq=frame_seqlen, eps=float(self.norm1.eps)
+            )
+        else:
+            sa_in = (self.norm1(x).unflatten(dim=1, sizes=(num_frames, frame_seqlen)) * (1 + e[1]) + e[0]).flatten(1, 2)
 
         y = self.self_attn(
-            (self.norm1(x).unflatten(dim=1, sizes=(num_frames, frame_seqlen)) * (1 + e[1]) + e[0]).flatten(1, 2),
+            sa_in,
             seq_lens,
             grid_sizes,
             freqs,
@@ -289,69 +388,90 @@ class CausalWanAttentionBlock(nn.Module):
             kv_cache,
             current_start,
             cache_start,
+            precomputed_rope=precomputed_rope,
+            frame_seqlen=frame_seqlen_hint,
         )
 
-        x = x + (y.unflatten(dim=1, sizes=(num_frames, frame_seqlen)) * e[2]).flatten(1, 2)
-
-        # cross-attention & ffn function
-        def cross_attn_ffn(
-            x,
-            context,
-            e,
-            mouse_cond,
-            keyboard_cond,
-            block_mask_mouse,
-            block_mask_keyboard,
-            kv_cache_mouse=None,
-            kv_cache_keyboard=None,
-            crossattn_cache=None,
-            start_frame=0,
-            use_rope_keyboard=False,
-            num_frame_per_block=3,
-        ):
-            x = x + self.cross_attn(self.norm3(x.to(context.dtype)), context, crossattn_cache=crossattn_cache)
-            if self.action_model is not None:
-                assert mouse_cond is not None or keyboard_cond is not None
-                x = self.action_model(
-                    x.to(context.dtype),
-                    grid_sizes[0],
-                    grid_sizes[1],
-                    grid_sizes[2],
-                    mouse_cond,
-                    keyboard_cond,
-                    block_mask_mouse,
-                    block_mask_keyboard,
-                    is_causal=True,
-                    kv_cache_mouse=kv_cache_mouse,
-                    kv_cache_keyboard=kv_cache_keyboard,
-                    start_frame=start_frame,
-                    use_rope_keyboard=use_rope_keyboard,
-                    num_frame_per_block=num_frame_per_block,
-                )
-
-            y = self.ffn(
-                (self.norm2(x).unflatten(dim=1, sizes=(num_frames, frame_seqlen)) * (1 + e[4]) + e[3]).flatten(1, 2)
+        # Fuse x + y * e[2] + norm3(x) when eligible
+        norm3_any: Any = self.norm3
+        can_fuse_norm3 = (
+            use_fast
+            and not _module_has_hooks(self.norm3)
+            and hasattr(norm3_any, "weight")
+            and hasattr(norm3_any, "eps")
+            and torch.promote_types(x.dtype, torch.promote_types(y.dtype, e[2].dtype)) == context.dtype
+        )
+        if can_fuse_norm3:
+            x_out_dtype = context.dtype
+            w3 = norm3_any.weight if norm3_any.weight.dtype == x_out_dtype else norm3_any.weight.to(x_out_dtype)
+            b3_raw = getattr(norm3_any, "bias", None)
+            b3 = None if b3_raw is None else (b3_raw if b3_raw.dtype == x_out_dtype else b3_raw.to(x_out_dtype))
+            x, x_ca_in = sf_residual_gate_add_layernorm(
+                x,
+                y,
+                e[2],
+                w3,
+                b3,
+                num_frames=num_frames,
+                frame_seq=frame_seqlen,
+                eps=float(norm3_any.eps),
             )
-
-            x = x + (y.unflatten(dim=1, sizes=(num_frames, frame_seqlen)) * e[5]).flatten(1, 2)
-            return x
+        elif use_fast:
+            x = sf_residual_gate_add(x, y, e[2], num_frames=num_frames, frame_seq=frame_seqlen)
+            x_ca_in = self.norm3(x.to(context.dtype))
+        else:
+            x = x + (y.unflatten(dim=1, sizes=(num_frames, frame_seqlen)) * e[2]).flatten(1, 2)
+            x_ca_in = self.norm3(x.to(context.dtype))
 
         assert grid_sizes.ndim == 1
-        x = cross_attn_ffn(
-            x,
-            context,
-            e,
-            mouse_cond,
-            keyboard_cond,
-            block_mask_mouse,
-            block_mask_keyboard,
-            kv_cache_mouse,
-            kv_cache_keyboard,
-            crossattn_cache,
-            start_frame=current_start // math.prod(grid_sizes[1:]).item(),
-            use_rope_keyboard=use_rope_keyboard,
-            num_frame_per_block=num_frame_per_block,
-        )
+        ca_out = self.cross_attn(x_ca_in, context, crossattn_cache=crossattn_cache)
+        if self.action_model is not None:
+            assert mouse_cond is not None or keyboard_cond is not None
+            x = x + ca_out
+            start_f = (
+                current_start // frame_seqlen_hint
+                if frame_seqlen_hint is not None
+                else current_start // math.prod(grid_sizes[1:]).item()
+            )
+            x = self.action_model(
+                x.to(context.dtype),
+                grid_sizes[0],
+                grid_sizes[1],
+                grid_sizes[2],
+                mouse_cond,
+                keyboard_cond,
+                block_mask_mouse,
+                block_mask_keyboard,
+                is_causal=True,
+                kv_cache_mouse=kv_cache_mouse,
+                kv_cache_keyboard=kv_cache_keyboard,
+                start_frame=start_f,
+                use_rope_keyboard=use_rope_keyboard,
+                num_frame_per_block=num_frame_per_block,
+            )
+            if use_fast and not _module_has_hooks(self.norm2):
+                ffn_in = sf_layernorm_adaln(
+                    x, e[4], e[3], num_frames=num_frames, frame_seq=frame_seqlen, eps=float(self.norm2.eps)
+                )
+            else:
+                ffn_in = (self.norm2(x).unflatten(dim=1, sizes=(num_frames, frame_seqlen)) * (1 + e[4]) + e[3]).flatten(
+                    1, 2
+                )
+        elif use_fast and not _module_has_hooks(self.norm2):
+            x, ffn_in = sf_residual_add_layernorm_adaln(
+                x, ca_out, e[4], e[3], num_frames=num_frames, frame_seq=frame_seqlen, eps=float(self.norm2.eps)
+            )
+        else:
+            x = x + ca_out
+            ffn_in = (self.norm2(x).unflatten(dim=1, sizes=(num_frames, frame_seqlen)) * (1 + e[4]) + e[3]).flatten(
+                1, 2
+            )
+
+        y_ffn = self.ffn(ffn_in)
+        if use_fast:
+            x = sf_residual_gate_add(x, y_ffn, e[5], num_frames=num_frames, frame_seq=frame_seqlen)
+        else:
+            x = x + (y_ffn.unflatten(dim=1, sizes=(num_frames, frame_seqlen)) * e[5]).flatten(1, 2)
         return x
 
 
@@ -382,6 +502,17 @@ class CausalHead(nn.Module):
 
         num_frames, frame_seqlen = e.shape[1], x.shape[1] // e.shape[1]
         e = (self.modulation.unsqueeze(1) + e).chunk(2, dim=2)
+        if (
+            x.is_cuda
+            and not torch.is_grad_enabled()
+            and not self.training
+            and sf_fast_kernels_enabled(self.__dict__.get("_worldfoundry_sf_fast_kernels"))
+            and not _module_has_hooks(self.norm)
+        ):
+            h = sf_layernorm_adaln(
+                x, e[1], e[0], num_frames=num_frames, frame_seq=frame_seqlen, eps=float(self.norm.eps)
+            )
+            return self.head(h)
         x = self.head(self.norm(x).unflatten(dim=1, sizes=(num_frames, frame_seqlen)) * (1 + e[1]) + e[0])
         return x
 
@@ -730,7 +861,9 @@ class CausalWanModel(nn.Module, NativeConfigMixin):
 
         # embeddings
         x = self.patch_embedding(x)
-        grid_sizes = torch.tensor(x.shape[2:], dtype=torch.long)
+        f_grid, h_grid, w_grid = int(x.shape[2]), int(x.shape[3]), int(x.shape[4])
+        frame_seqlen_hint = h_grid * w_grid
+        grid_sizes = torch.tensor((f_grid, h_grid, w_grid), dtype=torch.long)
         x = x.flatten(2).transpose(1, 2)  # B FHW C'
         seq_lens = torch.tensor([u.size(0) for u in x], dtype=torch.long)
         assert seq_lens[0] <= 15 * 1 * 880
@@ -740,6 +873,19 @@ class CausalWanModel(nn.Module, NativeConfigMixin):
         # context
         context_lens = None
         context = self.img_emb(visual_context)
+
+        precomputed_rope = None
+        if x.is_cuda and not torch.is_grad_enabled() and not self.training:
+            start_frame = current_start // frame_seqlen_hint
+            rope_cache = self.__dict__.setdefault("_worldfoundry_rope_cache", {})
+            rope_key = (id(self.freqs), device, f_grid, h_grid, w_grid, start_frame)
+            precomputed_rope = rope_cache.get(rope_key)
+            if precomputed_rope is None:
+                if len(rope_cache) >= 64:
+                    rope_cache.clear()
+                precomputed_rope = _build_action21_rope_cos_sin(self.freqs, f_grid, h_grid, w_grid, start_frame)
+                rope_cache[rope_key] = precomputed_rope
+
         # arguments
         kwargs = {
             "e": e0,
@@ -755,6 +901,8 @@ class CausalWanModel(nn.Module, NativeConfigMixin):
             "block_mask_keyboard": self.block_mask_keyboard,
             "use_rope_keyboard": self.use_rope_keyboard,
             "num_frame_per_block": self.num_frame_per_block,
+            "precomputed_rope": precomputed_rope,
+            "frame_seqlen_hint": frame_seqlen_hint,
         }
 
         def create_custom_forward(module):

@@ -24,9 +24,17 @@ import math
 from typing import Any
 
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
 
+from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.forcing.fast_kernels import (
+    sf_layernorm_adaln,
+    sf_qk_rmsnorm_rope_write_kv,
+    sf_residual_add_layernorm_adaln,
+    sf_residual_gate_add,
+    sf_residual_gate_add_layernorm,
+    sf_rmsnorm,
+)
+from worldfoundry.base_models.diffusion_model.optimizations.qkv_fusion import project_fused_qkv
 from worldfoundry.core.platform.compile_cache import configure_persistent_compile_cache
 
 configure_persistent_compile_cache(namespace="matrix-game-2-triton")
@@ -37,7 +45,16 @@ try:
     from triton.language.extra.cuda import libdevice as _libdevice
 
     @triton.jit
-    def _round_f32_to_bf16(value):
+    def _round_f32_to_bf16(value, USE_BF16_PTX: tl.constexpr):
+        if USE_BF16_PTX:
+            return tl.inline_asm_elementwise(
+                "{ .reg .b16 rounded; cvt.rn.bf16.f32 rounded, $1; mov.b32 $0, {0, rounded}; }",
+                constraints="=f,f",
+                args=[value],
+                dtype=tl.float32,
+                is_pure=True,
+                pack=1,
+            )
         bits = value.to(tl.uint32, bitcast=True)
         rounding_bias = 0x7FFF + ((bits >> 16) & 1)
         rounded = (bits + rounding_bias) & 0xFFFF0000
@@ -55,134 +72,13 @@ try:
         )
 
     @triton.jit
-    def _round_to_dtype(value, dtype: tl.constexpr):
+    def _round_to_dtype(value, dtype: tl.constexpr, USE_BF16_PTX: tl.constexpr = True):
         if dtype == tl.bfloat16:
-            return _round_f32_to_bf16(value)
+            return _round_f32_to_bf16(value, USE_BF16_PTX)
         elif dtype == tl.float16:
             return _round_f32_to_fp16(value)
         else:
             return value
-
-    @triton.jit
-    def _round_to_code(value, dtype_code: tl.constexpr):
-        if dtype_code == 1:
-            return _round_f32_to_bf16(value)
-        elif dtype_code == 2:
-            return _round_f32_to_fp16(value)
-        else:
-            return value
-
-    @triton.jit
-    def _mg2_scale_shift_kernel(
-        normed_ptr,
-        scale_ptr,
-        shift_ptr,
-        out_ptr,
-        rows,
-        frame_seq,
-        hidden_size: tl.constexpr,
-        block: tl.constexpr,
-        mul_dtype_code: tl.constexpr,
-    ):
-        """Bit-exact per-frame AdaLN ``normed * (1 + scale) + shift``."""
-        row = tl.program_id(0)
-        cols = tl.arange(0, block)
-        mask = (row < rows) & (cols < hidden_size)
-
-        x_off = row.to(tl.int64) * hidden_size + cols
-        normed = tl.load(normed_ptr + x_off, mask=mask, other=0.0).to(tl.float32)
-
-        frame_row = row // frame_seq
-        mod_off = frame_row.to(tl.int64) * hidden_size + cols
-        scale_in = tl.load(scale_ptr + mod_off, mask=mask, other=0.0)
-        shift_in = tl.load(shift_ptr + mod_off, mask=mask, other=0.0)
-
-        scale_factor = _round_to_dtype(1.0 + scale_in.to(tl.float32), scale_in.dtype)
-        modulated = _round_to_code(normed * scale_factor, mul_dtype_code)
-        out = modulated + shift_in.to(tl.float32)
-        tl.store(out_ptr + x_off, out, mask=mask)
-
-    @triton.jit
-    def _mg2_residual_gate_add_kernel(
-        x_ptr,
-        y_ptr,
-        gate_ptr,
-        out_ptr,
-        rows,
-        frame_seq,
-        hidden_size: tl.constexpr,
-        block: tl.constexpr,
-        prod_dtype_code: tl.constexpr,
-    ):
-        """Bit-exact ``x + (y * gate)`` where ``gate`` broadcasts across ``frame_seq``."""
-        row = tl.program_id(0)
-        cols = tl.arange(0, block)
-        mask = (row < rows) & (cols < hidden_size)
-
-        off = row.to(tl.int64) * hidden_size + cols
-        x_in = tl.load(x_ptr + off, mask=mask, other=0.0)
-        y_in = tl.load(y_ptr + off, mask=mask, other=0.0)
-
-        frame_row = row // frame_seq
-        gate_off = frame_row.to(tl.int64) * hidden_size + cols
-        gate_in = tl.load(gate_ptr + gate_off, mask=mask, other=0.0)
-
-        prod = _round_to_code(y_in.to(tl.float32) * gate_in.to(tl.float32), prod_dtype_code)
-        out = x_in.to(tl.float32) + prod
-        tl.store(out_ptr + off, out, mask=mask)
-
-    @triton.jit
-    def _mg2_apply_rstd_weight_kernel(
-        x_ptr,
-        rstd_ptr,
-        w_ptr,
-        out_ptr,
-        rows,
-        x_row_stride,
-        hidden_size: tl.constexpr,
-        block: tl.constexpr,
-    ):
-        """Bit-exact ``(x.float() * rstd).type_as(x) * w``."""
-        row = tl.program_id(0)
-        cols = tl.arange(0, block)
-        mask = (row < rows) & (cols < hidden_size)
-
-        x_off = row.to(tl.int64) * x_row_stride + cols
-        x_in = tl.load(x_ptr + x_off, mask=mask, other=0.0)
-        rstd = tl.load(rstd_ptr + row, mask=row < rows, other=1.0).to(tl.float32)
-        normed = _round_to_dtype(x_in.to(tl.float32) * rstd, x_in.dtype)
-        w = tl.load(w_ptr + cols, mask=mask, other=0.0).to(tl.float32)
-        out = normed * w
-        out_off = row.to(tl.int64) * hidden_size + cols
-        tl.store(out_ptr + out_off, out, mask=mask)
-
-    @triton.jit
-    def _mg2_rmsnorm_fp64_kernel(
-        x_ptr,
-        w_ptr,
-        out_ptr,
-        rows,
-        x_row_stride,
-        eps,
-        hidden_size: tl.constexpr,
-        block: tl.constexpr,
-    ):
-        """Single-pass FP64-accumulated ``WanRMSNorm``."""
-        row = tl.program_id(0)
-        cols = tl.arange(0, block)
-        mask = (row < rows) & (cols < hidden_size)
-
-        x_off = row.to(tl.int64) * x_row_stride + cols
-        x_in = tl.load(x_ptr + x_off, mask=mask, other=0.0)
-        x_f = x_in.to(tl.float32)
-        x_64 = x_f.to(tl.float64)
-        mean_sq = (tl.sum(x_64 * x_64, axis=0) / hidden_size).to(tl.float32)
-        rstd = _libdevice.rsqrt(mean_sq + eps)
-        normed = _round_to_dtype(x_f * rstd, x_in.dtype)
-        w = tl.load(w_ptr + cols, mask=mask, other=0.0).to(tl.float32)
-        out = normed * w
-        out_off = row.to(tl.int64) * hidden_size + cols
-        tl.store(out_ptr + out_off, out, mask=mask)
 
     @triton.jit
     def _mg2_qk_apply_rstd_rope_write_kv_kernel(
@@ -204,57 +100,59 @@ try:
         dst_token_offset,
         hidden_size: tl.constexpr,
         half_head_dim: tl.constexpr,
+        block: tl.constexpr,
         block_pairs: tl.constexpr,
+        USE_BF16_PTX: tl.constexpr,
     ):
-        """Bit-exact fused Q/K WanRMSNorm + FP64 3D RoPE + KV cache write."""
+        """Bit-exact coalesced 128-bit Q/K WanRMSNorm + FP64 3D RoPE + KV cache write."""
         row = tl.program_id(0)
         batch_idx = row // seq_len
         tok_idx = row % seq_len
 
+        cols = tl.arange(0, block)
+        cmask = cols < hidden_size
         pair = tl.arange(0, block_pairs)
-        even_col = pair * 2
-        odd_col = even_col + 1
-        pmask = odd_col < hidden_size
+        pmask = pair < (hidden_size // 2)
 
         q_base = row.to(tl.int64) * q_row_stride
         k_base = row.to(tl.int64) * k_row_stride
 
-        qe_in = tl.load(q_in_ptr + q_base + even_col, mask=pmask, other=0.0)
-        qo_in = tl.load(q_in_ptr + q_base + odd_col, mask=pmask, other=0.0)
-        ke_in = tl.load(k_in_ptr + k_base + even_col, mask=pmask, other=0.0)
-        ko_in = tl.load(k_in_ptr + k_base + odd_col, mask=pmask, other=0.0)
-
+        q_in = tl.load(q_in_ptr + q_base + cols, mask=cmask, other=0.0)
+        k_in = tl.load(k_in_ptr + k_base + cols, mask=cmask, other=0.0)
         q_rstd = tl.load(q_rstd_ptr + row).to(tl.float32)
         k_rstd = tl.load(k_rstd_ptr + row).to(tl.float32)
+        qw = tl.load(q_w_ptr + cols, mask=cmask, other=0.0).to(tl.float32)
+        kw = tl.load(k_w_ptr + cols, mask=cmask, other=0.0).to(tl.float32)
 
-        qwe = tl.load(q_w_ptr + even_col, mask=pmask, other=0.0).to(tl.float32)
-        qwo = tl.load(q_w_ptr + odd_col, mask=pmask, other=0.0).to(tl.float32)
-        kwe = tl.load(k_w_ptr + even_col, mask=pmask, other=0.0).to(tl.float32)
-        kwo = tl.load(k_w_ptr + odd_col, mask=pmask, other=0.0).to(tl.float32)
+        q_n = _round_to_dtype(
+            _round_to_dtype(q_in.to(tl.float32) * q_rstd, q_in.dtype, USE_BF16_PTX) * qw, q_in.dtype, USE_BF16_PTX
+        )
+        k_n = _round_to_dtype(
+            _round_to_dtype(k_in.to(tl.float32) * k_rstd, k_in.dtype, USE_BF16_PTX) * kw, k_in.dtype, USE_BF16_PTX
+        )
 
-        qe = _round_to_dtype(_round_to_dtype(qe_in.to(tl.float32) * q_rstd, qe_in.dtype) * qwe, qe_in.dtype)
-        qo = _round_to_dtype(_round_to_dtype(qo_in.to(tl.float32) * q_rstd, qo_in.dtype) * qwo, qo_in.dtype)
-        ke = _round_to_dtype(_round_to_dtype(ke_in.to(tl.float32) * k_rstd, ke_in.dtype) * kwe, ke_in.dtype)
-        ko = _round_to_dtype(_round_to_dtype(ko_in.to(tl.float32) * k_rstd, ko_in.dtype) * kwo, ko_in.dtype)
+        qe, qo = tl.split(tl.reshape(q_n, (block_pairs, 2)))
+        ke, ko = tl.split(tl.reshape(k_n, (block_pairs, 2)))
 
         pair_in_head = pair % half_head_dim
         cs_off = tok_idx.to(tl.int64) * half_head_dim + pair_in_head
         c = tl.load(cos_ptr + cs_off, mask=pmask, other=1.0).to(tl.float64)
         s = tl.load(sin_ptr + cs_off, mask=pmask, other=0.0).to(tl.float64)
 
-        rqe = (qe.to(tl.float64) * c - qo.to(tl.float64) * s).to(tl.float32).to(qe_in.dtype)
-        rqo = (qe.to(tl.float64) * s + qo.to(tl.float64) * c).to(tl.float32).to(qo_in.dtype)
-        rke = (ke.to(tl.float64) * c - ko.to(tl.float64) * s).to(tl.float32).to(ke_in.dtype)
-        rko = (ke.to(tl.float64) * s + ko.to(tl.float64) * c).to(tl.float32).to(ko_in.dtype)
+        rqe = (qe.to(tl.float64) * c - qo.to(tl.float64) * s).to(tl.float32).to(q_in.dtype)
+        rqo = (qe.to(tl.float64) * s + qo.to(tl.float64) * c).to(tl.float32).to(q_in.dtype)
+        rke = (ke.to(tl.float64) * c - ko.to(tl.float64) * s).to(tl.float32).to(k_in.dtype)
+        rko = (ke.to(tl.float64) * s + ko.to(tl.float64) * c).to(tl.float32).to(k_in.dtype)
+
+        rq = tl.reshape(tl.join(rqe, rqo), (block,))
+        rk = tl.reshape(tl.join(rke, rko), (block,))
 
         q_out_base = row.to(tl.int64) * hidden_size
         k_dst_base = (
             batch_idx.to(tl.int64) * k_dst_batch_stride + (dst_token_offset + tok_idx).to(tl.int64) * k_dst_seq_stride
         )
-        tl.store(q_out_ptr + q_out_base + even_col, rqe, mask=pmask)
-        tl.store(q_out_ptr + q_out_base + odd_col, rqo, mask=pmask)
-        tl.store(k_dst_ptr + k_dst_base + even_col, rke, mask=pmask)
-        tl.store(k_dst_ptr + k_dst_base + odd_col, rko, mask=pmask)
+        tl.store(q_out_ptr + q_out_base + cols, rq, mask=cmask)
+        tl.store(k_dst_ptr + k_dst_base + cols, rk, mask=cmask)
 
     @triton.jit
     def _mg2_qk_rmsnorm_rope_write_kv_fp64_kernel(
@@ -275,68 +173,61 @@ try:
         eps,
         hidden_size: tl.constexpr,
         half_head_dim: tl.constexpr,
+        block: tl.constexpr,
         block_pairs: tl.constexpr,
+        USE_BF16_PTX: tl.constexpr,
     ):
-        """Single-pass FP64-accumulated Q/K WanRMSNorm + FP64 3D RoPE + KV write."""
+        """Single-pass coalesced 128-bit Q/K WanRMSNorm + FP64 3D RoPE + KV write."""
         row = tl.program_id(0)
         batch_idx = row // seq_len
         tok_idx = row % seq_len
 
+        cols = tl.arange(0, block)
+        cmask = cols < hidden_size
         pair = tl.arange(0, block_pairs)
-        even_col = pair * 2
-        odd_col = even_col + 1
-        pmask = odd_col < hidden_size
+        pmask = pair < (hidden_size // 2)
 
         q_base = row.to(tl.int64) * q_row_stride
         k_base = row.to(tl.int64) * k_row_stride
 
-        qe_in = tl.load(q_in_ptr + q_base + even_col, mask=pmask, other=0.0)
-        qo_in = tl.load(q_in_ptr + q_base + odd_col, mask=pmask, other=0.0)
-        ke_in = tl.load(k_in_ptr + k_base + even_col, mask=pmask, other=0.0)
-        ko_in = tl.load(k_in_ptr + k_base + odd_col, mask=pmask, other=0.0)
+        q_in = tl.load(q_in_ptr + q_base + cols, mask=cmask, other=0.0)
+        k_in = tl.load(k_in_ptr + k_base + cols, mask=cmask, other=0.0)
+        qf = q_in.to(tl.float32)
+        kf = k_in.to(tl.float32)
 
-        qe_f = qe_in.to(tl.float32)
-        qo_f = qo_in.to(tl.float32)
-        ke_f = ke_in.to(tl.float32)
-        ko_f = ko_in.to(tl.float32)
-
-        qe_64 = qe_f.to(tl.float64)
-        qo_64 = qo_f.to(tl.float64)
-        ke_64 = ke_f.to(tl.float64)
-        ko_64 = ko_f.to(tl.float64)
-        q_mean_sq = (tl.sum(qe_64 * qe_64 + qo_64 * qo_64, axis=0) / hidden_size).to(tl.float32)
-        k_mean_sq = (tl.sum(ke_64 * ke_64 + ko_64 * ko_64, axis=0) / hidden_size).to(tl.float32)
+        q_mean_sq = tl.sum(qf * qf, axis=0) / hidden_size
+        k_mean_sq = tl.sum(kf * kf, axis=0) / hidden_size
         q_rstd = _libdevice.rsqrt(q_mean_sq + eps)
         k_rstd = _libdevice.rsqrt(k_mean_sq + eps)
 
-        qwe = tl.load(q_w_ptr + even_col, mask=pmask, other=0.0).to(tl.float32)
-        qwo = tl.load(q_w_ptr + odd_col, mask=pmask, other=0.0).to(tl.float32)
-        kwe = tl.load(k_w_ptr + even_col, mask=pmask, other=0.0).to(tl.float32)
-        kwo = tl.load(k_w_ptr + odd_col, mask=pmask, other=0.0).to(tl.float32)
+        qw = tl.load(q_w_ptr + cols, mask=cmask, other=0.0).to(tl.float32)
+        kw = tl.load(k_w_ptr + cols, mask=cmask, other=0.0).to(tl.float32)
 
-        qe = _round_to_dtype(_round_to_dtype(qe_f * q_rstd, qe_in.dtype) * qwe, qe_in.dtype)
-        qo = _round_to_dtype(_round_to_dtype(qo_f * q_rstd, qo_in.dtype) * qwo, qo_in.dtype)
-        ke = _round_to_dtype(_round_to_dtype(ke_f * k_rstd, ke_in.dtype) * kwe, ke_in.dtype)
-        ko = _round_to_dtype(_round_to_dtype(ko_f * k_rstd, ko_in.dtype) * kwo, ko_in.dtype)
+        q_n = _round_to_dtype(_round_to_dtype(qf * q_rstd, q_in.dtype, USE_BF16_PTX) * qw, q_in.dtype, USE_BF16_PTX)
+        k_n = _round_to_dtype(_round_to_dtype(kf * k_rstd, k_in.dtype, USE_BF16_PTX) * kw, k_in.dtype, USE_BF16_PTX)
+
+        qe, qo = tl.split(tl.reshape(q_n, (block_pairs, 2)))
+        ke, ko = tl.split(tl.reshape(k_n, (block_pairs, 2)))
 
         pair_in_head = pair % half_head_dim
         cs_off = tok_idx.to(tl.int64) * half_head_dim + pair_in_head
         c = tl.load(cos_ptr + cs_off, mask=pmask, other=1.0).to(tl.float64)
         s = tl.load(sin_ptr + cs_off, mask=pmask, other=0.0).to(tl.float64)
 
-        rqe = (qe.to(tl.float64) * c - qo.to(tl.float64) * s).to(tl.float32).to(qe_in.dtype)
-        rqo = (qe.to(tl.float64) * s + qo.to(tl.float64) * c).to(tl.float32).to(qo_in.dtype)
-        rke = (ke.to(tl.float64) * c - ko.to(tl.float64) * s).to(tl.float32).to(ke_in.dtype)
-        rko = (ke.to(tl.float64) * s + ko.to(tl.float64) * c).to(tl.float32).to(ko_in.dtype)
+        rqe = (qe.to(tl.float64) * c - qo.to(tl.float64) * s).to(tl.float32).to(q_in.dtype)
+        rqo = (qe.to(tl.float64) * s + qo.to(tl.float64) * c).to(tl.float32).to(q_in.dtype)
+        rke = (ke.to(tl.float64) * c - ko.to(tl.float64) * s).to(tl.float32).to(k_in.dtype)
+        rko = (ke.to(tl.float64) * s + ko.to(tl.float64) * c).to(tl.float32).to(k_in.dtype)
+
+        rq = tl.reshape(tl.join(rqe, rqo), (block,))
+        rk = tl.reshape(tl.join(rke, rko), (block,))
 
         q_out_base = row.to(tl.int64) * hidden_size
         k_dst_base = (
             batch_idx.to(tl.int64) * k_dst_batch_stride + (dst_token_offset + tok_idx).to(tl.int64) * k_dst_seq_stride
         )
-        tl.store(q_out_ptr + q_out_base + even_col, rqe, mask=pmask)
-        tl.store(q_out_ptr + q_out_base + odd_col, rqo, mask=pmask)
-        tl.store(k_dst_ptr + k_dst_base + even_col, rke, mask=pmask)
-        tl.store(k_dst_ptr + k_dst_base + odd_col, rko, mask=pmask)
+        tl.store(q_out_ptr + q_out_base + cols, rq, mask=cmask)
+        tl.store(k_dst_ptr + k_dst_base + cols, rk, mask=cmask)
 
     @triton.jit
     def _mg2_mouse_qkv_norm_rope_kv_kernel(
@@ -358,8 +249,9 @@ try:
         NUM_HEADS: tl.constexpr,
         HEAD_DIM: tl.constexpr,
         HALF_D: tl.constexpr,
+        USE_BF16_PTX: tl.constexpr,
     ):
-        """Fused mouse QKV split + ActionModule RMSNorm + FP32 interleaved RoPE + KV write.
+        """Coalesced 128-bit mouse QKV split + ActionModule RMSNorm + FP32 interleaved RoPE + KV write.
 
         Input ``qkv`` has shape ``[BS, T, 3 * NUM_HEADS * HEAD_DIM]`` with ``K=3`` outermost.
         Outputs ``q_out`` ``[BS, T, NUM_HEADS, HEAD_DIM]`` and writes ``k, v`` into
@@ -370,66 +262,61 @@ try:
         bs_idx = bs_t // num_frames
         t_idx = bs_t % num_frames
 
-        pair = tl.arange(0, HALF_D)
-        even = pair * 2
-        odd = even + 1
-
+        d_off = tl.arange(0, HEAD_DIM)
         hidden = NUM_HEADS * HEAD_DIM
         row_base = bs_idx.to(tl.int64) * qkv_stride_bs + t_idx.to(tl.int64) * qkv_stride_t
         q_base = row_base + head.to(tl.int64) * HEAD_DIM
         k_base = row_base + hidden + head.to(tl.int64) * HEAD_DIM
         v_base = row_base + 2 * hidden + head.to(tl.int64) * HEAD_DIM
 
-        qe_raw = tl.load(qkv_ptr + q_base + even)
-        qo_raw = tl.load(qkv_ptr + q_base + odd)
-        ke_raw = tl.load(qkv_ptr + k_base + even)
-        ko_raw = tl.load(qkv_ptr + k_base + odd)
-        ve_raw = tl.load(qkv_ptr + v_base + even)
-        vo_raw = tl.load(qkv_ptr + v_base + odd)
-
-        # ActionModule.WanRMSNorm: x * rsqrt(x.pow(2).mean(-1) + eps) computed in x.dtype (BF16/FP16)
-        qe_f = qe_raw.to(tl.float32)
-        qo_f = qo_raw.to(tl.float32)
-        ke_f = ke_raw.to(tl.float32)
-        ko_f = ko_raw.to(tl.float32)
-        q_sq = _round_to_dtype(qe_f * qe_f, qe_raw.dtype).to(tl.float64) + _round_to_dtype(
-            qo_f * qo_f, qo_raw.dtype
-        ).to(tl.float64)
-        k_sq = _round_to_dtype(ke_f * ke_f, ke_raw.dtype).to(tl.float64) + _round_to_dtype(
-            ko_f * ko_f, ko_raw.dtype
-        ).to(tl.float64)
-        q_mean = _round_to_dtype((tl.sum(q_sq, axis=0) / HEAD_DIM).to(tl.float32), qe_raw.dtype)
-        k_mean = _round_to_dtype((tl.sum(k_sq, axis=0) / HEAD_DIM).to(tl.float32), ke_raw.dtype)
-        q_rstd = _round_to_dtype(_libdevice.rsqrt(_round_to_dtype(q_mean + eps, qe_raw.dtype)), qe_raw.dtype)
-        k_rstd = _round_to_dtype(_libdevice.rsqrt(_round_to_dtype(k_mean + eps, ke_raw.dtype)), ke_raw.dtype)
-        qe_n = _round_to_dtype(qe_f * q_rstd, qe_raw.dtype)
-        qo_n = _round_to_dtype(qo_f * q_rstd, qo_raw.dtype)
-        ke_n = _round_to_dtype(ke_f * k_rstd, ke_raw.dtype)
-        ko_n = _round_to_dtype(ko_f * k_rstd, ko_raw.dtype)
-
-        # Interleaved FP32 RoPE: cos/sin have repeated pairs [c0, c0, c1, c1, ...]
-        cs_base = t_idx.to(tl.int64) * cos_stride_t + even
-        c = tl.load(cos_ptr + cs_base).to(tl.float32)
-        s = tl.load(sin_ptr + cs_base).to(tl.float32)
-
-        rqe = (qe_n * c - qo_n * s).to(qe_raw.dtype)
-        rqo = (qe_n * s + qo_n * c).to(qo_raw.dtype)
-        rke = (ke_n * c - ko_n * s).to(ke_raw.dtype)
-        rko = (ke_n * s + ko_n * c).to(ko_raw.dtype)
-
-        q_out_base = (bs_t.to(tl.int64) * NUM_HEADS + head.to(tl.int64)) * HEAD_DIM
-        tl.store(q_out_ptr + q_out_base + even, rqe)
-        tl.store(q_out_ptr + q_out_base + odd, rqo)
+        q_raw = tl.load(qkv_ptr + q_base + d_off)
+        k_raw = tl.load(qkv_ptr + k_base + d_off)
+        v_raw = tl.load(qkv_ptr + v_base + d_off)
 
         kv_out_base = (
             bs_idx.to(tl.int64) * kv_stride_bs
             + (dst_frame_offset + t_idx).to(tl.int64) * kv_stride_t
             + head.to(tl.int64) * kv_stride_h
         )
-        tl.store(k_dst_ptr + kv_out_base + even, rke)
-        tl.store(k_dst_ptr + kv_out_base + odd, rko)
-        tl.store(v_dst_ptr + kv_out_base + even, ve_raw)
-        tl.store(v_dst_ptr + kv_out_base + odd, vo_raw)
+        tl.store(v_dst_ptr + kv_out_base + d_off, v_raw)
+
+        # ActionModule.WanRMSNorm: x * rsqrt(x.pow(2).mean(-1) + eps) computed in x.dtype (BF16/FP16)
+        q_f = q_raw.to(tl.float32)
+        k_f = k_raw.to(tl.float32)
+        q_sq = _round_to_dtype(q_f * q_f, q_raw.dtype, USE_BF16_PTX)
+        k_sq = _round_to_dtype(k_f * k_f, k_raw.dtype, USE_BF16_PTX)
+        q_mean = _round_to_dtype(tl.sum(q_sq, axis=0) / HEAD_DIM, q_raw.dtype, USE_BF16_PTX)
+        k_mean = _round_to_dtype(tl.sum(k_sq, axis=0) / HEAD_DIM, k_raw.dtype, USE_BF16_PTX)
+        q_rstd = _round_to_dtype(
+            _libdevice.rsqrt(_round_to_dtype(q_mean + eps, q_raw.dtype, USE_BF16_PTX)), q_raw.dtype, USE_BF16_PTX
+        )
+        k_rstd = _round_to_dtype(
+            _libdevice.rsqrt(_round_to_dtype(k_mean + eps, k_raw.dtype, USE_BF16_PTX)), k_raw.dtype, USE_BF16_PTX
+        )
+        q_n = _round_to_dtype(q_f * q_rstd, q_raw.dtype, USE_BF16_PTX)
+        k_n = _round_to_dtype(k_f * k_rstd, k_raw.dtype, USE_BF16_PTX)
+
+        qe_n, qo_n = tl.split(tl.reshape(q_n, (HALF_D, 2)))
+        ke_n, ko_n = tl.split(tl.reshape(k_n, (HALF_D, 2)))
+
+        # Interleaved FP32 RoPE: cos/sin have repeated pairs [c0, c0, c1, c1, ...]
+        cs_base = t_idx.to(tl.int64) * cos_stride_t + d_off
+        c_full = tl.load(cos_ptr + cs_base).to(tl.float32)
+        s_full = tl.load(sin_ptr + cs_base).to(tl.float32)
+        c, _ = tl.split(tl.reshape(c_full, (HALF_D, 2)))
+        s, _ = tl.split(tl.reshape(s_full, (HALF_D, 2)))
+
+        rqe = (qe_n * c - qo_n * s).to(q_raw.dtype)
+        rqo = (qe_n * s + qo_n * c).to(q_raw.dtype)
+        rke = (ke_n * c - ko_n * s).to(k_raw.dtype)
+        rko = (ke_n * s + ko_n * c).to(k_raw.dtype)
+
+        rq = tl.reshape(tl.join(rqe, rqo), (HEAD_DIM,))
+        rk = tl.reshape(tl.join(rke, rko), (HEAD_DIM,))
+
+        q_out_base = (bs_t.to(tl.int64) * NUM_HEADS + head.to(tl.int64)) * HEAD_DIM
+        tl.store(q_out_ptr + q_out_base + d_off, rq)
+        tl.store(k_dst_ptr + kv_out_base + d_off, rk)
 
     @triton.jit
     def _mg2_mouse_small_attn_kernel(
@@ -501,8 +388,9 @@ try:
         NUM_HEADS: tl.constexpr,
         HEAD_DIM: tl.constexpr,
         HALF_D: tl.constexpr,
+        USE_BF16_PTX: tl.constexpr,
     ):
-        """Fused keyboard Q RMSNorm + per-frame FP32 RoPE + ``[B, T*S, H, D] -> [B, H, T*S, D]`` layout."""
+        """Coalesced 128-bit keyboard Q RMSNorm + per-frame FP32 RoPE + ``[B, T*S, H, D] -> [B, H, T*S, D]``."""
         row = tl.program_id(0)
         head = tl.program_id(1)
         seq_len = num_frames * spatial_s
@@ -510,34 +398,31 @@ try:
         tok_idx = row % seq_len
         t_idx = tok_idx // spatial_s
 
-        pair = tl.arange(0, HALF_D)
-        even = pair * 2
-        odd = even + 1
-
+        d_off = tl.arange(0, HEAD_DIM)
         in_base = (row.to(tl.int64) * NUM_HEADS + head.to(tl.int64)) * HEAD_DIM
-        qe_raw = tl.load(q_in_ptr + in_base + even)
-        qo_raw = tl.load(q_in_ptr + in_base + odd)
+        q_raw = tl.load(q_in_ptr + in_base + d_off)
 
-        qe_f = qe_raw.to(tl.float32)
-        qo_f = qo_raw.to(tl.float32)
-        q_sq = _round_to_dtype(qe_f * qe_f, qe_raw.dtype).to(tl.float64) + _round_to_dtype(
-            qo_f * qo_f, qo_raw.dtype
-        ).to(tl.float64)
-        q_mean = _round_to_dtype((tl.sum(q_sq, axis=0) / HEAD_DIM).to(tl.float32), qe_raw.dtype)
-        rstd = _round_to_dtype(_libdevice.rsqrt(_round_to_dtype(q_mean + eps, qe_raw.dtype)), qe_raw.dtype)
-        qe_n = _round_to_dtype(qe_f * rstd, qe_raw.dtype)
-        qo_n = _round_to_dtype(qo_f * rstd, qo_raw.dtype)
+        q_f = q_raw.to(tl.float32)
+        q_sq = _round_to_dtype(q_f * q_f, q_raw.dtype, USE_BF16_PTX)
+        q_mean = _round_to_dtype(tl.sum(q_sq, axis=0) / HEAD_DIM, q_raw.dtype, USE_BF16_PTX)
+        rstd = _round_to_dtype(
+            _libdevice.rsqrt(_round_to_dtype(q_mean + eps, q_raw.dtype, USE_BF16_PTX)), q_raw.dtype, USE_BF16_PTX
+        )
+        q_n = _round_to_dtype(q_f * rstd, q_raw.dtype, USE_BF16_PTX)
+        qe_n, qo_n = tl.split(tl.reshape(q_n, (HALF_D, 2)))
 
-        cs_base = t_idx.to(tl.int64) * cos_stride_t + even
-        c = tl.load(cos_ptr + cs_base).to(tl.float32)
-        s = tl.load(sin_ptr + cs_base).to(tl.float32)
+        cs_base = t_idx.to(tl.int64) * cos_stride_t + d_off
+        c_full = tl.load(cos_ptr + cs_base).to(tl.float32)
+        s_full = tl.load(sin_ptr + cs_base).to(tl.float32)
+        c, _ = tl.split(tl.reshape(c_full, (HALF_D, 2)))
+        s, _ = tl.split(tl.reshape(s_full, (HALF_D, 2)))
 
-        rqe = (qe_n * c - qo_n * s).to(qe_raw.dtype)
-        rqo = (qe_n * s + qo_n * c).to(qo_raw.dtype)
+        rqe = (qe_n * c - qo_n * s).to(q_raw.dtype)
+        rqo = (qe_n * s + qo_n * c).to(q_raw.dtype)
+        rq = tl.reshape(tl.join(rqe, rqo), (HEAD_DIM,))
 
         out_base = ((b_idx.to(tl.int64) * NUM_HEADS + head.to(tl.int64)) * seq_len + tok_idx.to(tl.int64)) * HEAD_DIM
-        tl.store(q_out_ptr + out_base + even, rqe)
-        tl.store(q_out_ptr + out_base + odd, rqo)
+        tl.store(q_out_ptr + out_base + d_off, rq)
 
     @triton.jit
     def _mg2_kb_rope_bhsd_kernel(
@@ -552,7 +437,7 @@ try:
         HEAD_DIM: tl.constexpr,
         HALF_D: tl.constexpr,
     ):
-        """Bit-exact per-frame FP32 RoPE + ``[B, T*S, H, D] -> [B, H, T*S, D]`` on pre-normed Q."""
+        """Coalesced 128-bit per-frame FP32 RoPE + ``[B, T*S, H, D] -> [B, H, T*S, D]`` on pre-normed Q."""
         row = tl.program_id(0)
         head = tl.program_id(1)
         seq_len = num_frames * spatial_s
@@ -560,26 +445,23 @@ try:
         tok_idx = row % seq_len
         t_idx = tok_idx // spatial_s
 
-        pair = tl.arange(0, HALF_D)
-        even = pair * 2
-        odd = even + 1
-
+        d_off = tl.arange(0, HEAD_DIM)
         in_base = (row.to(tl.int64) * NUM_HEADS + head.to(tl.int64)) * HEAD_DIM
-        qe_raw = tl.load(q_in_ptr + in_base + even)
-        qo_raw = tl.load(q_in_ptr + in_base + odd)
+        q_raw = tl.load(q_in_ptr + in_base + d_off)
+        qe_f, qo_f = tl.split(tl.reshape(q_raw.to(tl.float32), (HALF_D, 2)))
 
-        cs_base = t_idx.to(tl.int64) * cos_stride_t + even
-        c = tl.load(cos_ptr + cs_base).to(tl.float32)
-        s = tl.load(sin_ptr + cs_base).to(tl.float32)
+        cs_base = t_idx.to(tl.int64) * cos_stride_t + d_off
+        c_full = tl.load(cos_ptr + cs_base).to(tl.float32)
+        s_full = tl.load(sin_ptr + cs_base).to(tl.float32)
+        c, _ = tl.split(tl.reshape(c_full, (HALF_D, 2)))
+        s, _ = tl.split(tl.reshape(s_full, (HALF_D, 2)))
 
-        qe_f = qe_raw.to(tl.float32)
-        qo_f = qo_raw.to(tl.float32)
-        rqe = (qe_f * c - qo_f * s).to(qe_raw.dtype)
-        rqo = (qe_f * s + qo_f * c).to(qo_raw.dtype)
+        rqe = (qe_f * c - qo_f * s).to(q_raw.dtype)
+        rqo = (qe_f * s + qo_f * c).to(q_raw.dtype)
+        rq = tl.reshape(tl.join(rqe, rqo), (HEAD_DIM,))
 
         out_base = ((b_idx.to(tl.int64) * NUM_HEADS + head.to(tl.int64)) * seq_len + tok_idx.to(tl.int64)) * HEAD_DIM
-        tl.store(q_out_ptr + out_base + even, rqe)
-        tl.store(q_out_ptr + out_base + odd, rqo)
+        tl.store(q_out_ptr + out_base + d_off, rq)
 
     _TRITON_AVAILABLE = True
 except Exception:
@@ -609,42 +491,8 @@ def hopper_fa3_usable(device: torch.device | str | None = None) -> bool:
     return _FA3_MODULE is not None and callable(getattr(_FA3_MODULE, "flash_attn_func", None))
 
 
-def _dtype_to_round_code(dtype: torch.dtype) -> int:
-    if dtype == torch.bfloat16:
-        return 1
-    if dtype == torch.float16:
-        return 2
-    return 0
-
-
-def _prepare_frame_mod_tensor(
-    t: torch.Tensor,
-    *,
-    batch: int,
-    num_frames: int,
-    hidden: int,
-    device: torch.device,
-) -> torch.Tensor | None:
-    """Validate and materialize a ``[batch * num_frames, hidden]`` per-frame modulation tensor."""
-    if not t.is_cuda or t.device != device or t.shape[-1] != hidden:
-        return None
-    if t.ndim == 4:
-        if t.shape[2] != 1:
-            return None
-        b_s, f_s = int(t.shape[0]), int(t.shape[1])
-        if b_s not in (1, batch) or f_s not in (1, num_frames):
-            return None
-        if b_s == batch and f_s == num_frames:
-            return t.reshape(batch * num_frames, hidden).contiguous()
-        return t.expand(batch, num_frames, 1, hidden).reshape(batch * num_frames, hidden).contiguous()
-    if t.ndim == 3:
-        b_s, f_s = int(t.shape[0]), int(t.shape[1])
-        if b_s not in (1, batch) or f_s not in (1, num_frames):
-            return None
-        if b_s == batch and f_s == num_frames:
-            return t.reshape(batch * num_frames, hidden).contiguous()
-        return t.expand(batch, num_frames, hidden).reshape(batch * num_frames, hidden).contiguous()
-    return None
+def _use_bf16_ptx(device: torch.device) -> bool:
+    return device.type == "cuda" and torch.cuda.get_device_capability(device)[0] >= 8
 
 
 def mg2_layernorm_adaln(
@@ -655,49 +503,19 @@ def mg2_layernorm_adaln(
     num_frames: int,
     frame_seq: int,
     eps: float = 1e-6,
+    exact: bool = True,
 ) -> torch.Tensor:
-    """Bit-exact ``F.layer_norm`` + fused Triton per-frame AdaLN ``(1 + scale) + shift``."""
-    hidden = int(x.shape[-1])
-    if (
-        _TRITON_AVAILABLE
-        and x.is_cuda
-        and not torch.is_grad_enabled()
-        and x.ndim == 3
-        and x.is_contiguous()
-        and hidden <= 4096
-        and num_frames > 0
-        and frame_seq > 0
-        and x.shape[1] == num_frames * frame_seq
-    ):
-        batch = int(x.shape[0])
-        scale_c = _prepare_frame_mod_tensor(scale, batch=batch, num_frames=num_frames, hidden=hidden, device=x.device)
-        shift_c = _prepare_frame_mod_tensor(shift, batch=batch, num_frames=num_frames, hidden=hidden, device=x.device)
-        if scale_c is not None and shift_c is not None:
-            normed = F.layer_norm(x, (hidden,), weight=None, bias=None, eps=eps).type_as(x)
-            mul_dtype = torch.promote_types(x.dtype, scale.dtype)
-            out_dtype = torch.promote_types(mul_dtype, shift.dtype)
-            mul_code = _dtype_to_round_code(mul_dtype)
-            out = torch.empty_like(x, dtype=out_dtype)
-            rows = int(x.shape[0] * x.shape[1])
-            block = triton.next_power_of_2(hidden)
-            _mg2_scale_shift_kernel[(rows,)](
-                normed,
-                scale_c,
-                shift_c,
-                out,
-                rows,
-                frame_seq,
-                hidden_size=hidden,
-                block=block,
-                mul_dtype_code=mul_code,
-                num_warps=8 if block >= 1024 else 4,
-                enable_fp_fusion=False,
-            )
-            return out
-    normed = F.layer_norm(x, (hidden,), weight=None, bias=None, eps=eps).type_as(x)
-    scale_b = scale.unsqueeze(2) if scale.ndim == 3 else scale
-    shift_b = shift.unsqueeze(2) if shift.ndim == 3 else shift
-    return (normed.unflatten(1, (num_frames, frame_seq)) * (1 + scale_b) + shift_b).flatten(1, 2)
+    """``WanLayerNorm`` + fused Triton per-frame AdaLN ``(1 + scale) + shift`` (zero mod copies)."""
+    return sf_layernorm_adaln(
+        x,
+        scale,
+        shift,
+        num_frames=num_frames,
+        frame_seq=frame_seq,
+        eps=eps,
+        exact=exact,
+        enabled=True,
+    )
 
 
 def mg2_residual_gate_add(
@@ -708,100 +526,20 @@ def mg2_residual_gate_add(
     num_frames: int,
     frame_seq: int,
 ) -> torch.Tensor:
-    """Bit-exact fused ``x + (y * gate)`` with per-frame gate broadcast."""
-    hidden = int(x.shape[-1])
-    if (
-        _TRITON_AVAILABLE
-        and x.is_cuda
-        and not torch.is_grad_enabled()
-        and x.ndim == 3
-        and y.shape == x.shape
-        and y.device == x.device
-        and x.is_contiguous()
-        and y.is_contiguous()
-        and hidden <= 4096
-        and num_frames > 0
-        and frame_seq > 0
-        and x.shape[1] == num_frames * frame_seq
-    ):
-        batch = int(x.shape[0])
-        gate_c = _prepare_frame_mod_tensor(gate, batch=batch, num_frames=num_frames, hidden=hidden, device=x.device)
-        if gate_c is not None:
-            prod_dtype = torch.promote_types(y.dtype, gate.dtype)
-            out_dtype = torch.promote_types(x.dtype, prod_dtype)
-            prod_code = _dtype_to_round_code(prod_dtype)
-            out = torch.empty_like(x, dtype=out_dtype)
-            rows = int(x.shape[0] * x.shape[1])
-            block = triton.next_power_of_2(hidden)
-            _mg2_residual_gate_add_kernel[(rows,)](
-                x,
-                y,
-                gate_c,
-                out,
-                rows,
-                frame_seq,
-                hidden_size=hidden,
-                block=block,
-                prod_dtype_code=prod_code,
-                num_warps=8 if block >= 1024 else 4,
-                enable_fp_fusion=False,
-            )
-            return out
-    gate_b = gate.unsqueeze(2) if gate.ndim == 3 else gate
-    return x + (y.unflatten(1, (num_frames, frame_seq)) * gate_b).flatten(1, 2)
+    """Bit-exact fused ``x + (y * gate)`` with strided per-frame gate broadcast (zero copies)."""
+    return sf_residual_gate_add(
+        x,
+        y,
+        gate,
+        num_frames=num_frames,
+        frame_seq=frame_seq,
+        enabled=True,
+    )
 
 
 def mg2_rmsnorm(x: torch.Tensor, weight: torch.Tensor, eps: float = 1e-6, *, exact: bool = True) -> torch.Tensor:
-    """Fast ``WanRMSNorm`` supporting strided last-dim-contiguous ``[B, S, C]``."""
-    hidden = int(x.shape[-1])
-    if (
-        _TRITON_AVAILABLE
-        and x.is_cuda
-        and weight.is_cuda
-        and weight.device == x.device
-        and weight.ndim == 1
-        and weight.shape[0] == hidden
-        and weight.is_contiguous()
-        and not torch.is_grad_enabled()
-        and x.ndim == 3
-        and x.stride(-1) == 1
-        and (x.shape[0] == 1 or x.stride(0) == x.shape[1] * x.stride(1))
-        and hidden <= 4096
-    ):
-        rows = int(x.shape[0] * x.shape[1])
-        out_dtype = torch.promote_types(x.dtype, weight.dtype)
-        out = torch.empty(x.shape, dtype=out_dtype, device=x.device)
-        block = triton.next_power_of_2(hidden)
-        if exact:
-            rstd = torch.rsqrt(x.float().square_().mean(dim=-1) + eps).reshape(rows).contiguous()
-            _mg2_apply_rstd_weight_kernel[(rows,)](
-                x,
-                rstd,
-                weight,
-                out,
-                rows,
-                int(x.stride(1)),
-                hidden_size=hidden,
-                block=block,
-                num_warps=8 if block >= 1024 else 4,
-                enable_fp_fusion=False,
-            )
-        else:
-            _mg2_rmsnorm_fp64_kernel[(rows,)](
-                x,
-                weight,
-                out,
-                rows,
-                int(x.stride(1)),
-                float(eps),
-                hidden_size=hidden,
-                block=block,
-                num_warps=8 if block >= 1024 else 4,
-                enable_fp_fusion=False,
-            )
-        return out
-    normed = (x.float() * torch.rsqrt(x.float().pow(2).mean(dim=-1, keepdim=True) + eps)).type_as(x)
-    return normed * weight
+    """Fast coalesced ``WanRMSNorm`` supporting strided last-dim-contiguous ``[B, S, C]``."""
+    return sf_rmsnorm(x, weight, eps=eps, exact=exact, enabled=True)
 
 
 def mg2_qk_rmsnorm_rope_write_kv(
@@ -818,8 +556,29 @@ def mg2_qk_rmsnorm_rope_write_kv(
     head_dim: int,
     eps: float = 1e-6,
     exact: bool = True,
+    v_proj: torch.Tensor | None = None,
+    v_dst: torch.Tensor | None = None,
 ) -> torch.Tensor:
-    """Fused Q/K WanRMSNorm + FP64 3D RoPE + direct KV cache store."""
+    """Coalesced 128-bit fused Q/K WanRMSNorm + FP64 3D RoPE + direct K(/V) cache store."""
+    if v_proj is not None and v_dst is not None:
+        return sf_qk_rmsnorm_rope_write_kv(
+            q_proj,
+            k_proj,
+            v_proj,
+            q_weight,
+            k_weight,
+            cos,
+            sin,
+            k_dst,
+            v_dst,
+            dst_start=dst_token_offset,
+            num_heads=num_heads,
+            head_dim=head_dim,
+            eps=eps,
+            rotate_k=True,
+            exact=exact,
+            enabled=True,
+        )
     batch, seq_len, hidden = int(q_proj.shape[0]), int(q_proj.shape[1]), int(q_proj.shape[2])
     half_d = head_dim // 2
     if (
@@ -850,7 +609,14 @@ def mg2_qk_rmsnorm_rope_write_kv(
     ):
         q_out = torch.empty((batch, seq_len, num_heads, head_dim), dtype=q_proj.dtype, device=q_proj.device)
         rows = batch * seq_len
-        block_pairs = triton.next_power_of_2(hidden // 2)
+        block = max(32, int(triton.next_power_of_2(hidden)))
+        block_pairs = block // 2
+        use_ptx = _use_bf16_ptx(q_proj.device)
+        num_warps = 4 if block >= 1024 else 2
+        if block > 2048:
+            num_warps = 8
+        cos_c = cos.reshape(seq_len, half_d).contiguous()
+        sin_c = sin.reshape(seq_len, half_d).contiguous()
         if exact:
             q_rstd = torch.rsqrt(q_proj.float().square_().mean(dim=-1) + eps).reshape(rows).contiguous()
             k_rstd = torch.rsqrt(k_proj.float().square_().mean(dim=-1) + eps).reshape(rows).contiguous()
@@ -861,8 +627,8 @@ def mg2_qk_rmsnorm_rope_write_kv(
                 k_rstd,
                 q_weight,
                 k_weight,
-                cos.contiguous(),
-                sin.contiguous(),
+                cos_c,
+                sin_c,
                 q_out,
                 k_dst,
                 seq_len,
@@ -873,8 +639,10 @@ def mg2_qk_rmsnorm_rope_write_kv(
                 int(dst_token_offset),
                 hidden_size=hidden,
                 half_head_dim=half_d,
+                block=block,
                 block_pairs=block_pairs,
-                num_warps=8 if block_pairs >= 512 else 4,
+                USE_BF16_PTX=use_ptx,
+                num_warps=num_warps,
                 enable_fp_fusion=False,
             )
         else:
@@ -883,8 +651,8 @@ def mg2_qk_rmsnorm_rope_write_kv(
                 k_proj,
                 q_weight,
                 k_weight,
-                cos.contiguous(),
-                sin.contiguous(),
+                cos_c,
+                sin_c,
                 q_out,
                 k_dst,
                 seq_len,
@@ -896,8 +664,10 @@ def mg2_qk_rmsnorm_rope_write_kv(
                 float(eps),
                 hidden_size=hidden,
                 half_head_dim=half_d,
+                block=block,
                 block_pairs=block_pairs,
-                num_warps=8 if block_pairs >= 512 else 4,
+                USE_BF16_PTX=use_ptx,
+                num_warps=num_warps,
                 enable_fp_fusion=False,
             )
         return q_out
@@ -940,7 +710,7 @@ def mg2_main_self_attention(
 
 
 def mg2_fast_action_module_forward(
-    action_model: nn.Module,
+    action_model: Any,
     x: torch.Tensor,
     *,
     num_frames: int,
@@ -955,11 +725,12 @@ def mg2_fast_action_module_forward(
     start_frame: int,
     use_rope_keyboard: bool = True,
     exact_mouse_sdpa: bool = False,
-) -> torch.Tensor:
+    return_deferred_residual: bool = False,
+) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor | None]:
     """Fast CUDA-Graph-safe ``ActionModule`` steady-state forward.
 
     Replaces FA3-on-tiny-sequence mouse/keyboard attention (0.442 ms each) with:
-    - Fused Triton mouse QKV-Norm+RoPE+KV-write + fused Triton small-sequence
+    - Coalesced 128-bit Triton mouse QKV-Norm+RoPE+KV-write + fused Triton small-sequence
       attention (``Sq=3, Sk<=16, D=64``, ~0.015 ms, fused output transpose).
     - Zero-copy shared-KV keyboard SDPA (``[B, H, T*S, D] x [B, H, Sk, D]``,
       ~0.018 ms, zero ``.repeat(880)``, mathematical identity).
@@ -976,9 +747,19 @@ def mg2_fast_action_module_forward(
         action_model.freqs_sin = freqs_sin
     cos_win = freqs_cos[start_frame : start_frame + num_frames].contiguous()
     sin_win = freqs_sin[start_frame : start_frame + num_frames].contiguous()
+    use_ptx = _use_bf16_ptx(x.device)
+
+    run_mouse = bool(
+        getattr(action_model, "enable_mouse", False) and group_mouse_pre is not None and kv_cache_mouse is not None
+    )
+    run_keyboard = bool(
+        getattr(action_model, "enable_keyboard", False) and kb_cond_slice is not None and kv_cache_keyboard is not None
+    )
+    deferred_update: torch.Tensor | None = None
 
     # 1. Mouse branch (when enabled & conditioned)
-    if getattr(action_model, "enable_mouse", False) and group_mouse_pre is not None and kv_cache_mouse is not None:
+    if run_mouse:
+        assert group_mouse_pre is not None and kv_cache_mouse is not None
         # [B, T*S, C] -> [B*S, T, C]
         h_mouse = (
             x.view(batch, num_frames, spatial_s, x.shape[-1])
@@ -1033,6 +814,7 @@ def mg2_fast_action_module_forward(
                 NUM_HEADS=heads,
                 HEAD_DIM=head_dim_m,
                 HALF_D=head_dim_m // 2,
+                USE_BF16_PTX=use_ptx,
                 num_warps=2,
                 enable_fp_fusion=False,
             )
@@ -1073,10 +855,15 @@ def mg2_fast_action_module_forward(
                 .transpose(1, 2)
                 .reshape(batch, num_frames * spatial_s, c_m)
             )
-        hidden_states = hidden_states + action_model.proj_mouse(attn_m)
+        mouse_proj = action_model.proj_mouse(attn_m)
+        if return_deferred_residual and not run_keyboard:
+            deferred_update = mouse_proj
+        else:
+            hidden_states = hidden_states + mouse_proj
 
     # 2. Keyboard branch (zero-copy shared-KV SDPA — eliminates 880x .repeat & FA3 tiny-seq overhead!)
-    if getattr(action_model, "enable_keyboard", False) and kb_cond_slice is not None and kv_cache_keyboard is not None:
+    if run_keyboard:
+        assert kb_cond_slice is not None and kv_cache_keyboard is not None
         vcr = int(action_model.vae_time_compression_ratio)
         win_sz = int(action_model.windows_size)
         pad_t = vcr * win_sz
@@ -1152,6 +939,7 @@ def mg2_fast_action_module_forward(
                     NUM_HEADS=heads,
                     HEAD_DIM=head_dim_k,
                     HALF_D=head_dim_k // 2,
+                    USE_BF16_PTX=use_ptx,
                     num_warps=2,
                     enable_fp_fusion=False,
                 )
@@ -1184,8 +972,14 @@ def mg2_fast_action_module_forward(
                 .transpose(1, 2)
                 .reshape(batch, num_frames * spatial_s, c_k)
             )
-        hidden_states = hidden_states + action_model.proj_keyboard(attn_kb)
+        kb_proj = action_model.proj_keyboard(attn_kb)
+        if return_deferred_residual:
+            deferred_update = kb_proj
+        else:
+            hidden_states = hidden_states + kb_proj
 
+    if return_deferred_residual:
+        return hidden_states, deferred_update
     return hidden_states
 
 
@@ -1215,7 +1009,7 @@ def build_mg2_3d_rope_cos_sin(
 
 
 def precompute_action_inputs(
-    action_model_ref: nn.Module | None,
+    action_model_ref: Any,
     *,
     mouse_cond: torch.Tensor | None,
     keyboard_cond: torch.Tensor | None,
@@ -1257,7 +1051,7 @@ def precompute_action_inputs(
 
 
 def mg2_fast_steady_forward(
-    model: nn.Module,
+    model: Any,
     x_in: torch.Tensor,
     t_in: torch.Tensor,
     cc_in: torch.Tensor,
@@ -1293,6 +1087,8 @@ def mg2_fast_steady_forward(
     e0 = model.time_projection(e).unflatten(1, (6, model.dim)).unflatten(dim=0, sizes=t_in.shape)
 
     # Precompute real FP64 3D RoPE once for all 30 blocks (0-ULP identical to causal_rope_apply).
+    if model.freqs.device != x.device:
+        model.freqs = model.freqs.to(x.device)
     rope_cos, rope_sin = build_mg2_3d_rope_cos_sin(model.freqs, f_grid, h_grid, w_grid, start_frame)
 
     # Hoist mouse/keyboard window slicing once outside the 15-block ActionModule loop.
@@ -1320,40 +1116,51 @@ def mg2_fast_steady_forward(
 
     for idx, block in enumerate(model.blocks):
         mod = (block.modulation.unsqueeze(1) + e0).chunk(6, dim=2)
-        h = mg2_layernorm_adaln(x, mod[1], mod[0], num_frames=f_grid, frame_seq=frame_seq, eps=float(block.norm1.eps))
+        h = sf_layernorm_adaln(
+            x,
+            mod[1],
+            mod[0],
+            num_frames=f_grid,
+            frame_seq=frame_seq,
+            eps=float(block.norm1.eps),
+            exact=exact_norms,
+            enabled=True,
+        )
 
         sa = block.self_attn
         if getattr(sa, "_qkv_fused", False) or hasattr(sa, "qkv"):
-            from worldfoundry.base_models.diffusion_model.optimizations.qkv_fusion import project_fused_qkv
-
             q_proj, k_proj, v_proj = project_fused_qkv(sa.qkv, h)
         else:
             q_proj, k_proj, v_proj = sa.q(h), sa.k(h), sa.v(h)
-        v = v_proj.view(batch_size, seq_len, num_heads, head_dim)
 
         layer_kv = kv_cache[idx]
         k_cache = layer_kv["k"]
         v_cache = layer_kv["v"]
-        v_cache[:, local_start_index:local_end_index].copy_(v)
 
         if hasattr(sa.norm_q, "weight") and hasattr(sa.norm_k, "weight"):
-            roped_q = mg2_qk_rmsnorm_rope_write_kv(
+            roped_q = sf_qk_rmsnorm_rope_write_kv(
                 q_proj,
                 k_proj,
+                v_proj,
                 sa.norm_q.weight,
                 sa.norm_k.weight,
                 rope_cos,
                 rope_sin,
                 k_cache,
-                dst_token_offset=local_start_index,
+                v_cache,
+                dst_start=local_start_index,
                 num_heads=num_heads,
                 head_dim=head_dim,
                 eps=float(sa.norm_q.eps),
+                rotate_k=True,
                 exact=exact_norms,
+                enabled=True,
             )
         else:
             from worldfoundry.core.kernels.diffusion import apply_real_rope_bshd
 
+            v = v_proj.view(batch_size, seq_len, num_heads, head_dim)
+            v_cache[:, local_start_index:local_end_index].copy_(v)
             qv = sa.norm_q(q_proj).view(batch_size, seq_len, num_heads, head_dim)
             kv = sa.norm_k(k_proj).view(batch_size, seq_len, num_heads, head_dim)
             roped_q = apply_real_rope_bshd(qv, rope_cos, rope_sin).to(v.dtype)
@@ -1368,16 +1175,37 @@ def mg2_fast_steady_forward(
             backend=attention_backend,
         )
         y_sa = sa.o(attn_out.reshape(batch_size, seq_len, model.dim))
-        x = mg2_residual_gate_add(x, y_sa, mod[2], num_frames=f_grid, frame_seq=frame_seq)
+
+        # 2-stage super-fusion: x = x + y_sa * mod[2] AND x_ca_in = norm3(x) in one HBM pass!
+        norm3 = block.norm3
+        if hasattr(norm3, "weight") and hasattr(norm3, "eps"):
+            x_out_dtype = torch.promote_types(x.dtype, torch.promote_types(y_sa.dtype, mod[2].dtype))
+            w3 = norm3.weight if norm3.weight.dtype == x_out_dtype else norm3.weight.to(x_out_dtype)
+            b3_raw = getattr(norm3, "bias", None)
+            b3 = None if b3_raw is None else (b3_raw if b3_raw.dtype == x_out_dtype else b3_raw.to(x_out_dtype))
+            x, x_ca_in = sf_residual_gate_add_layernorm(
+                x,
+                y_sa,
+                mod[2],
+                w3,
+                b3,
+                num_frames=f_grid,
+                frame_seq=frame_seq,
+                eps=float(norm3.eps),
+                exact=exact_norms,
+                enabled=True,
+            )
+        else:
+            x = sf_residual_gate_add(x, y_sa, mod[2], num_frames=f_grid, frame_seq=frame_seq, enabled=True)
+            x_ca_in = norm3(x)
 
         # Cached image cross-attention (short Sk=257 -> cuDNN SDPA is 4x faster than FA3!)
         ca = block.cross_attn
-        x_ca_in = block.norm3(x)
         q_ca_raw = ca.q(x_ca_in)
         if hasattr(ca.norm_q, "weight") and hasattr(ca.norm_q, "eps"):
-            q_ca = mg2_rmsnorm(q_ca_raw, ca.norm_q.weight, eps=float(ca.norm_q.eps), exact=exact_norms).view(
-                batch_size, seq_len, num_heads, head_dim
-            )
+            q_ca = sf_rmsnorm(
+                q_ca_raw, ca.norm_q.weight, eps=float(ca.norm_q.eps), exact=exact_norms, enabled=True
+            ).view(batch_size, seq_len, num_heads, head_dim)
         else:
             q_ca = ca.norm_q(q_ca_raw).view(batch_size, seq_len, num_heads, head_dim)
         ca_slot = crossattn_cache[idx]
@@ -1386,12 +1214,13 @@ def mg2_fast_steady_forward(
             ca_slot["k"].transpose(1, 2),
             ca_slot["v"].transpose(1, 2),
         ).transpose(1, 2)
-        x = x + ca.o(ca_attn.reshape(batch_size, seq_len, model.dim))
+        ca_out = ca.o(ca_attn.reshape(batch_size, seq_len, model.dim))
 
-        # ActionModule (mouse + keyboard)
+        # ActionModule (mouse + keyboard) + 2-stage super-fused residual add + norm2 + AdaLN across ALL 30 blocks!
         am = getattr(block, "action_model", None)
         if am is not None:
-            x = mg2_fast_action_module_forward(
+            x = x + ca_out
+            am_res = mg2_fast_action_module_forward(
                 am,
                 x,
                 num_frames=f_grid,
@@ -1406,20 +1235,61 @@ def mg2_fast_steady_forward(
                 start_frame=start_frame,
                 use_rope_keyboard=use_rope_keyboard,
                 exact_mouse_sdpa=exact_norms,
+                return_deferred_residual=True,
+            )
+            assert isinstance(am_res, tuple)
+            x, deferred_update = am_res
+            if deferred_update is not None:
+                x, h_ffn = sf_residual_add_layernorm_adaln(
+                    x,
+                    deferred_update,
+                    mod[4],
+                    mod[3],
+                    num_frames=f_grid,
+                    frame_seq=frame_seq,
+                    eps=float(block.norm2.eps),
+                    exact=exact_norms,
+                    enabled=True,
+                )
+            else:
+                h_ffn = sf_layernorm_adaln(
+                    x,
+                    mod[4],
+                    mod[3],
+                    num_frames=f_grid,
+                    frame_seq=frame_seq,
+                    eps=float(block.norm2.eps),
+                    exact=exact_norms,
+                    enabled=True,
+                )
+        else:
+            x, h_ffn = sf_residual_add_layernorm_adaln(
+                x,
+                ca_out,
+                mod[4],
+                mod[3],
+                num_frames=f_grid,
+                frame_seq=frame_seq,
+                eps=float(block.norm2.eps),
+                exact=exact_norms,
+                enabled=True,
             )
 
-        # FFN + gated residual
-        h_ffn = mg2_layernorm_adaln(
-            x, mod[4], mod[3], num_frames=f_grid, frame_seq=frame_seq, eps=float(block.norm2.eps)
-        )
         y_ffn = block.ffn(h_ffn)
-        x = mg2_residual_gate_add(x, y_ffn, mod[5], num_frames=f_grid, frame_seq=frame_seq)
+        x = sf_residual_gate_add(x, y_ffn, mod[5], num_frames=f_grid, frame_seq=frame_seq, enabled=True)
 
     # Head + unpatchify
     head = model.head
     e_head = (head.modulation.unsqueeze(1) + e.unflatten(dim=0, sizes=t_in.shape).unsqueeze(2)).chunk(2, dim=2)
-    h_head = mg2_layernorm_adaln(
-        x, e_head[1], e_head[0], num_frames=f_grid, frame_seq=frame_seq, eps=float(head.norm.eps)
+    h_head = sf_layernorm_adaln(
+        x,
+        e_head[1],
+        e_head[0],
+        num_frames=f_grid,
+        frame_seq=frame_seq,
+        eps=float(head.norm.eps),
+        exact=exact_norms,
+        enabled=True,
     )
     out = head.head(h_head)
     c_out = int(model.out_dim)

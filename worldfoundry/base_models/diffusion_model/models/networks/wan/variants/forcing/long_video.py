@@ -8,7 +8,7 @@ and license terms are recorded under
 """
 
 import math
-from typing import ClassVar
+from typing import Any, ClassVar
 
 import torch
 import torch.distributed as dist
@@ -17,6 +17,16 @@ import torch.nn as nn
 from worldfoundry.core.attention.sequence.varlen import attention
 from worldfoundry.core.model_loading.model_configuration import NativeConfigMixin, register_to_config
 
+from .fast_kernels import (
+    sf_apply_rope_bshd,
+    sf_fast_kernels_enabled,
+    sf_layernorm_adaln,
+    sf_qk_rmsnorm_rope_write_kv,
+    sf_residual_add_layernorm_adaln,
+    sf_residual_gate_add,
+    sf_residual_gate_add_layernorm,
+    sf_rmsnorm,
+)
 from .model import (
     WAN_CROSSATTENTION_CLASSES,
     MLPProj,
@@ -26,6 +36,41 @@ from .model import (
     rope_params,
     sinusoidal_embedding_1d,
 )
+
+
+def _module_has_hooks(module: nn.Module) -> bool:
+    return bool(getattr(module, "_forward_hooks", None) or getattr(module, "_forward_pre_hooks", None))
+
+
+def _tensor_version_safe(tensor: torch.Tensor) -> int | None:
+    if tensor.is_inference():
+        return None
+    return int(tensor._version)
+
+
+def _build_long_video_rope_cos_sin(
+    freqs: torch.Tensor,
+    num_frames: int,
+    h_grid: int,
+    w_grid: int,
+    start_frame: int,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    c = int(freqs.shape[1])
+    t_dim = c - 2 * (c // 3)
+    s_dim = c // 3
+    f_t, f_h, f_w = freqs.split([t_dim, s_dim, s_dim], dim=1)
+    freqs_3d = torch.cat(
+        [
+            f_t[start_frame : start_frame + num_frames]
+            .view(num_frames, 1, 1, t_dim)
+            .expand(num_frames, h_grid, w_grid, t_dim),
+            f_h[:h_grid].view(1, h_grid, 1, s_dim).expand(num_frames, h_grid, w_grid, s_dim),
+            f_w[:w_grid].view(1, 1, w_grid, s_dim).expand(num_frames, h_grid, w_grid, s_dim),
+        ],
+        dim=-1,
+    ).reshape(1, num_frames * h_grid * w_grid, 1, c)
+    return freqs_3d.real.to(torch.float64).contiguous(), freqs_3d.imag.to(torch.float64).contiguous()
+
 
 # wan 1.3B model has a weird channel / head configurations and require max-autotune to work with flexattention
 # see https://github.com/pytorch/pytorch/issues/133254
@@ -101,6 +146,11 @@ class CausalWanSelfAttention(nn.Module):
         current_start=0,
         cache_start=None,
         updating_cache=False,
+        *,
+        precomputed_rope=None,
+        anchor_rope=None,
+        frame_seqlen_hint=None,
+        kv_plan=None,
     ):
         r"""
         Args:
@@ -114,16 +164,14 @@ class CausalWanSelfAttention(nn.Module):
         if cache_start is None:
             cache_start = current_start
 
-        # query, key, value function
-        def qkv_fn(x):
-            q = self.norm_q(self.q(x)).view(b, s, n, d)  # [B, L, 12, 128]
-            k = self.norm_k(self.k(x)).view(b, s, n, d)  # [B, L, 12, 128]
-            v = self.v(x).view(b, s, n, d)  # [B, L, 12, 128]
-            return q, k, v
-
-        q, k, v = qkv_fn(x)
+        q_proj = self.q(x)
+        k_proj = self.k(x)
+        v_proj = self.v(x)
 
         if kv_cache is None:
+            q = self.norm_q(q_proj).view(b, s, n, d)
+            k = self.norm_k(k_proj).view(b, s, n, d)
+            v = v_proj.view(b, s, n, d)
             # FlexAttention is only needed by the excluded training path. Keep
             # the import lazy so inference remains usable on supported PyTorch
             # builds that do not expose this prototype API.
@@ -226,52 +274,94 @@ class CausalWanSelfAttention(nn.Module):
                     block_mask=block_mask,
                 )[:, :, :-padded_length].transpose(2, 1)
         else:
-            frame_seqlen = math.prod(grid_sizes[0][1:]).item()
+            frame_seqlen = (
+                int(frame_seqlen_hint) if frame_seqlen_hint is not None else math.prod(grid_sizes[0][1:]).item()
+            )
             current_start_frame = current_start // frame_seqlen
-            roped_query = causal_rope_apply(q, grid_sizes, freqs, start_frame=current_start_frame).type_as(
-                v
-            )  # [B, L, 12, 128]
-            roped_key = causal_rope_apply(k, grid_sizes, freqs, start_frame=current_start_frame).type_as(
-                v
-            )  # [B, L, 12, 128]
-
-            grid_sizes_one_block = grid_sizes.clone()
-            grid_sizes_one_block[:, 0] = 3
 
             # only caching the first block
             cache_end = cache_start + self.block_length
-            num_new_tokens = cache_end - kv_cache["global_end_index"].item()
-            kv_cache_size = kv_cache["k"].shape[1]
+            if kv_plan is not None:
+                prev_global_end, prev_local_end = kv_plan
+            else:
+                prev_global_end = int(kv_cache["global_end_index"].item())
+                prev_local_end = int(kv_cache["local_end_index"].item())
 
+            num_new_tokens = cache_end - prev_global_end
+            kv_cache_size = kv_cache["k"].shape[1]
             sink_tokens = 1 * self.block_length  # we keep the first block in the cache
 
-            if (num_new_tokens > 0) and (num_new_tokens + kv_cache["local_end_index"].item() > kv_cache_size):
-                num_evicted_tokens = num_new_tokens + kv_cache["local_end_index"].item() - kv_cache_size
-                num_rolled_tokens = kv_cache["local_end_index"].item() - num_evicted_tokens - sink_tokens
+            if (num_new_tokens > 0) and (num_new_tokens + prev_local_end > kv_cache_size):
+                num_evicted_tokens = num_new_tokens + prev_local_end - kv_cache_size
+                num_rolled_tokens = prev_local_end - num_evicted_tokens - sink_tokens
                 kv_cache["k"][:, sink_tokens : sink_tokens + num_rolled_tokens] = kv_cache["k"][
                     :, sink_tokens + num_evicted_tokens : sink_tokens + num_evicted_tokens + num_rolled_tokens
                 ].clone()
                 kv_cache["v"][:, sink_tokens : sink_tokens + num_rolled_tokens] = kv_cache["v"][
                     :, sink_tokens + num_evicted_tokens : sink_tokens + num_evicted_tokens + num_rolled_tokens
                 ].clone()
+                local_end_index = prev_local_end + cache_end - prev_global_end - num_evicted_tokens
+            else:
+                local_end_index = prev_local_end + cache_end - prev_global_end
+            local_start_index = local_end_index - self.block_length
 
-                local_end_index = (
-                    kv_cache["local_end_index"].item()
-                    + cache_end
-                    - kv_cache["global_end_index"].item()
-                    - num_evicted_tokens
+            use_fast_qk = (
+                x.is_cuda
+                and not torch.is_grad_enabled()
+                and precomputed_rope is not None
+                and not _module_has_hooks(self.norm_q)
+                and not _module_has_hooks(self.norm_k)
+                and sf_fast_kernels_enabled(self.__dict__.get("_worldfoundry_sf_fast_kernels"))
+                and ((not self.qk_norm) or (hasattr(self.norm_q, "weight") and hasattr(self.norm_k, "weight")))
+            )
+            v = v_proj.view(b, s, n, d)
+            norm_q_any: Any = self.norm_q
+            norm_k_any: Any = self.norm_k
+            if use_fast_qk and s == self.block_length and local_start_index > 0 and updating_cache:
+                rope_cos, rope_sin = precomputed_rope
+                q_w: torch.Tensor | None = norm_q_any.weight if self.qk_norm else None
+                k_w: torch.Tensor | None = norm_k_any.weight if self.qk_norm else None
+                roped_query = sf_qk_rmsnorm_rope_write_kv(
+                    q_proj,
+                    k_proj,
+                    v_proj,
+                    q_w,
+                    k_w,
+                    rope_cos,
+                    rope_sin,
+                    kv_cache["k"],
+                    kv_cache["v"],
+                    dst_start=local_start_index,
+                    num_heads=n,
+                    head_dim=d,
+                    eps=float(self.eps),
+                    rotate_k=True,
                 )
-                local_start_index = local_end_index - self.block_length
-                kv_cache["k"][:, local_start_index:local_end_index] = roped_key[:, : self.block_length]
+                roped_key = kv_cache["k"][:, local_start_index:local_end_index]
+            elif use_fast_qk:
+                rope_cos, rope_sin = precomputed_rope
+                if self.qk_norm:
+                    q = sf_rmsnorm(q_proj, norm_q_any.weight, eps=float(self.eps)).view(b, s, n, d)
+                    k = sf_rmsnorm(k_proj, norm_k_any.weight, eps=float(self.eps)).view(b, s, n, d)
+                else:
+                    q = q_proj.view(b, s, n, d)
+                    k = k_proj.view(b, s, n, d)
+                roped_query = sf_apply_rope_bshd(q, rope_cos, rope_sin).type_as(v)
+                roped_key = sf_apply_rope_bshd(k, rope_cos, rope_sin).type_as(v)
+                if local_start_index == 0:
+                    kv_cache["k"][:, local_start_index:local_end_index] = k[:, : self.block_length]
+                else:
+                    kv_cache["k"][:, local_start_index:local_end_index] = roped_key[:, : self.block_length]
                 kv_cache["v"][:, local_start_index:local_end_index] = v[:, : self.block_length]
             else:
-                local_end_index = kv_cache["local_end_index"].item() + cache_end - kv_cache["global_end_index"].item()
-                local_start_index = local_end_index - self.block_length
+                q = self.norm_q(q_proj).view(b, s, n, d)
+                k = self.norm_k(k_proj).view(b, s, n, d)
+                roped_query = causal_rope_apply(q, grid_sizes, freqs, start_frame=current_start_frame).type_as(v)
+                roped_key = causal_rope_apply(k, grid_sizes, freqs, start_frame=current_start_frame).type_as(v)
                 if local_start_index == 0:  # first block is not roped in the cache
                     kv_cache["k"][:, local_start_index:local_end_index] = k[:, : self.block_length]
                 else:
                     kv_cache["k"][:, local_start_index:local_end_index] = roped_key[:, : self.block_length]
-
                 kv_cache["v"][:, local_start_index:local_end_index] = v[:, : self.block_length]
 
             if num_new_tokens > 0:  # prevent updating when caching clean frame
@@ -289,15 +379,21 @@ class CausalWanSelfAttention(nn.Module):
                     working_cache_v = kv_cache["v"][:, extract_cache_start:extract_cache_end]
 
                     if extract_cache_start == 0:  # rope the global first block in working cache
-                        working_cache_key[:, : self.block_length] = causal_rope_apply(
-                            working_cache_key[:, : self.block_length], grid_sizes_one_block, freqs, start_frame=0
-                        ).type_as(v)
+                        if anchor_rope is not None and x.is_cuda and not torch.is_grad_enabled():
+                            working_cache_key[:, : self.block_length] = sf_apply_rope_bshd(
+                                working_cache_key[:, : self.block_length], anchor_rope[0], anchor_rope[1]
+                            ).type_as(v)
+                        else:
+                            grid_sizes_one_block = grid_sizes.clone()
+                            grid_sizes_one_block[:, 0] = 3
+                            working_cache_key[:, : self.block_length] = causal_rope_apply(
+                                working_cache_key[:, : self.block_length], grid_sizes_one_block, freqs, start_frame=0
+                            ).type_as(v)
 
                     x = attention(roped_query, working_cache_key, working_cache_v)
 
                 else:
                     # 1. extract working cache
-                    # calculate the length of working cache
                     query_length = roped_query.shape[1]
                     working_cache_max_length = self.max_attention_size - query_length - self.block_length
 
@@ -309,19 +405,26 @@ class CausalWanSelfAttention(nn.Module):
                     working_cache_v = kv_cache["v"][:, extract_cache_start:extract_cache_end]
 
                     # 2. extract anchor cache, roped as the past frame
-                    working_cache_frame_length = working_cache_key.shape[1] // self.frame_length
-                    rope_start_frame = current_start_frame - working_cache_frame_length - 3
-
-                    anchor_cache_key = causal_rope_apply(
-                        kv_cache["k"][:, : self.block_length], grid_sizes_one_block, freqs, start_frame=rope_start_frame
-                    ).type_as(v)
+                    if anchor_rope is not None and x.is_cuda and not torch.is_grad_enabled():
+                        anchor_cache_key = sf_apply_rope_bshd(
+                            kv_cache["k"][:, : self.block_length], anchor_rope[0], anchor_rope[1]
+                        ).type_as(v)
+                    else:
+                        working_cache_frame_length = working_cache_key.shape[1] // self.frame_length
+                        rope_start_frame = current_start_frame - working_cache_frame_length - 3
+                        grid_sizes_one_block = grid_sizes.clone()
+                        grid_sizes_one_block[:, 0] = 3
+                        anchor_cache_key = causal_rope_apply(
+                            kv_cache["k"][:, : self.block_length],
+                            grid_sizes_one_block,
+                            freqs,
+                            start_frame=rope_start_frame,
+                        ).type_as(v)
                     anchor_cache_v = kv_cache["v"][:, : self.block_length]
 
                     # 3. attention with working cache and anchor cache
                     input_key = torch.cat([anchor_cache_key, working_cache_key, roped_key], dim=1)
-
                     input_v = torch.cat([anchor_cache_v, working_cache_v, v], dim=1)
-
                     x = attention(roped_query, input_key, input_v)
 
         # output
@@ -380,6 +483,11 @@ class CausalWanAttentionBlock(nn.Module):
         crossattn_cache=None,
         current_start=0,
         cache_start=None,
+        *,
+        precomputed_rope=None,
+        anchor_rope=None,
+        frame_seqlen_hint=None,
+        kv_plan=None,
     ):
         r"""
         Args:
@@ -390,14 +498,24 @@ class CausalWanAttentionBlock(nn.Module):
             freqs(Tensor): Rope freqs, shape [1024, C / num_heads / 2]
         """
         num_frames, frame_seqlen = e.shape[1], x.shape[1] // e.shape[1]
-        # assert e.dtype == torch.float32
-        # with amp.autocast(dtype=torch.float32):
         e = (self.modulation.unsqueeze(1) + e).chunk(6, dim=2)
-        # assert e[0].dtype == torch.float32
+        use_fast = (
+            x.is_cuda
+            and not torch.is_grad_enabled()
+            and not self.training
+            and sf_fast_kernels_enabled(self.__dict__.get("_worldfoundry_sf_fast_kernels"))
+        )
+
+        if use_fast and not _module_has_hooks(self.norm1):
+            sa_in = sf_layernorm_adaln(
+                x, e[1], e[0], num_frames=num_frames, frame_seq=frame_seqlen, eps=float(self.norm1.eps)
+            )
+        else:
+            sa_in = (self.norm1(x).unflatten(dim=1, sizes=(num_frames, frame_seqlen)) * (1 + e[1]) + e[0]).flatten(1, 2)
 
         # self-attention
         y = self.self_attn(
-            (self.norm1(x).unflatten(dim=1, sizes=(num_frames, frame_seqlen)) * (1 + e[1]) + e[0]).flatten(1, 2),
+            sa_in,
             seq_lens,
             grid_sizes,
             freqs,
@@ -406,22 +524,52 @@ class CausalWanAttentionBlock(nn.Module):
             current_start,
             cache_start,
             updating_cache=updating_cache,
+            precomputed_rope=precomputed_rope,
+            anchor_rope=anchor_rope,
+            frame_seqlen_hint=frame_seqlen_hint,
+            kv_plan=kv_plan,
         )
 
-        # with amp.autocast(dtype=torch.float32):
-        x = x + (y.unflatten(dim=1, sizes=(num_frames, frame_seqlen)) * e[2]).flatten(1, 2)
-
-        # cross-attention & ffn function
-        def cross_attn_ffn(x, context, context_lens, e, crossattn_cache=None):
-            x = x + self.cross_attn(self.norm3(x), context, context_lens, crossattn_cache=crossattn_cache)
-            y = self.ffn(
-                (self.norm2(x).unflatten(dim=1, sizes=(num_frames, frame_seqlen)) * (1 + e[4]) + e[3]).flatten(1, 2)
+        # 2-stage super-fusion: x = x + y * e[2] AND x_ca_in = norm3(x)
+        norm3_any: Any = self.norm3
+        if (
+            use_fast
+            and not _module_has_hooks(self.norm3)
+            and hasattr(norm3_any, "weight")
+            and hasattr(norm3_any, "eps")
+        ):
+            x_out_dtype = torch.promote_types(x.dtype, torch.promote_types(y.dtype, e[2].dtype))
+            w3 = norm3_any.weight if norm3_any.weight.dtype == x_out_dtype else norm3_any.weight.to(x_out_dtype)
+            b3_raw = getattr(norm3_any, "bias", None)
+            b3 = None if b3_raw is None else (b3_raw if b3_raw.dtype == x_out_dtype else b3_raw.to(x_out_dtype))
+            x, x_ca_in = sf_residual_gate_add_layernorm(
+                x, y, e[2], w3, b3, num_frames=num_frames, frame_seq=frame_seqlen, eps=float(norm3_any.eps)
             )
-            # with amp.autocast(dtype=torch.float32):
-            x = x + (y.unflatten(dim=1, sizes=(num_frames, frame_seqlen)) * e[5]).flatten(1, 2)
-            return x
+        elif use_fast:
+            x = sf_residual_gate_add(x, y, e[2], num_frames=num_frames, frame_seq=frame_seqlen)
+            x_ca_in = self.norm3(x)
+        else:
+            x = x + (y.unflatten(dim=1, sizes=(num_frames, frame_seqlen)) * e[2]).flatten(1, 2)
+            x_ca_in = self.norm3(x)
 
-        x = cross_attn_ffn(x, context, context_lens, e, crossattn_cache)
+        ca_out = self.cross_attn(x_ca_in, context, context_lens, crossattn_cache=crossattn_cache)
+
+        # 2-stage super-fusion: x = x + ca_out AND ffn_in = norm2(x) * (1 + e[4]) + e[3]
+        if use_fast and not _module_has_hooks(self.norm2):
+            x, ffn_in = sf_residual_add_layernorm_adaln(
+                x, ca_out, e[4], e[3], num_frames=num_frames, frame_seq=frame_seqlen, eps=float(self.norm2.eps)
+            )
+        else:
+            x = x + ca_out
+            ffn_in = (self.norm2(x).unflatten(dim=1, sizes=(num_frames, frame_seqlen)) * (1 + e[4]) + e[3]).flatten(
+                1, 2
+            )
+
+        y_ffn = self.ffn(ffn_in)
+        if use_fast:
+            x = sf_residual_gate_add(x, y_ffn, e[5], num_frames=num_frames, frame_seq=frame_seqlen)
+        else:
+            x = x + (y_ffn.unflatten(dim=1, sizes=(num_frames, frame_seqlen)) * e[5]).flatten(1, 2)
         return x
 
 
@@ -449,10 +597,19 @@ class CausalHead(nn.Module):
             x(Tensor): Shape [B, L1, C]
             e(Tensor): Shape [B, F, 1, C]
         """
-        # assert e.dtype == torch.float32
-        # with amp.autocast(dtype=torch.float32):
         num_frames, frame_seqlen = e.shape[1], x.shape[1] // e.shape[1]
         e = (self.modulation.unsqueeze(1) + e).chunk(2, dim=2)
+        if (
+            x.is_cuda
+            and not torch.is_grad_enabled()
+            and not self.training
+            and sf_fast_kernels_enabled(self.__dict__.get("_worldfoundry_sf_fast_kernels"))
+            and not _module_has_hooks(self.norm)
+        ):
+            h = sf_layernorm_adaln(
+                x, e[1], e[0], num_frames=num_frames, frame_seq=frame_seqlen, eps=float(self.norm.eps)
+            )
+            return self.head(h)
         x = self.head(self.norm(x).unflatten(dim=1, sizes=(num_frames, frame_seqlen)) * (1 + e[1]) + e[0])
         return x
 
@@ -869,23 +1026,16 @@ class CausalWanModel(nn.Module, NativeConfigMixin):
 
         # embeddings
         x = [self.patch_embedding(u.unsqueeze(0)) for u in x]
-        grid_sizes = torch.stack([torch.tensor(u.shape[2:], dtype=torch.long) for u in x])
+        grid_tuples = [tuple(int(v) for v in u.shape[2:]) for u in x]
+        grid_sizes = torch.tensor(grid_tuples, dtype=torch.long)
         x = [u.flatten(2).transpose(1, 2) for u in x]
         seq_lens = torch.tensor([u.size(1) for u in x], dtype=torch.long)
         assert seq_lens.max() <= seq_len
         x = torch.cat(x)
-        """
-        torch.cat([
-            torch.cat([u, u.new_zeros(1, seq_len - u.size(1), u.size(2))],
-                      dim=1) for u in x
-        ])
-        """
 
         # time embeddings
-        # with amp.autocast(dtype=torch.float32):
         e = self.time_embedding(sinusoidal_embedding_1d(self.freq_dim, t.flatten()).type_as(x))
         e0 = self.time_projection(e).unflatten(1, (6, self.dim)).unflatten(dim=0, sizes=t.shape)
-        # assert e.dtype == torch.float32 and e0.dtype == torch.float32
 
         # context
         context_lens = None
@@ -897,6 +1047,80 @@ class CausalWanModel(nn.Module, NativeConfigMixin):
             context_clip = self.img_emb(clip_fea)  # bs x 257 x dim
             context = torch.concat([context_clip, context], dim=1)
 
+        f_grid, h_grid, w_grid = grid_tuples[0]
+        frame_seqlen_hint = h_grid * w_grid
+        all_same_grid = all(gt == grid_tuples[0] for gt in grid_tuples)
+        precomputed_rope = None
+        anchor_rope = None
+        kv_plan = None
+        kv_mirror = None
+        kv_mirror_key = None
+
+        if kv_cache is not None and len(kv_cache) == len(self.blocks) and not torch.is_grad_enabled():
+            layer0 = kv_cache[0]
+            g_vers = tuple(_tensor_version_safe(layer["global_end_index"]) for layer in kv_cache)
+            l_vers = tuple(_tensor_version_safe(layer["local_end_index"]) for layer in kv_cache)
+            vers_trackable = all(v is not None for v in g_vers) and all(v is not None for v in l_vers)
+            kv_mirror = self.__dict__.setdefault("_worldfoundry_kv_host_mirror", {})
+            kv_mirror_key = (id(kv_cache), layer0["k"].data_ptr())
+            cached = kv_mirror.get(kv_mirror_key)
+            if vers_trackable and cached is not None and cached[2] == g_vers and cached[3] == l_vers:
+                kv_plan = (cached[0], cached[1])
+            elif len(kv_cache) == 1 or all(
+                layer["global_end_index"].device == layer0["global_end_index"].device
+                and layer["local_end_index"].device == layer0["local_end_index"].device
+                for layer in kv_cache
+            ):
+                stacked = torch.stack(
+                    [layer["global_end_index"].reshape(()) for layer in kv_cache]
+                    + [layer["local_end_index"].reshape(()) for layer in kv_cache]
+                ).tolist()
+                n_layers = len(kv_cache)
+                g_vals = stacked[:n_layers]
+                l_vals = stacked[n_layers:]
+                if all(v == g_vals[0] for v in g_vals) and all(v == l_vals[0] for v in l_vals):
+                    kv_plan = (int(g_vals[0]), int(l_vals[0]))
+
+        if x.is_cuda and not torch.is_grad_enabled() and not self.training and all_same_grid:
+            start_frame = current_start // frame_seqlen_hint
+            rope_cache = self.__dict__.setdefault("_worldfoundry_rope_cache", {})
+
+            def _get_rope(nf: int, sf: int) -> tuple[torch.Tensor, torch.Tensor]:
+                key = (id(self.freqs), device, nf, h_grid, w_grid, sf)
+                val = rope_cache.get(key)
+                if val is None:
+                    if len(rope_cache) >= 64:
+                        rope_cache.clear()
+                    val = _build_long_video_rope_cos_sin(self.freqs, nf, h_grid, w_grid, sf)
+                    rope_cache[key] = val
+                return val
+
+            precomputed_rope = _get_rope(f_grid, start_frame)
+            if kv_plan is not None and kv_cache is not None:
+                sa0: Any = self.blocks[0].self_attn
+                c_start = current_start if cache_start is None else cache_start
+                c_end = c_start + sa0.block_length
+                prev_g, prev_l = kv_plan
+                num_new = c_end - prev_g
+                kv_cap = int(kv_cache[0]["k"].shape[1])
+                if num_new > 0 and num_new + prev_l > kv_cap:
+                    num_ev = num_new + prev_l - kv_cap
+                    next_l = prev_l + c_end - prev_g - num_ev
+                else:
+                    next_l = prev_l + c_end - prev_g
+                loc_start = next_l - sa0.block_length
+                if loc_start > 0 and sa0.block_length == 3 * frame_seqlen_hint:
+                    if updating_cache:
+                        if max(0, next_l - sa0.max_attention_size) == 0:
+                            anchor_rope = _get_rope(3, 0)
+                    else:
+                        wc_max = sa0.max_attention_size - int(x.shape[1]) - sa0.block_length
+                        wc_start = max(sa0.block_length, loc_start - wc_max)
+                        wc_frames = max(0, loc_start - wc_start) // sa0.frame_length
+                        anchor_sf = start_frame - wc_frames - 3
+                        if anchor_sf >= 0:
+                            anchor_rope = _get_rope(3, anchor_sf)
+
         # arguments
         kwargs = {
             "e": e0,
@@ -907,6 +1131,10 @@ class CausalWanModel(nn.Module, NativeConfigMixin):
             "context_lens": context_lens,
             "block_mask": self.block_mask,
             "updating_cache": updating_cache,
+            "precomputed_rope": precomputed_rope,
+            "anchor_rope": anchor_rope,
+            "frame_seqlen_hint": frame_seqlen_hint,
+            "kv_plan": kv_plan,
         }
 
         def create_custom_forward(module):
@@ -936,6 +1164,29 @@ class CausalWanModel(nn.Module, NativeConfigMixin):
                     }
                 )
                 x = block(x, **kwargs)
+
+        if kv_plan is not None and kv_mirror is not None and kv_mirror_key is not None and kv_cache is not None:
+            g_vers_after = tuple(_tensor_version_safe(layer["global_end_index"]) for layer in kv_cache)
+            l_vers_after = tuple(_tensor_version_safe(layer["local_end_index"]) for layer in kv_cache)
+            if all(v is not None for v in g_vers_after) and all(v is not None for v in l_vers_after):
+                sa0: Any = self.blocks[0].self_attn
+                c_start = current_start if cache_start is None else cache_start
+                c_end = c_start + sa0.block_length
+                prev_g, prev_l = kv_plan
+                num_new = c_end - prev_g
+                if num_new > 0:
+                    kv_cap = int(kv_cache[0]["k"].shape[1])
+                    if num_new + prev_l > kv_cap:
+                        num_ev = num_new + prev_l - kv_cap
+                        next_l = prev_l + c_end - prev_g - num_ev
+                    else:
+                        next_l = prev_l + c_end - prev_g
+                    next_g = c_end
+                else:
+                    next_g, next_l = prev_g, prev_l
+                if len(kv_mirror) >= 16:
+                    kv_mirror.clear()
+                kv_mirror[kv_mirror_key] = (next_g, next_l, g_vers_after, l_vers_after)
 
         # head
         x = self.head(x, e.unflatten(dim=0, sizes=t.shape).unsqueeze(2))
