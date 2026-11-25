@@ -43,7 +43,7 @@ def _silu_mul_kernel(
 ):
     """Elementwise ``silu(gate) * value``; *block* tiles a flat contiguous buffer."""
 
-    offsets = tl.program_id(0) * block + tl.arange(0, block)
+    offsets = tl.program_id(0).to(tl.int64) * block + tl.arange(0, block).to(tl.int64)
     mask = offsets < elements
     gate = tl.load(gate_ptr + offsets, mask=mask, other=0.0).to(tl.float32)
     value = tl.load(value_ptr + offsets, mask=mask, other=0.0).to(tl.float32)
@@ -59,12 +59,12 @@ def _packed_silu_mul_kernel(
     half_features: tl.constexpr,
     block: tl.constexpr,
 ):
-    """Packed last-dim split: even half is gate, odd half is value."""
+    """Packed last-dim split: first half is gate, second half is value (strict int64)."""
 
-    output_offsets = tl.program_id(0) * block + tl.arange(0, block)
+    output_offsets = tl.program_id(0).to(tl.int64) * block + tl.arange(0, block).to(tl.int64)
     mask = output_offsets < output_elements
     row = output_offsets // half_features
-    feature = output_offsets % half_features
+    feature = output_offsets - row * half_features
     input_base = row * (2 * half_features) + feature
     gate = tl.load(input_ptr + input_base, mask=mask, other=0.0).to(tl.float32)
     value = tl.load(input_ptr + input_base + half_features, mask=mask, other=0.0).to(tl.float32)
@@ -425,28 +425,29 @@ def _scale_shift_kernel(
     hs2: tl.constexpr,
     hs3: tl.constexpr,
     hs4: tl.constexpr,
-    round_product: tl.constexpr,
+    round_product_bf16: tl.constexpr,
+    round_product_fp16: tl.constexpr,
     block: tl.constexpr,
 ):
-    """Fused ``x * (1 + scale) + shift``; ``round_product`` restores eager BF16 cuts."""
+    """Fused ``x * (1 + scale) + shift`` (strict int64, single-cycle SM80+ PTX rounding)."""
 
-    offsets = tl.program_id(0) * block + tl.arange(0, block)
+    offsets = tl.program_id(0).to(tl.int64) * block + tl.arange(0, block).to(tl.int64)
     mask = offsets < elements
     row = offsets // features
-    cols = offsets % features
+    cols = offsets - row * features
     scale_base = _broadcast_row_offset(row, d0, d1, d2, d3, ss0, ss1, ss2, ss3)
     shift_base = _broadcast_row_offset(row, d0, d1, d2, d3, hs0, hs1, hs2, hs3)
     x_input = tl.load(x_ptr + offsets, mask=mask, other=0.0)
     scale_input = tl.load(scale_ptr + scale_base + cols * ss4, mask=mask, other=0.0)
     shift_input = tl.load(shift_ptr + shift_base + cols * hs4, mask=mask, other=0.0)
-    # Match ``x * (1 + scale) + shift`` expression boundaries.  Keeping the
-    # vendor LayerNorm outside this kernel preserves its exact reduction order;
-    # this kernel only removes one of the two following pointwise launches.
-    scale_factor = _round_to_dtype(1.0 + scale_input.to(tl.float32), scale_input.dtype)
-    product = x_input.to(tl.float32) * scale_factor.to(tl.float32)
-    if round_product:
-        product = _round_to_dtype(product, x_input.dtype)
-    tl.store(out_ptr + offsets, product.to(tl.float32) + shift_input.to(tl.float32), mask=mask)
+    # Match ``x * (1 + scale) + shift`` expression boundaries via single-cycle PTX rounding.
+    scale_factor = _round_to_dtype_ptx(1.0 + scale_input.to(tl.float32), scale_input.dtype)
+    product = x_input.to(tl.float32) * scale_factor
+    if round_product_bf16:
+        product = _round_float32_to_bfloat16_ptx(product)
+    elif round_product_fp16:
+        product = _round_float32_to_float16(product)
+    tl.store(out_ptr + offsets, product + shift_input.to(tl.float32), mask=mask)
 
 
 @triton.jit
@@ -479,8 +480,8 @@ def _rms_norm_scale_shift_kernel(
 ):
     """RMSNorm (optional weight) then AdaLN; weight is applied before the dtype cut."""
 
-    row = tl.program_id(0)
-    cols = tl.arange(0, block)
+    row = tl.program_id(0).to(tl.int64)
+    cols = tl.arange(0, block).to(tl.int64)
     mask = (row < rows) & (cols < features)
     offsets = row * features + cols
     x_input = tl.load(x_ptr + offsets, mask=mask, other=0.0)
@@ -1010,7 +1011,8 @@ def scale_shift(x: torch.Tensor, scale: torch.Tensor, shift: torch.Tensor) -> to
         hs2=shift_strides[2],
         hs3=shift_strides[3],
         hs4=shift_strides[4],
-        round_product=product_dtype in {torch.float16, torch.bfloat16},
+        round_product_bf16=product_dtype == torch.bfloat16,
+        round_product_fp16=product_dtype == torch.float16,
         block=block,
         num_warps=4,
         enable_fp_fusion=False,
