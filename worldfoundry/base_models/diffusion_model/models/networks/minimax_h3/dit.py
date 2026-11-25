@@ -38,6 +38,7 @@ from .config import (
 from .ops import (
     apply_qk_norm,
     indexed_gate,
+    indexed_gate_rms_norm_indexed_scale_shift,
     make_rms_norm,
     qk_norm_rope,
     rms_norm_indexed_scale_shift,
@@ -1808,12 +1809,22 @@ class MiniMaxH3DiTBlock(nn.Module):
                 attention_groups=attention_groups,
                 cp_seq_len=cp_seq_len,
             )
-        x = indexed_gate(residual, gate_msa, h, combined_indices, dtype=x.dtype)
-
-        residual = x
-        if ffn_conditioner is not None:
+        if ffn_conditioner is None:
+            residual, h = indexed_gate_rms_norm_indexed_scale_shift(
+                residual,
+                gate_msa,
+                h,
+                self.norm2,
+                shift_mlp,
+                scale_mlp,
+                combined_indices,
+                dtype=x.dtype,
+            )
+        else:
+            x = indexed_gate(residual, gate_msa, h, combined_indices, dtype=x.dtype)
+            residual = x
             x = ffn_conditioner(x)
-        h = rms_norm_indexed_scale_shift(x, self.norm2, shift_mlp, scale_mlp, combined_indices, dtype=x.dtype)
+            h = rms_norm_indexed_scale_shift(x, self.norm2, shift_mlp, scale_mlp, combined_indices, dtype=x.dtype)
         h = self.mlp(h)
         return indexed_gate(residual, gate_mlp, h, combined_indices, dtype=x.dtype)
 

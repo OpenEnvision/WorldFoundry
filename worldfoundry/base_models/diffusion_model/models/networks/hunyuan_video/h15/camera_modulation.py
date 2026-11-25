@@ -151,6 +151,111 @@ try:
         out = x_in.to(tl.float32) + (y_sum * g).to(x_in.dtype).to(tl.float32)
         tl.store(out_ptr + off, out.to(x_in.dtype), mask=mask)
 
+    @triton.jit
+    def _hy_residual_gate_layernorm_modulate_kernel(
+        x_ptr,
+        y_ptr,
+        gate_ptr,
+        shift_ptr,
+        scale_ptr,
+        x_out_ptr,
+        mod_out_ptr,
+        rows,
+        seq_len,
+        token_len,
+        latent_len,
+        gate_row_stride,
+        shift_row_stride,
+        scale_row_stride,
+        eps,
+        hidden_size: tl.constexpr,
+        block: tl.constexpr,
+        USE_TANH: tl.constexpr,
+    ):
+        """Single-pass ``x_out = x + y * gate`` + affine-free FP32 LayerNorm + AdaLN ``norm*(1+scale)+shift``."""
+        row = tl.program_id(0)
+        cols = tl.arange(0, block)
+        mask = (row < rows) & (cols < hidden_size)
+
+        off = row.to(tl.int64) * hidden_size + cols
+        x_in = tl.load(x_ptr + off, mask=mask, other=0.0)
+        y_in = tl.load(y_ptr + off, mask=mask, other=0.0)
+
+        b_idx = row // seq_len
+        s_idx = row % seq_len
+        t_idx = s_idx // token_len
+        mod_row = (b_idx * latent_len + t_idx).to(tl.int64)
+
+        g_raw = tl.load(gate_ptr + mod_row * gate_row_stride + cols, mask=mask, other=0.0).to(tl.float32)
+        if USE_TANH:
+            g_raw = _libdevice.tanh(g_raw)
+        g = g_raw.to(x_in.dtype).to(tl.float32)
+        x_upd = (x_in.to(tl.float32) + (y_in.to(tl.float32) * g).to(x_in.dtype).to(tl.float32)).to(x_in.dtype)
+        tl.store(x_out_ptr + off, x_upd, mask=mask)
+
+        x_f = tl.where(mask, x_upd.to(tl.float32), 0.0)
+        mean = tl.sum(x_f, axis=0) / hidden_size
+        diff = tl.where(mask, x_f - mean, 0.0)
+        var = tl.sum(diff * diff, axis=0) / hidden_size
+        normed = (diff * _libdevice.rsqrt(var + eps)).to(x_in.dtype).to(tl.float32)
+
+        sc = tl.load(scale_ptr + mod_row * scale_row_stride + cols, mask=mask, other=0.0).to(x_in.dtype).to(tl.float32)
+        sh = tl.load(shift_ptr + mod_row * shift_row_stride + cols, mask=mask, other=0.0).to(x_in.dtype).to(tl.float32)
+        mod_out = normed * (1.0 + sc) + sh
+        tl.store(mod_out_ptr + off, mod_out.to(x_in.dtype), mask=mask)
+
+    @triton.jit
+    def _hy_residual_dual_gate_layernorm_modulate_kernel(
+        x_ptr,
+        y1_ptr,
+        y2_ptr,
+        gate_ptr,
+        shift_ptr,
+        scale_ptr,
+        x_out_ptr,
+        mod_out_ptr,
+        rows,
+        seq_len,
+        token_len,
+        latent_len,
+        gate_row_stride,
+        shift_row_stride,
+        scale_row_stride,
+        eps,
+        hidden_size: tl.constexpr,
+        block: tl.constexpr,
+    ):
+        """Single-pass ``x_out = x + (y1 + y2) * gate`` + affine-free FP32 LayerNorm + AdaLN."""
+        row = tl.program_id(0)
+        cols = tl.arange(0, block)
+        mask = (row < rows) & (cols < hidden_size)
+
+        off = row.to(tl.int64) * hidden_size + cols
+        x_in = tl.load(x_ptr + off, mask=mask, other=0.0)
+        y1_in = tl.load(y1_ptr + off, mask=mask, other=0.0)
+        y2_in = tl.load(y2_ptr + off, mask=mask, other=0.0)
+
+        b_idx = row // seq_len
+        s_idx = row % seq_len
+        t_idx = s_idx // token_len
+        mod_row = (b_idx * latent_len + t_idx).to(tl.int64)
+
+        g = tl.load(gate_ptr + mod_row * gate_row_stride + cols, mask=mask, other=0.0).to(x_in.dtype).to(tl.float32)
+        y_sum = (y1_in.to(tl.float32) + y2_in.to(tl.float32)).to(x_in.dtype).to(tl.float32)
+        x_upd = (x_in.to(tl.float32) + (y_sum * g).to(x_in.dtype).to(tl.float32)).to(x_in.dtype)
+        tl.store(x_out_ptr + off, x_upd, mask=mask)
+
+        x_f = tl.where(mask, x_upd.to(tl.float32), 0.0)
+        mean = tl.sum(x_f, axis=0) / hidden_size
+        diff = tl.where(mask, x_f - mean, 0.0)
+        var = tl.sum(diff * diff, axis=0) / hidden_size
+        normed = (diff * _libdevice.rsqrt(var + eps)).to(x_in.dtype).to(tl.float32)
+
+        sc = tl.load(scale_ptr + mod_row * scale_row_stride + cols, mask=mask, other=0.0).to(x_in.dtype).to(tl.float32)
+        sh = tl.load(shift_ptr + mod_row * shift_row_stride + cols, mask=mask, other=0.0).to(x_in.dtype).to(tl.float32)
+        mod_out = normed * (1.0 + sc) + sh
+        tl.store(mod_out_ptr + off, mod_out.to(x_in.dtype), mask=mask)
+
     _TRITON_MOD_AVAILABLE = True
 except Exception:
     _TRITON_MOD_AVAILABLE = False
@@ -402,6 +507,169 @@ def fused_residual_dual_gate(
                 )
                 return out
     return x + apply_gate(y1 + y2, gate=gate)
+
+
+def fused_residual_gate_layernorm_modulate(
+    x: torch.Tensor,
+    y: torch.Tensor,
+    gate: torch.Tensor | None,
+    shift: torch.Tensor | None,
+    scale: torch.Tensor | None,
+    *,
+    eps: float = 1e-6,
+    tanh: bool = False,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Single-pass ``x_out = x + gate * y`` and ``LayerNorm(x_out, eps) * (1 + scale) + shift``."""
+    hidden = int(x.shape[-1])
+    if (
+        _TRITON_MOD_AVAILABLE
+        and x.is_cuda
+        and y.is_cuda
+        and gate is not None
+        and shift is not None
+        and scale is not None
+        and gate.is_cuda
+        and shift.is_cuda
+        and scale.is_cuda
+        and y.device == x.device
+        and gate.device == x.device
+        and shift.device == x.device
+        and scale.device == x.device
+        and not torch.is_grad_enabled()
+        and x.ndim == 3
+        and y.shape == x.shape
+        and y.dtype == x.dtype
+        and gate.ndim == 2
+        and shift.ndim == 2
+        and scale.ndim == 2
+        and gate.shape == shift.shape == scale.shape
+        and scale.shape[1] == hidden
+        and gate.stride(1) == 1
+        and shift.stride(1) == 1
+        and scale.stride(1) == 1
+        and x.is_contiguous()
+        and y.is_contiguous()
+        and hidden <= 4096
+        and int(x.shape[1]) > 0
+    ):
+        batch, seq_len = int(x.shape[0]), int(x.shape[1])
+        if int(scale.shape[0]) % batch == 0:
+            latent_len = int(scale.shape[0]) // batch
+            if latent_len > 0 and seq_len % latent_len == 0:
+                token_len = seq_len // latent_len
+                rows = batch * seq_len
+                x_out = torch.empty_like(x)
+                mod_out = torch.empty_like(x)
+                block = triton.next_power_of_2(hidden)
+                _hy_residual_gate_layernorm_modulate_kernel[(rows,)](
+                    x,
+                    y,
+                    gate,
+                    shift,
+                    scale,
+                    x_out,
+                    mod_out,
+                    rows,
+                    seq_len,
+                    token_len,
+                    latent_len,
+                    int(gate.stride(0)),
+                    int(shift.stride(0)),
+                    int(scale.stride(0)),
+                    float(eps),
+                    hidden_size=hidden,
+                    block=block,
+                    USE_TANH=tanh,
+                    num_warps=8 if block >= 1024 else 4,
+                )
+                return x_out, mod_out
+    x_out = fused_residual_gate(x, y, gate, tanh=tanh)
+    mod_out = fused_layernorm_modulate(x_out, shift=shift, scale=scale, eps=eps)
+    return x_out, mod_out
+
+
+def fused_residual_dual_gate_layernorm_modulate(
+    x: torch.Tensor,
+    y1: torch.Tensor,
+    y2: torch.Tensor,
+    gate: torch.Tensor | None,
+    shift: torch.Tensor | None,
+    scale: torch.Tensor | None,
+    *,
+    eps: float = 1e-6,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Single-pass ``x_out = x + gate * (y1 + y2)`` and ``LayerNorm(x_out, eps) * (1 + scale) + shift``."""
+    hidden = int(x.shape[-1])
+    if (
+        _TRITON_MOD_AVAILABLE
+        and x.is_cuda
+        and y1.is_cuda
+        and y2.is_cuda
+        and gate is not None
+        and shift is not None
+        and scale is not None
+        and gate.is_cuda
+        and shift.is_cuda
+        and scale.is_cuda
+        and y1.device == x.device
+        and y2.device == x.device
+        and gate.device == x.device
+        and shift.device == x.device
+        and scale.device == x.device
+        and not torch.is_grad_enabled()
+        and x.ndim == 3
+        and y1.shape == x.shape
+        and y2.shape == x.shape
+        and y1.dtype == x.dtype
+        and y2.dtype == x.dtype
+        and gate.ndim == 2
+        and shift.ndim == 2
+        and scale.ndim == 2
+        and gate.shape == shift.shape == scale.shape
+        and scale.shape[1] == hidden
+        and gate.stride(1) == 1
+        and shift.stride(1) == 1
+        and scale.stride(1) == 1
+        and x.is_contiguous()
+        and y1.is_contiguous()
+        and y2.is_contiguous()
+        and hidden <= 4096
+        and int(x.shape[1]) > 0
+    ):
+        batch, seq_len = int(x.shape[0]), int(x.shape[1])
+        if int(scale.shape[0]) % batch == 0:
+            latent_len = int(scale.shape[0]) // batch
+            if latent_len > 0 and seq_len % latent_len == 0:
+                token_len = seq_len // latent_len
+                rows = batch * seq_len
+                x_out = torch.empty_like(x)
+                mod_out = torch.empty_like(x)
+                block = triton.next_power_of_2(hidden)
+                _hy_residual_dual_gate_layernorm_modulate_kernel[(rows,)](
+                    x,
+                    y1,
+                    y2,
+                    gate,
+                    shift,
+                    scale,
+                    x_out,
+                    mod_out,
+                    rows,
+                    seq_len,
+                    token_len,
+                    latent_len,
+                    int(gate.stride(0)),
+                    int(shift.stride(0)),
+                    int(scale.stride(0)),
+                    float(eps),
+                    hidden_size=hidden,
+                    block=block,
+                    num_warps=8 if block >= 1024 else 4,
+                )
+                return x_out, mod_out
+    x_out = fused_residual_dual_gate(x, y1, y2, gate)
+    mod_out = fused_layernorm_modulate(x_out, shift=shift, scale=scale, eps=eps)
+    return x_out, mod_out
 
 
 class FinalLayer(DiTFinalLayer):

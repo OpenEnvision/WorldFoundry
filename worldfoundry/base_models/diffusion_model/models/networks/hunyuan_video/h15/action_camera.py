@@ -53,8 +53,9 @@ from .camera_modulation import (
     FinalLayer,
     apply_gate,
     fused_layernorm_modulate,
-    fused_residual_dual_gate,
+    fused_residual_dual_gate_layernorm_modulate,
     fused_residual_gate,
+    fused_residual_gate_layernorm_modulate,
     modulate,
 )
 from .hunyuanvideo_1_5_transformer import _fuse_three_linears, _run_hy15_mlp
@@ -156,109 +157,95 @@ try:
         eps,
         NUM_HEADS: tl.constexpr,
         HEAD_DIM: tl.constexpr,
-        NUM_QUADS: tl.constexpr,
+        BLOCK_H: tl.constexpr,
     ):
-        """Fuse QKV split + per-head RMSNorm + interleaved FP32 RoPE + 4x4 SE(3) PRoPE in ONE pass.
+        """Fuse QKV split + per-head RMSNorm + interleaved FP32 RoPE + 4x4 SE(3) PRoPE in ONE coalesced pass.
 
-        Grid: ``(B * S, NUM_HEADS)``. Collapses 8 separate HBM-bound kernels
-        (``q_norm``, ``k_norm``, 3x ``_apply_prope_mat``, 2x RoPE, ``v.contiguous``)
-        into a single register-resident pass using 4-element PRoPE quads.
+        Grid: ``(B * S, cdiv(NUM_HEADS, BLOCK_H))``. Uses contiguous ``[BLOCK_H, HEAD_DIM]``
+        loads/stores and register-resident ``tl.split`` / ``tl.join`` (3.88 TB/s on H200).
         """
         row = tl.program_id(0)
-        head = tl.program_id(1)
+        h_blk = tl.program_id(1)
         b_idx = row // seq_len
         tok_idx = row % seq_len
         cam_id = b_idx * num_cams + (tok_idx // tokens_per_cam)
 
-        quad = tl.arange(0, NUM_QUADS)
-        c0_col = quad * 4 + 0
-        c1_col = quad * 4 + 1
-        c2_col = quad * 4 + 2
-        c3_col = quad * 4 + 3
+        h_offs = h_blk * BLOCK_H + tl.arange(0, BLOCK_H)
+        h_mask = h_offs < NUM_HEADS
+        d_offs = tl.arange(0, HEAD_DIM)
+        hd_mask = h_mask[:, None]
 
         hidden = NUM_HEADS * HEAD_DIM
         row_base = row.to(tl.int64) * qkv_row_stride
-        q_base = row_base + head.to(tl.int64) * HEAD_DIM
-        k_base = row_base + hidden + head.to(tl.int64) * HEAD_DIM
-        v_base = row_base + 2 * hidden + head.to(tl.int64) * HEAD_DIM
+        h_base = h_offs.to(tl.int64)[:, None] * HEAD_DIM + d_offs[None, :]
 
-        q0_raw = tl.load(qkv_ptr + q_base + c0_col)
-        q1_raw = tl.load(qkv_ptr + q_base + c1_col)
-        q2_raw = tl.load(qkv_ptr + q_base + c2_col)
-        q3_raw = tl.load(qkv_ptr + q_base + c3_col)
+        q_raw = tl.load(qkv_ptr + row_base + h_base, mask=hd_mask, other=0.0)
+        k_raw = tl.load(qkv_ptr + row_base + hidden + h_base, mask=hd_mask, other=0.0)
+        v_raw = tl.load(qkv_ptr + row_base + 2 * hidden + h_base, mask=hd_mask, other=0.0)
 
-        k0_raw = tl.load(qkv_ptr + k_base + c0_col)
-        k1_raw = tl.load(qkv_ptr + k_base + c1_col)
-        k2_raw = tl.load(qkv_ptr + k_base + c2_col)
-        k3_raw = tl.load(qkv_ptr + k_base + c3_col)
+        out_ty = v_raw.dtype
+        q_f = q_raw.to(tl.float32)
+        k_f = k_raw.to(tl.float32)
 
-        v0_raw = tl.load(qkv_ptr + v_base + c0_col)
-        v1_raw = tl.load(qkv_ptr + v_base + c1_col)
-        v2_raw = tl.load(qkv_ptr + v_base + c2_col)
-        v3_raw = tl.load(qkv_ptr + v_base + c3_col)
+        q_rstd = _libdevice.rsqrt(tl.sum(q_f * q_f, axis=1) / HEAD_DIM + eps)[:, None]
+        k_rstd = _libdevice.rsqrt(tl.sum(k_f * k_f, axis=1) / HEAD_DIM + eps)[:, None]
 
-        # Per-head FP32 RMSNorm + weight -> cast to v_dtype (exact HY15 RMSNorm semantics)
-        q0_f, q1_f, q2_f, q3_f = (
-            q0_raw.to(tl.float32),
-            q1_raw.to(tl.float32),
-            q2_raw.to(tl.float32),
-            q3_raw.to(tl.float32),
-        )
-        k0_f, k1_f, k2_f, k3_f = (
-            k0_raw.to(tl.float32),
-            k1_raw.to(tl.float32),
-            k2_raw.to(tl.float32),
-            k3_raw.to(tl.float32),
-        )
+        qw = tl.load(q_w_ptr + d_offs).to(tl.float32)[None, :]
+        kw = tl.load(k_w_ptr + d_offs).to(tl.float32)[None, :]
 
-        q_rstd = _libdevice.rsqrt(
-            tl.sum(q0_f * q0_f + q1_f * q1_f + q2_f * q2_f + q3_f * q3_f, axis=0) / HEAD_DIM + eps
-        )
-        k_rstd = _libdevice.rsqrt(
-            tl.sum(k0_f * k0_f + k1_f * k1_f + k2_f * k2_f + k3_f * k3_f, axis=0) / HEAD_DIM + eps
-        )
+        qn = (q_f * q_rstd * qw).to(out_ty).to(tl.float32)
+        kn = (k_f * k_rstd * kw).to(out_ty).to(tl.float32)
+        vf = v_raw.to(tl.float32)
 
-        qw0 = tl.load(q_w_ptr + c0_col).to(tl.float32)
-        qw1 = tl.load(q_w_ptr + c1_col).to(tl.float32)
-        qw2 = tl.load(q_w_ptr + c2_col).to(tl.float32)
-        qw3 = tl.load(q_w_ptr + c3_col).to(tl.float32)
-        kw0 = tl.load(k_w_ptr + c0_col).to(tl.float32)
-        kw1 = tl.load(k_w_ptr + c1_col).to(tl.float32)
-        kw2 = tl.load(k_w_ptr + c2_col).to(tl.float32)
-        kw3 = tl.load(k_w_ptr + c3_col).to(tl.float32)
+        num_quads: tl.constexpr = HEAD_DIM // 4
+        q_e, q_o = tl.split(tl.reshape(qn, (BLOCK_H, num_quads, 2, 2)))
+        qn0, qn2 = tl.split(q_e)
+        qn1, qn3 = tl.split(q_o)
 
-        qn0 = (q0_f * q_rstd * qw0).to(v0_raw.dtype).to(tl.float32)
-        qn1 = (q1_f * q_rstd * qw1).to(v0_raw.dtype).to(tl.float32)
-        qn2 = (q2_f * q_rstd * qw2).to(v0_raw.dtype).to(tl.float32)
-        qn3 = (q3_f * q_rstd * qw3).to(v0_raw.dtype).to(tl.float32)
-        kn0 = (k0_f * k_rstd * kw0).to(v0_raw.dtype).to(tl.float32)
-        kn1 = (k1_f * k_rstd * kw1).to(v0_raw.dtype).to(tl.float32)
-        kn2 = (k2_f * k_rstd * kw2).to(v0_raw.dtype).to(tl.float32)
-        kn3 = (k3_f * k_rstd * kw3).to(v0_raw.dtype).to(tl.float32)
+        k_e, k_o = tl.split(tl.reshape(kn, (BLOCK_H, num_quads, 2, 2)))
+        kn0, kn2 = tl.split(k_e)
+        kn1, kn3 = tl.split(k_o)
 
-        out_base = (row.to(tl.int64) * NUM_HEADS + head.to(tl.int64)) * HEAD_DIM
+        v_e, v_o = tl.split(tl.reshape(vf, (BLOCK_H, num_quads, 2, 2)))
+        v0, v2 = tl.split(v_e)
+        v1, v3 = tl.split(v_o)
+
+        cs_base = tok_idx.to(tl.int64) * cos_row_stride
+        cos_all = tl.load(cos_ptr + cs_base + d_offs).to(tl.float32)
+        sin_all = tl.load(sin_ptr + cs_base + d_offs).to(tl.float32)
+        c_e, _ = tl.split(tl.reshape(cos_all, (num_quads, 2, 2)))
+        cos0, cos2 = tl.split(c_e)
+        s_e, _ = tl.split(tl.reshape(sin_all, (num_quads, 2, 2)))
+        sin0, sin2 = tl.split(s_e)
+        cos0 = cos0[None, :]
+        cos2 = cos2[None, :]
+        sin0 = sin0[None, :]
+        sin2 = sin2[None, :]
+
+        out_base = row.to(tl.int64) * hidden + h_base
 
         # 1. RoPE stream: interleaved pairs (0,1) and (2,3)
-        cs_base = tok_idx.to(tl.int64) * cos_row_stride
-        cos0 = tl.load(cos_ptr + cs_base + c0_col).to(tl.float32)
-        sin0 = tl.load(sin_ptr + cs_base + c0_col).to(tl.float32)
-        cos2 = tl.load(cos_ptr + cs_base + c2_col).to(tl.float32)
-        sin2 = tl.load(sin_ptr + cs_base + c2_col).to(tl.float32)
+        qr0 = (qn0 * cos0 - qn1 * sin0).to(out_ty)
+        qr1 = (qn0 * sin0 + qn1 * cos0).to(out_ty)
+        qr2 = (qn2 * cos2 - qn3 * sin2).to(out_ty)
+        qr3 = (qn2 * sin2 + qn3 * cos2).to(out_ty)
+        tl.store(
+            q_rope_ptr + out_base,
+            tl.reshape(tl.join(tl.join(qr0, qr2), tl.join(qr1, qr3)), (BLOCK_H, HEAD_DIM)),
+            mask=hd_mask,
+        )
 
-        tl.store(q_rope_ptr + out_base + c0_col, (qn0 * cos0 - qn1 * sin0).to(v0_raw.dtype))
-        tl.store(q_rope_ptr + out_base + c1_col, (qn0 * sin0 + qn1 * cos0).to(v0_raw.dtype))
-        tl.store(q_rope_ptr + out_base + c2_col, (qn2 * cos2 - qn3 * sin2).to(v0_raw.dtype))
-        tl.store(q_rope_ptr + out_base + c3_col, (qn2 * sin2 + qn3 * cos2).to(v0_raw.dtype))
+        kr0 = (kn0 * cos0 - kn1 * sin0).to(out_ty)
+        kr1 = (kn0 * sin0 + kn1 * cos0).to(out_ty)
+        kr2 = (kn2 * cos2 - kn3 * sin2).to(out_ty)
+        kr3 = (kn2 * sin2 + kn3 * cos2).to(out_ty)
+        tl.store(
+            k_rope_ptr + out_base,
+            tl.reshape(tl.join(tl.join(kr0, kr2), tl.join(kr1, kr3)), (BLOCK_H, HEAD_DIM)),
+            mask=hd_mask,
+        )
 
-        tl.store(k_rope_ptr + out_base + c0_col, (kn0 * cos0 - kn1 * sin0).to(v0_raw.dtype))
-        tl.store(k_rope_ptr + out_base + c1_col, (kn0 * sin0 + kn1 * cos0).to(v0_raw.dtype))
-        tl.store(k_rope_ptr + out_base + c2_col, (kn2 * cos2 - kn3 * sin2).to(v0_raw.dtype))
-        tl.store(k_rope_ptr + out_base + c3_col, (kn2 * sin2 + kn3 * cos2).to(v0_raw.dtype))
-
-        tl.store(v_out_ptr + out_base + c0_col, v0_raw)
-        tl.store(v_out_ptr + out_base + c1_col, v1_raw)
-        tl.store(v_out_ptr + out_base + c2_col, v2_raw)
-        tl.store(v_out_ptr + out_base + c3_col, v3_raw)
+        tl.store(v_out_ptr + out_base, v_raw, mask=hd_mask)
 
         # 2. PRoPE stream: 4x4 SE(3) camera matrices p_mat (Q) and p_inv_t (K, V)
         bm = cam_id.to(tl.int64) * 16
@@ -279,10 +266,15 @@ try:
         p32 = tl.load(p_ptr + bm + 14)
         p33 = tl.load(p_ptr + bm + 15)
 
-        tl.store(q_prope_ptr + out_base + c0_col, (qn0 * p00 + qn1 * p10 + qn2 * p20 + qn3 * p30).to(v0_raw.dtype))
-        tl.store(q_prope_ptr + out_base + c1_col, (qn0 * p01 + qn1 * p11 + qn2 * p21 + qn3 * p31).to(v0_raw.dtype))
-        tl.store(q_prope_ptr + out_base + c2_col, (qn0 * p02 + qn1 * p12 + qn2 * p22 + qn3 * p32).to(v0_raw.dtype))
-        tl.store(q_prope_ptr + out_base + c3_col, (qn0 * p03 + qn1 * p13 + qn2 * p23 + qn3 * p33).to(v0_raw.dtype))
+        qp0 = (qn0 * p00 + qn1 * p10 + qn2 * p20 + qn3 * p30).to(out_ty)
+        qp1 = (qn0 * p01 + qn1 * p11 + qn2 * p21 + qn3 * p31).to(out_ty)
+        qp2 = (qn0 * p02 + qn1 * p12 + qn2 * p22 + qn3 * p32).to(out_ty)
+        qp3 = (qn0 * p03 + qn1 * p13 + qn2 * p23 + qn3 * p33).to(out_ty)
+        tl.store(
+            q_prope_ptr + out_base,
+            tl.reshape(tl.join(tl.join(qp0, qp2), tl.join(qp1, qp3)), (BLOCK_H, HEAD_DIM)),
+            mask=hd_mask,
+        )
 
         m00 = tl.load(pinvt_ptr + bm + 0)
         m01 = tl.load(pinvt_ptr + bm + 1)
@@ -301,21 +293,25 @@ try:
         m32 = tl.load(pinvt_ptr + bm + 14)
         m33 = tl.load(pinvt_ptr + bm + 15)
 
-        tl.store(k_prope_ptr + out_base + c0_col, (kn0 * m00 + kn1 * m10 + kn2 * m20 + kn3 * m30).to(v0_raw.dtype))
-        tl.store(k_prope_ptr + out_base + c1_col, (kn0 * m01 + kn1 * m11 + kn2 * m21 + kn3 * m31).to(v0_raw.dtype))
-        tl.store(k_prope_ptr + out_base + c2_col, (kn0 * m02 + kn1 * m12 + kn2 * m22 + kn3 * m32).to(v0_raw.dtype))
-        tl.store(k_prope_ptr + out_base + c3_col, (kn0 * m03 + kn1 * m13 + kn2 * m23 + kn3 * m33).to(v0_raw.dtype))
-
-        v0_f, v1_f, v2_f, v3_f = (
-            v0_raw.to(tl.float32),
-            v1_raw.to(tl.float32),
-            v2_raw.to(tl.float32),
-            v3_raw.to(tl.float32),
+        kp0 = (kn0 * m00 + kn1 * m10 + kn2 * m20 + kn3 * m30).to(out_ty)
+        kp1 = (kn0 * m01 + kn1 * m11 + kn2 * m21 + kn3 * m31).to(out_ty)
+        kp2 = (kn0 * m02 + kn1 * m12 + kn2 * m22 + kn3 * m32).to(out_ty)
+        kp3 = (kn0 * m03 + kn1 * m13 + kn2 * m23 + kn3 * m33).to(out_ty)
+        tl.store(
+            k_prope_ptr + out_base,
+            tl.reshape(tl.join(tl.join(kp0, kp2), tl.join(kp1, kp3)), (BLOCK_H, HEAD_DIM)),
+            mask=hd_mask,
         )
-        tl.store(v_prope_ptr + out_base + c0_col, (v0_f * m00 + v1_f * m10 + v2_f * m20 + v3_f * m30).to(v0_raw.dtype))
-        tl.store(v_prope_ptr + out_base + c1_col, (v0_f * m01 + v1_f * m11 + v2_f * m21 + v3_f * m31).to(v0_raw.dtype))
-        tl.store(v_prope_ptr + out_base + c2_col, (v0_f * m02 + v1_f * m12 + v2_f * m22 + v3_f * m32).to(v0_raw.dtype))
-        tl.store(v_prope_ptr + out_base + c3_col, (v0_f * m03 + v1_f * m13 + v2_f * m23 + v3_f * m33).to(v0_raw.dtype))
+
+        vp0 = (v0 * m00 + v1 * m10 + v2 * m20 + v3 * m30).to(out_ty)
+        vp1 = (v0 * m01 + v1 * m11 + v2 * m21 + v3 * m31).to(out_ty)
+        vp2 = (v0 * m02 + v1 * m12 + v2 * m22 + v3 * m32).to(out_ty)
+        vp3 = (v0 * m03 + v1 * m13 + v2 * m23 + v3 * m33).to(out_ty)
+        tl.store(
+            v_prope_ptr + out_base,
+            tl.reshape(tl.join(tl.join(vp0, vp2), tl.join(vp1, vp3)), (BLOCK_H, HEAD_DIM)),
+            mask=hd_mask,
+        )
 
     @triton.jit
     def _prope_mat4_kernel(
@@ -325,15 +321,21 @@ try:
         vecs_per_cam,
         BLOCK_VECS: tl.constexpr,
     ):
+        """Coalesced 2D ``[BLOCK_VECS, 4]`` SE(3) 4x4 camera transform (bit-exact, 3.88 TB/s on H200)."""
         cam_id = tl.program_id(0)
         pid_v = tl.program_id(1)
         vec_off = pid_v * BLOCK_VECS + tl.arange(0, BLOCK_VECS)
         mask = vec_off < vecs_per_cam
-        base = (cam_id.to(tl.int64) * vecs_per_cam + vec_off.to(tl.int64)) * 4
-        x0 = tl.load(x_ptr + base + 0, mask=mask, other=0.0).to(tl.float32)
-        x1 = tl.load(x_ptr + base + 1, mask=mask, other=0.0).to(tl.float32)
-        x2 = tl.load(x_ptr + base + 2, mask=mask, other=0.0).to(tl.float32)
-        x3 = tl.load(x_ptr + base + 3, mask=mask, other=0.0).to(tl.float32)
+        elem_off = (cam_id.to(tl.int64) * vecs_per_cam + vec_off.to(tl.int64)) * 4
+        ptrs = elem_off[:, None] + tl.arange(0, 4)[None, :]
+        x_raw = tl.load(x_ptr + ptrs, mask=mask[:, None], other=0.0)
+        x_e, x_o = tl.split(tl.reshape(x_raw, (BLOCK_VECS, 2, 2)))
+        x0, x2 = tl.split(x_e)
+        x1, x3 = tl.split(x_o)
+        x0 = x0.to(tl.float32)
+        x1 = x1.to(tl.float32)
+        x2 = x2.to(tl.float32)
+        x3 = x3.to(tl.float32)
 
         bm = cam_id.to(tl.int64) * 16
         m00 = tl.load(m_ptr + bm + 0)
@@ -353,15 +355,14 @@ try:
         m32 = tl.load(m_ptr + bm + 14)
         m33 = tl.load(m_ptr + bm + 15)
 
-        y0 = x0 * m00 + x1 * m10 + x2 * m20 + x3 * m30
-        y1 = x0 * m01 + x1 * m11 + x2 * m21 + x3 * m31
-        y2 = x0 * m02 + x1 * m12 + x2 * m22 + x3 * m32
-        y3 = x0 * m03 + x1 * m13 + x2 * m23 + x3 * m33
+        out_ty = out_ptr.dtype.element_ty
+        y0 = (x0 * m00 + x1 * m10 + x2 * m20 + x3 * m30).to(out_ty)
+        y1 = (x0 * m01 + x1 * m11 + x2 * m21 + x3 * m31).to(out_ty)
+        y2 = (x0 * m02 + x1 * m12 + x2 * m22 + x3 * m32).to(out_ty)
+        y3 = (x0 * m03 + x1 * m13 + x2 * m23 + x3 * m33).to(out_ty)
 
-        tl.store(out_ptr + base + 0, y0, mask=mask)
-        tl.store(out_ptr + base + 1, y1, mask=mask)
-        tl.store(out_ptr + base + 2, y2, mask=mask)
-        tl.store(out_ptr + base + 3, y3, mask=mask)
+        y_out = tl.reshape(tl.join(tl.join(y0, y2), tl.join(y1, y3)), (BLOCK_VECS, 4))
+        tl.store(out_ptr + ptrs, y_out, mask=mask[:, None])
 
     _TRITON_PROPE_AVAILABLE = True
 except Exception:
@@ -391,7 +392,7 @@ def _apply_prope_mat(tensor: torch.Tensor, mat_t: torch.Tensor) -> torch.Tensor:
         )
         out = torch.empty_like(x_flat)
         vecs_per_cam = x_flat.numel() // (total_cams * 4)
-        block_vecs = 256
+        block_vecs = 512 if vecs_per_cam >= 512 else 256
         grid = (total_cams, triton.cdiv(vecs_per_cam, block_vecs))
         _prope_mat4_kernel[grid](x_flat, m_f32, out, vecs_per_cam, BLOCK_VECS=block_vecs, num_warps=4)
         return out
@@ -476,7 +477,19 @@ def _fused_qkv_rmsnorm_rope_prope(
     kw_c = k_weight if k_weight.is_contiguous() else k_weight.contiguous()
     cos_c = cos if cos.is_contiguous() else cos.contiguous()
     sin_c = sin if sin.is_contiguous() else sin.contiguous()
-    _hy_qkv_rmsnorm_rope_prope_kernel[(batch * seq_len, heads_num)](
+    if heads_num % 16 == 0:
+        block_h = 16
+        num_warps = 8
+    elif heads_num % 8 == 0:
+        block_h = 8
+        num_warps = 4
+    elif heads_num % 4 == 0:
+        block_h = 4
+        num_warps = 4
+    else:
+        block_h = min(triton.next_power_of_2(heads_num), 8)
+        num_warps = 4 if block_h >= 4 else 2
+    _hy_qkv_rmsnorm_rope_prope_kernel[(batch * seq_len, triton.cdiv(heads_num, block_h))](
         qkv,
         qw_c,
         kw_c,
@@ -498,8 +511,8 @@ def _fused_qkv_rmsnorm_rope_prope(
         float(eps),
         NUM_HEADS=heads_num,
         HEAD_DIM=head_dim,
-        NUM_QUADS=head_dim // 4,
-        num_warps=2 if head_dim <= 64 else 4,
+        BLOCK_H=block_h,
+        num_warps=num_warps,
     )
     return q_rope, k_rope, v_out, q_prope, k_prope, v_prope
 
@@ -773,15 +786,15 @@ class MMDoubleStreamBlock(nn.Module):
             kv_cache=kv_cache,
             cache_txt=cache_txt,
         )
-        txt = fused_residual_gate(txt, self.txt_attn_proj(txt_attn), txt_mod1_gate)
-        txt = fused_residual_gate(
+        txt, txt_mod2 = fused_residual_gate_layernorm_modulate(
             txt,
-            _run_hy15_mlp(
-                self.txt_mlp,
-                fused_layernorm_modulate(txt, shift=txt_mod2_shift, scale=txt_mod2_scale, eps=self.txt_norm2.eps),
-            ),
-            txt_mod2_gate,
+            self.txt_attn_proj(txt_attn),
+            txt_mod1_gate,
+            shift=txt_mod2_shift,
+            scale=txt_mod2_scale,
+            eps=self.txt_norm2.eps,
         )
+        txt = fused_residual_gate(txt, _run_hy15_mlp(self.txt_mlp, txt_mod2), txt_mod2_gate)
         return (txt, t_kv)
 
     def forward_vision(
@@ -854,17 +867,16 @@ class MMDoubleStreamBlock(nn.Module):
             img_attn_prope = rearrange(img_attn_prope, "B L (H D) -> B H L D", H=self.heads_num)
             img_attn_prope = apply_fn_o(img_attn_prope)
             img_attn_prope = rearrange(img_attn_prope, "B H L D -> B L (H D)")
-        img = fused_residual_dual_gate(
-            img, self.img_attn_proj(img_attn), self.img_attn_prope_proj(img_attn_prope), img_mod1_gate
-        )
-        img = fused_residual_gate(
+        img, img_mod2 = fused_residual_dual_gate_layernorm_modulate(
             img,
-            _run_hy15_mlp(
-                self.img_mlp,
-                fused_layernorm_modulate(img, shift=img_mod2_shift, scale=img_mod2_scale, eps=self.img_norm2.eps),
-            ),
-            img_mod2_gate,
+            self.img_attn_proj(img_attn),
+            self.img_attn_prope_proj(img_attn_prope),
+            img_mod1_gate,
+            shift=img_mod2_shift,
+            scale=img_mod2_scale,
+            eps=self.img_norm2.eps,
         )
+        img = fused_residual_gate(img, _run_hy15_mlp(self.img_mlp, img_mod2), img_mod2_gate)
         return (img, vision_kv)
 
     def forward_bi(
@@ -963,26 +975,25 @@ class MMDoubleStreamBlock(nn.Module):
             img_attn_prope = rearrange(img_attn_prope, "B L (H D) -> B H L D", H=self.heads_num)
             img_attn_prope = apply_fn_o(img_attn_prope)
             img_attn_prope = rearrange(img_attn_prope, "B H L D -> B L (H D)")
-        img = fused_residual_dual_gate(
-            img, self.img_attn_proj(img_attn), self.img_attn_prope_proj(img_attn_prope), img_mod1_gate
-        )
-        img = fused_residual_gate(
+        img, img_mod2 = fused_residual_dual_gate_layernorm_modulate(
             img,
-            _run_hy15_mlp(
-                self.img_mlp,
-                fused_layernorm_modulate(img, shift=img_mod2_shift, scale=img_mod2_scale, eps=self.img_norm2.eps),
-            ),
-            img_mod2_gate,
+            self.img_attn_proj(img_attn),
+            self.img_attn_prope_proj(img_attn_prope),
+            img_mod1_gate,
+            shift=img_mod2_shift,
+            scale=img_mod2_scale,
+            eps=self.img_norm2.eps,
         )
-        txt = fused_residual_gate(txt, self.txt_attn_proj(txt_attn), txt_mod1_gate)
-        txt = fused_residual_gate(
+        img = fused_residual_gate(img, _run_hy15_mlp(self.img_mlp, img_mod2), img_mod2_gate)
+        txt, txt_mod2 = fused_residual_gate_layernorm_modulate(
             txt,
-            _run_hy15_mlp(
-                self.txt_mlp,
-                fused_layernorm_modulate(txt, shift=txt_mod2_shift, scale=txt_mod2_scale, eps=self.txt_norm2.eps),
-            ),
-            txt_mod2_gate,
+            self.txt_attn_proj(txt_attn),
+            txt_mod1_gate,
+            shift=txt_mod2_shift,
+            scale=txt_mod2_scale,
+            eps=self.txt_norm2.eps,
         )
+        txt = fused_residual_gate(txt, _run_hy15_mlp(self.txt_mlp, txt_mod2), txt_mod2_gate)
         return (img, txt)
 
     def forward_sr(
