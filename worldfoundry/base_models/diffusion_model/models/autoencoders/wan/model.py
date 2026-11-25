@@ -18,6 +18,28 @@ from einops import rearrange, repeat
 from tqdm import tqdm
 
 from worldfoundry.core.attention import scaled_dot_product_attention as _worldfoundry_scaled_dot_product_attention
+from worldfoundry.core.kernels.triton_wan_vae import (
+    can_use_wan_vae_avg_down_3d_add,
+    can_use_wan_vae_causal_pad_cache,
+    can_use_wan_vae_dup_up_3d_add,
+    can_use_wan_vae_residual_bias_add,
+    can_use_wan_vae_rms_norm,
+    is_channels_last_2d,
+    is_channels_last_3d,
+    wan_vae_avg_down_3d,
+    wan_vae_avg_down_3d_add,
+    wan_vae_causal_pad_cache,
+    wan_vae_dup_up_3d,
+    wan_vae_dup_up_3d_add,
+    wan_vae_nearest_upsample_2x,
+    wan_vae_patchify_2x,
+    wan_vae_residual_bias_add,
+    wan_vae_rms_norm,
+    wan_vae_rms_norm_silu_causal_pad,
+    wan_vae_time_interleave_upsample_2x,
+    wan_vae_unpatchify_2x,
+    wan_vae_zero_pad_2d_rb,
+)
 
 CACHE_T = 2
 
@@ -48,10 +70,60 @@ class CausalConv3d(nn.Conv3d):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._padding = (self.padding[2], self.padding[2], self.padding[1], self.padding[1], 2 * self.padding[0], 0)
+        p0, p1, p2 = int(self.padding[0]), int(self.padding[1]), int(self.padding[2])
+        self._padding: tuple[int, int, int, int, int, int] = (p2, p2, p1, p1, 2 * p0, 0)
         self.padding = (0, 0, 0)
 
     def forward(self, x, cache_x=None):
+        if (
+            not torch.is_grad_enabled()
+            and x.is_cuda
+            and x.ndim == 5
+            and type(self) is CausalConv3d
+            and not _has_hooks(self)
+            and self.weight.device == x.device
+            and (self.bias is None or self.bias.device == x.device)
+            and x.dtype in (torch.bfloat16, torch.float16, torch.float32)
+        ):
+            pad_w_l, pad_w_r, pad_h_t, pad_h_b, pad_t_l, pad_t_r = self._padding
+            if pad_w_l == pad_w_r and pad_h_t == pad_h_b and pad_t_r == 0:
+                if pad_w_l == 0 and pad_h_t == 0 and pad_t_l == 0 and cache_x is None:
+                    out = F.conv3d(x, self.weight, None, self.stride, (0, 0, 0), self.dilation, self.groups)
+                    if self.bias is not None and can_use_wan_vae_residual_bias_add(None, out, self.bias):
+                        return wan_vae_residual_bias_add(None, out, self.bias)
+                    return out + self.bias.view(1, -1, 1, 1, 1) if self.bias is not None else out
+                align_c = (
+                    32
+                    if (
+                        self.groups == 1
+                        and x.shape[1] < 8
+                        and self.weight.shape[1] == x.shape[1]
+                        and (is_channels_last_3d(x) or is_channels_last_3d(self.weight))
+                    )
+                    else 0
+                )
+                if can_use_wan_vae_causal_pad_cache(
+                    x, pad_w=pad_w_l, pad_h=pad_h_t, pad_t_left=pad_t_l, align_c=align_c
+                ):
+                    x_pad, _ = wan_vae_causal_pad_cache(
+                        x,
+                        cache_in=cache_x,
+                        pad_w=pad_w_l,
+                        pad_h=pad_h_t,
+                        pad_t_left=pad_t_l,
+                        write_cache=False,
+                        cache_t=CACHE_T,
+                        align_c=align_c,
+                    )
+                    weight = self.weight
+                    if align_c > weight.shape[1]:
+                        weight = F.pad(weight, (0, 0, 0, 0, 0, 0, 0, align_c - weight.shape[1])).contiguous(
+                            memory_format=torch.channels_last_3d
+                        )
+                    out = F.conv3d(x_pad, weight, None, self.stride, (0, 0, 0), self.dilation, self.groups)
+                    if self.bias is not None and can_use_wan_vae_residual_bias_add(None, out, self.bias):
+                        return wan_vae_residual_bias_add(None, out, self.bias)
+                    return out + self.bias.view(1, -1, 1, 1, 1) if self.bias is not None else out
         padding = list(self._padding)
         if cache_x is not None and self._padding[4] > 0:
             cache_x = cache_x.to(x.device)
@@ -66,15 +138,126 @@ def _has_hooks(module: nn.Module) -> bool:
     return bool(module._forward_hooks or module._forward_pre_hooks)
 
 
-def _try_fused_rms_silu_causal_conv3d(
+def _any_submodule_has_hooks(module: nn.Module) -> bool:
+    return any(_has_hooks(m) for m in module.modules())
+
+
+def _can_use_internal_cl3d(module: nn.Module, x: torch.Tensor) -> bool:
+    return (
+        x.is_cuda
+        and x.ndim == 5
+        and not module.training
+        and not torch.is_grad_enabled()
+        and x.dtype in (torch.bfloat16, torch.float16)
+        and not torch.compiler.is_compiling()
+        and not _any_submodule_has_hooks(module)
+    )
+
+
+def _ndhwc_to_nhwc(x: torch.Tensor) -> torch.Tensor:
+    b, c, t, h, w = x.shape
+    return x.permute(0, 2, 3, 4, 1).reshape(b * t, h, w, c).permute(0, 3, 1, 2)
+
+
+def _nhwc_to_ndhwc(x: torch.Tensor, b: int, t: int) -> torch.Tensor:
+    _, c, h, w = x.shape
+    return x.permute(0, 2, 3, 1).reshape(b, t, h, w, c).permute(0, 4, 1, 2, 3)
+
+
+def _5d_to_4d(x: torch.Tensor) -> torch.Tensor:
+    if is_channels_last_3d(x):
+        return _ndhwc_to_nhwc(x)
+    if x.shape[2] == 1:
+        return x.squeeze(2)
+    return rearrange(x, "b c t h w -> (b t) c h w")
+
+
+def _4d_to_5d(x: torch.Tensor, b: int, t: int) -> torch.Tensor:
+    if is_channels_last_2d(x):
+        return _nhwc_to_ndhwc(x, b, t)
+    if t == 1:
+        return x.unsqueeze(2)
+    return rearrange(x, "(b t) c h w -> b c t h w", t=t)
+
+
+def _causal_conv3d_cached(
+    x: torch.Tensor,
+    conv: nn.Module,
+    feat_cache: list | None,
+    feat_idx: list[int],
+    *,
+    align_c_lt8: bool = False,
+) -> torch.Tensor | None:
+    """Single-pass cached ``CausalConv3d`` (optional ``C: <8 -> 8`` CL3D align + coalesced bias)."""
+    if (
+        torch.is_grad_enabled()
+        or not x.is_cuda
+        or x.ndim != 5
+        or type(conv) is not CausalConv3d
+        or _has_hooks(conv)
+        or conv.weight.device != x.device
+        or (conv.bias is not None and conv.bias.device != x.device)
+    ):
+        return None
+    pad_w_l, pad_w_r, pad_h_t, pad_h_b, pad_t_l, pad_t_r = conv._padding
+    if pad_w_l != pad_w_r or pad_h_t != pad_h_b or pad_t_r != 0:
+        return None
+    align_c = (
+        32
+        if (
+            align_c_lt8
+            and conv.groups == 1
+            and x.shape[1] < 8
+            and conv.weight.shape[1] == x.shape[1]
+            and (is_channels_last_3d(x) or is_channels_last_3d(conv.weight))
+        )
+        else 0
+    )
+    if not can_use_wan_vae_causal_pad_cache(x, pad_w=pad_w_l, pad_h=pad_h_t, pad_t_left=pad_t_l, align_c=align_c):
+        return None
+    write_cache = feat_cache is not None
+    prev_cache = None
+    if write_cache:
+        idx = feat_idx[0]
+        raw_prev = feat_cache[idx]
+        if isinstance(raw_prev, torch.Tensor):
+            prev_cache = raw_prev
+    x_pad, new_cache = wan_vae_causal_pad_cache(
+        x,
+        cache_in=prev_cache,
+        pad_w=pad_w_l,
+        pad_h=pad_h_t,
+        pad_t_left=pad_t_l,
+        write_cache=write_cache,
+        cache_t=CACHE_T,
+        align_c=align_c,
+    )
+    if write_cache:
+        feat_cache[feat_idx[0]] = new_cache
+        feat_idx[0] += 1
+    weight = conv.weight
+    if align_c > weight.shape[1]:
+        weight = F.pad(weight, (0, 0, 0, 0, 0, 0, 0, align_c - weight.shape[1])).contiguous(
+            memory_format=torch.channels_last_3d
+        )
+    out = F.conv3d(x_pad, weight, None, conv.stride, (0, 0, 0), conv.dilation, conv.groups)
+    if conv.bias is not None:
+        return wan_vae_residual_bias_add(None, out, conv.bias)
+    return out
+
+
+def _try_fused_rms_silu_causal_conv3d_deferred(
     x: torch.Tensor,
     rms: nn.Module,
     silu: nn.Module,
     conv: nn.Module,
     feat_cache: list | None,
     feat_idx: list[int],
-) -> torch.Tensor | None:
-    """Super-fuse ``RMS_norm -> SiLU -> CausalConv3d`` (with cache + pad) on CUDA inference."""
+    *,
+    pre_bias: torch.Tensor | None = None,
+    defer_bias: bool = False,
+) -> tuple[torch.Tensor, torch.Tensor | None] | None:
+    """Super-fuse ``(pre_bias +) RMS_norm -> SiLU -> CausalConv3d`` with optional deferred bias."""
     if (
         torch.is_grad_enabled()
         or not x.is_cuda
@@ -88,10 +271,10 @@ def _try_fused_rms_silu_causal_conv3d(
         or _has_hooks(conv)
         or rms.gamma.device != x.device
         or conv.weight.device != x.device
+        or (conv.bias is not None and conv.bias.device != x.device)
+        or (pre_bias is not None and pre_bias.device != x.device)
     ):
         return None
-    from worldfoundry.core.kernels.triton_wan_vae import can_use_wan_vae_rms_norm, wan_vae_rms_norm_silu_causal_pad
-
     if not can_use_wan_vae_rms_norm(x, channel_first=True):
         return None
     pad_w_l, pad_w_r, pad_h_t, pad_h_b, pad_t_l, pad_t_r = conv._padding
@@ -119,11 +302,30 @@ def _try_fused_rms_silu_causal_conv3d(
         scale=rms.scale,
         write_cache=write_cache,
         cache_t=CACHE_T,
+        pre_bias=pre_bias,
     )
     if write_cache:
         feat_cache[feat_idx[0]] = new_cache
         feat_idx[0] += 1
-    return F.conv3d(x_pad, conv.weight, conv.bias, conv.stride, (0, 0, 0), conv.dilation, conv.groups)
+    out = F.conv3d(x_pad, conv.weight, None, conv.stride, (0, 0, 0), conv.dilation, conv.groups)
+    if defer_bias:
+        return out, conv.bias
+    if conv.bias is not None:
+        return wan_vae_residual_bias_add(None, out, conv.bias), None
+    return out, None
+
+
+def _try_fused_rms_silu_causal_conv3d(
+    x: torch.Tensor,
+    rms: nn.Module,
+    silu: nn.Module,
+    conv: nn.Module,
+    feat_cache: list | None,
+    feat_idx: list[int],
+) -> torch.Tensor | None:
+    """Super-fuse ``RMS_norm -> SiLU -> CausalConv3d`` (with cache + pad) on CUDA inference."""
+    res = _try_fused_rms_silu_causal_conv3d_deferred(x, rms, silu, conv, feat_cache, feat_idx, defer_bias=False)
+    return None if res is None else res[0]
 
 
 class RMS_norm(nn.Module):
@@ -141,8 +343,6 @@ class RMS_norm(nn.Module):
 
     def forward(self, x):
         if x.is_cuda and not torch.is_grad_enabled() and self.channel_first and self.gamma.device == x.device:
-            from worldfoundry.core.kernels.triton_wan_vae import can_use_wan_vae_rms_norm, wan_vae_rms_norm
-
             bias_t = self.bias if isinstance(self.bias, torch.Tensor) else None
             if (bias_t is None or bias_t.device == x.device) and can_use_wan_vae_rms_norm(
                 x, channel_first=self.channel_first
@@ -164,8 +364,6 @@ class Upsample(nn.Upsample):
             and self.scale_factor == (2.0, 2.0)
             and x.dtype in (torch.bfloat16, torch.float16, torch.float32)
         ):
-            from worldfoundry.core.kernels.triton_wan_vae import wan_vae_nearest_upsample_2x
-
             return wan_vae_nearest_upsample_2x(x)
         return super().forward(x.float()).type_as(x)
 
@@ -197,7 +395,158 @@ class Resample(nn.Module):
         else:
             self.resample = nn.Identity()
 
+    def _can_use_fused_resample(self, x: torch.Tensor) -> bool:
+        if (
+            self.training
+            or torch.is_grad_enabled()
+            or not x.is_cuda
+            or x.ndim != 5
+            or x.dtype not in (torch.bfloat16, torch.float16, torch.float32)
+            or _has_hooks(self)
+            or _has_hooks(self.resample)
+            or type(self.resample) is not nn.Sequential
+            or len(self.resample) != 2
+        ):
+            return False
+        first, conv2d = self.resample[0], self.resample[1]
+        if (
+            _has_hooks(first)
+            or _has_hooks(conv2d)
+            or type(conv2d) is not nn.Conv2d
+            or conv2d.weight.device != x.device
+            or (conv2d.bias is not None and conv2d.bias.device != x.device)
+        ):
+            return False
+        if self.mode in ("upsample2d", "upsample3d"):
+            if (
+                type(first) is not Upsample
+                or first.scale_factor != (2.0, 2.0)
+                or first.mode not in ("nearest", "nearest-exact")
+            ):
+                return False
+            if self.mode == "upsample3d":
+                tc = self.time_conv
+                if (
+                    type(tc) is not CausalConv3d
+                    or _has_hooks(tc)
+                    or tc.weight.device != x.device
+                    or (tc.bias is not None and tc.bias.device != x.device)
+                    or tc._padding != (0, 0, 0, 0, 2, 0)
+                ):
+                    return False
+            return True
+        if self.mode in ("downsample2d", "downsample3d"):
+            if type(first) is not nn.ZeroPad2d or first.padding != (0, 1, 0, 1):
+                return False
+            if self.mode == "downsample3d":
+                tc = self.time_conv
+                if (
+                    type(tc) is not CausalConv3d
+                    or _has_hooks(tc)
+                    or tc.weight.device != x.device
+                    or (tc.bias is not None and tc.bias.device != x.device)
+                    or tc._padding != (0, 0, 0, 0, 0, 0)
+                ):
+                    return False
+            return True
+        return False
+
+    def _forward_fused_deferred(
+        self,
+        x: torch.Tensor,
+        feat_cache: list | None,
+        feat_idx: list[int],
+        *,
+        defer_out_bias: bool = False,
+        allow_4d_out: bool = False,
+    ) -> tuple[torch.Tensor, torch.Tensor | None, list | None, list[int]]:
+        b, _, t, _, _ = x.size()
+        assert isinstance(self.resample, nn.Sequential)
+        conv2d = self.resample[1]
+        assert isinstance(conv2d, nn.Conv2d)
+        if self.mode in ("upsample2d", "upsample3d"):
+            if self.mode == "upsample3d" and feat_cache is not None:
+                idx = feat_idx[0]
+                if feat_cache[idx] is None:
+                    feat_cache[idx] = "Rep"
+                    feat_idx[0] += 1
+                    x_up = wan_vae_nearest_upsample_2x(_5d_to_4d(x))
+                    t_out = t
+                else:
+                    is_rep = isinstance(feat_cache[idx], str)
+                    prev_c = None if is_rep else feat_cache[idx]
+                    x_pad, new_cache = wan_vae_causal_pad_cache(
+                        x,
+                        cache_in=prev_c,
+                        pad_w=0,
+                        pad_h=0,
+                        pad_t_left=2,
+                        write_cache=True,
+                        cache_t=CACHE_T,
+                        pad_cache_zero_left=is_rep,
+                    )
+                    feat_cache[idx] = new_cache
+                    feat_idx[0] += 1
+                    tc = self.time_conv
+                    h_time = F.conv3d(x_pad, tc.weight, None, tc.stride, (0, 0, 0), tc.dilation, tc.groups)
+                    x_up = wan_vae_time_interleave_upsample_2x(h_time, tc.bias)
+                    t_out = t * 2
+            else:
+                x_up = wan_vae_nearest_upsample_2x(_5d_to_4d(x))
+                t_out = t
+            h_2d = F.conv2d(x_up, conv2d.weight, None, conv2d.stride, conv2d.padding, conv2d.dilation, conv2d.groups)
+            if defer_out_bias:
+                out_t = h_2d if allow_4d_out else _4d_to_5d(h_2d, b, t_out)
+                return out_t, conv2d.bias, feat_cache, feat_idx
+            h_5d = _4d_to_5d(h_2d, b, t_out)
+            out_t = wan_vae_residual_bias_add(None, h_5d, conv2d.bias) if conv2d.bias is not None else h_5d
+            return out_t, None, feat_cache, feat_idx
+
+        # downsample2d / downsample3d
+        x_pad2d = wan_vae_zero_pad_2d_rb(_5d_to_4d(x))
+        h_2d = F.conv2d(x_pad2d, conv2d.weight, None, conv2d.stride, conv2d.padding, conv2d.dilation, conv2d.groups)
+        if self.mode == "downsample3d" and feat_cache is not None:
+            idx = feat_idx[0]
+            if feat_cache[idx] is None:
+                h_5d = _4d_to_5d(h_2d, b, t)
+                h_5d = wan_vae_residual_bias_add(None, h_5d, conv2d.bias) if conv2d.bias is not None else h_5d
+                feat_cache[idx] = h_5d.clone()
+                feat_idx[0] += 1
+                return h_5d, None, feat_cache, feat_idx
+            h_5d = _4d_to_5d(h_2d, b, t)
+            prev_last = feat_cache[idx][:, :, -1:, :, :]
+            x_cat, new_cache = wan_vae_causal_pad_cache(
+                h_5d,
+                cache_in=prev_last,
+                pad_w=0,
+                pad_h=0,
+                pad_t_left=1,
+                write_cache=True,
+                cache_t=1,
+                pre_bias=conv2d.bias,
+            )
+            feat_cache[idx] = new_cache
+            feat_idx[0] += 1
+            tc = self.time_conv
+            h_t = F.conv3d(x_cat, tc.weight, None, tc.stride, (0, 0, 0), tc.dilation, tc.groups)
+            if defer_out_bias:
+                return h_t, tc.bias, feat_cache, feat_idx
+            out_t = wan_vae_residual_bias_add(None, h_t, tc.bias) if tc.bias is not None else h_t
+            return out_t, None, feat_cache, feat_idx
+
+        if defer_out_bias:
+            out_t = h_2d if allow_4d_out else _4d_to_5d(h_2d, b, t)
+            return out_t, conv2d.bias, feat_cache, feat_idx
+        h_5d = _4d_to_5d(h_2d, b, t)
+        out_t = wan_vae_residual_bias_add(None, h_5d, conv2d.bias) if conv2d.bias is not None else h_5d
+        return out_t, None, feat_cache, feat_idx
+
     def forward(self, x, feat_cache=None, feat_idx=[0]):  # noqa: B006 - Keeps the upstream default object and signature.
+        if self._can_use_fused_resample(x):
+            out, _, feat_cache, feat_idx = self._forward_fused_deferred(
+                x, feat_cache, feat_idx, defer_out_bias=False, allow_4d_out=False
+            )
+            return out, feat_cache, feat_idx
         b, c, t, h, w = x.size()
         if self.mode == "upsample3d" and feat_cache is not None:
             idx = feat_idx[0]
@@ -265,6 +614,13 @@ def patchify(x, patch_size):
     if x.dim() == 4:
         x = rearrange(x, "b c (h q) (w r) -> b (c r q) h w", q=patch_size, r=patch_size)
     elif x.dim() == 5:
+        if (
+            patch_size == 2
+            and x.is_cuda
+            and not torch.is_grad_enabled()
+            and x.dtype in (torch.bfloat16, torch.float16, torch.float32)
+        ):
+            return wan_vae_patchify_2x(x)
         x = rearrange(x, "b c f (h q) (w r) -> b (c r q) f h w", q=patch_size, r=patch_size)
     else:
         raise ValueError(f"Invalid input shape: {x.shape}")
@@ -277,6 +633,13 @@ def unpatchify(x, patch_size):
     if x.dim() == 4:
         x = rearrange(x, "b (c r q) h w -> b c (h q) (w r)", q=patch_size, r=patch_size)
     elif x.dim() == 5:
+        if (
+            patch_size == 2
+            and x.is_cuda
+            and not torch.is_grad_enabled()
+            and x.dtype in (torch.bfloat16, torch.float16, torch.float32)
+        ):
+            return wan_vae_unpatchify_2x(x)
         x = rearrange(x, "b (c r q) f h w -> b c f (h q) (w r)", q=patch_size, r=patch_size)
     return x
 
@@ -336,7 +699,6 @@ class ResidualBlock(nn.Module):
         self.shortcut = CausalConv3d(in_dim, out_dim, 1) if in_dim != out_dim else nn.Identity()
 
     def forward(self, x, feat_cache=None, feat_idx=[0]):  # noqa: B006 - Keeps the upstream default object and signature.
-        h = self.shortcut(x)
         layers = self.residual
         if (
             not self.training
@@ -347,13 +709,48 @@ class ResidualBlock(nn.Module):
             and type(layers[5]) is nn.Dropout
             and not _has_hooks(layers[5])
         ):
-            out1 = _try_fused_rms_silu_causal_conv3d(x, layers[0], layers[1], layers[2], feat_cache, feat_idx)
-            if out1 is not None:
-                out2 = _try_fused_rms_silu_causal_conv3d(out1, layers[3], layers[4], layers[6], feat_cache, feat_idx)
-                if out2 is not None:
+            can_fuse_second = (
+                type(layers[3]) is RMS_norm
+                and layers[3].channel_first
+                and type(layers[4]) is nn.SiLU
+                and type(layers[6]) is CausalConv3d
+                and not _has_hooks(layers[3])
+                and not _has_hooks(layers[4])
+                and not _has_hooks(layers[6])
+            )
+            res1 = _try_fused_rms_silu_causal_conv3d_deferred(
+                x, layers[0], layers[1], layers[2], feat_cache, feat_idx, defer_bias=can_fuse_second
+            )
+            if res1 is not None:
+                out1, bias1 = res1
+                res2 = _try_fused_rms_silu_causal_conv3d_deferred(
+                    out1, layers[3], layers[4], layers[6], feat_cache, feat_idx, pre_bias=bias1, defer_bias=True
+                )
+                if res2 is not None:
+                    out2, bias2 = res2
+                    sc = self.shortcut
+                    h_bias: torch.Tensor | None = None
+                    if (
+                        type(sc) is CausalConv3d
+                        and not _has_hooks(sc)
+                        and sc._padding == (0, 0, 0, 0, 0, 0)
+                        and sc.weight.device == x.device
+                        and (sc.bias is None or sc.bias.device == x.device)
+                    ):
+                        h = F.conv3d(x, sc.weight, None, sc.stride, (0, 0, 0), sc.dilation, sc.groups)
+                        h_bias = sc.bias
+                    else:
+                        h = sc(x)
+                    if can_use_wan_vae_residual_bias_add(h, out2, bias2, h_bias):
+                        return wan_vae_residual_bias_add(h, out2, bias2, h_bias), feat_cache, feat_idx
+                    if bias2 is not None:
+                        out2 = out2 + bias2.view(1, -1, 1, 1, 1)
+                    if h_bias is not None:
+                        h = h + h_bias.view(1, -1, 1, 1, 1)
                     return out2 + h, feat_cache, feat_idx
                 # Fall through for second half only if conv2 was hooked/wrapped.
-                x = out1
+                h = self.shortcut(x)
+                x = out1 + bias1.view(1, -1, 1, 1, 1) if bias1 is not None else out1
                 for layer in (layers[3], layers[4], layers[5], layers[6]):
                     if check_is_instance(layer, CausalConv3d) and feat_cache is not None:
                         idx = feat_idx[0]
@@ -368,6 +765,7 @@ class ResidualBlock(nn.Module):
                     else:
                         x = layer(x)
                 return x + h, feat_cache, feat_idx
+        h = self.shortcut(x)
         for layer in layers:
             if check_is_instance(layer, CausalConv3d) and feat_cache is not None:
                 idx = feat_idx[0]
@@ -405,24 +803,88 @@ class AttentionBlock(nn.Module):
     def forward(self, x):
         identity = x
         b, c, t, h, w = x.size()
-        x = rearrange(x, "b c t h w -> (b t) c h w")
-        x = self.norm(x)
+        is_cl3d = is_channels_last_3d(x)
+        x_2d = _5d_to_4d(x)
+        x_2d = self.norm(x_2d)
+
         # compute query, key, value
-        q, k, v = self.to_qkv(x).reshape(b * t, 1, c * 3, -1).permute(0, 1, 3, 2).contiguous().chunk(3, dim=-1)
+        if (
+            not torch.is_grad_enabled()
+            and x_2d.is_cuda
+            and type(self.to_qkv) is nn.Conv2d
+            and not _has_hooks(self.to_qkv)
+            and self.to_qkv.weight.device == x_2d.device
+            and (self.to_qkv.bias is None or self.to_qkv.bias.device == x_2d.device)
+        ):
+            qkv = F.conv2d(
+                x_2d,
+                self.to_qkv.weight,
+                None,
+                self.to_qkv.stride,
+                self.to_qkv.padding,
+                self.to_qkv.dilation,
+                self.to_qkv.groups,
+            )
+            if self.to_qkv.bias is not None and can_use_wan_vae_residual_bias_add(None, qkv, self.to_qkv.bias):
+                qkv = wan_vae_residual_bias_add(None, qkv, self.to_qkv.bias)
+            elif self.to_qkv.bias is not None:
+                qkv = qkv + self.to_qkv.bias.view(1, -1, 1, 1)
+        else:
+            qkv = self.to_qkv(x_2d)
+
+        if is_channels_last_2d(qkv):
+            q, k, v = qkv.permute(0, 2, 3, 1).reshape(b * t, 1, h * w, c * 3).chunk(3, dim=-1)
+        else:
+            q, k, v = qkv.reshape(b * t, 1, c * 3, -1).permute(0, 1, 3, 2).contiguous().chunk(3, dim=-1)
 
         # apply attention
-        x = _worldfoundry_scaled_dot_product_attention(
+        x_attn = _worldfoundry_scaled_dot_product_attention(
             q,
             k,
             v,
             # attn_mask=block_causal_mask(q, block_size=h * w)
         )
-        x = x.squeeze(1).permute(0, 2, 1).reshape(b * t, c, h, w)
+        if is_cl3d:
+            x_2d = x_attn.squeeze(1).reshape(b * t, h, w, c).permute(0, 3, 1, 2)
+        else:
+            x_2d = x_attn.squeeze(1).permute(0, 2, 1).reshape(b * t, c, h, w).contiguous()
 
-        # output
-        x = self.proj(x)
-        x = rearrange(x, "(b t) c h w-> b c t h w", t=t)
-        return x + identity
+        # output (+ fused proj.bias + identity)
+        if (
+            not torch.is_grad_enabled()
+            and x_2d.is_cuda
+            and type(self.proj) is nn.Conv2d
+            and not _has_hooks(self.proj)
+            and self.proj.weight.device == x_2d.device
+            and (self.proj.bias is None or self.proj.bias.device == x_2d.device)
+        ):
+            proj_2d = F.conv2d(
+                x_2d,
+                self.proj.weight,
+                None,
+                self.proj.stride,
+                self.proj.padding,
+                self.proj.dilation,
+                self.proj.groups,
+            )
+            proj_5d = (
+                _nhwc_to_ndhwc(proj_2d, b, t)
+                if (is_cl3d and is_channels_last_2d(proj_2d))
+                else rearrange(proj_2d, "(b t) c h w -> b c t h w", t=t)
+            )
+            if can_use_wan_vae_residual_bias_add(identity, proj_5d, self.proj.bias):
+                return wan_vae_residual_bias_add(identity, proj_5d, self.proj.bias)
+            if self.proj.bias is not None:
+                proj_5d = proj_5d + self.proj.bias.view(1, -1, 1, 1, 1)
+            return proj_5d + identity
+
+        x_2d = self.proj(x_2d)
+        x_5d = (
+            _nhwc_to_ndhwc(x_2d, b, t)
+            if (is_cl3d and is_channels_last_2d(x_2d))
+            else rearrange(x_2d, "(b t) c h w-> b c t h w", t=t)
+        )
+        return x_5d + identity
 
 
 class AvgDown3D(nn.Module):
@@ -446,6 +908,20 @@ class AvgDown3D(nn.Module):
         self.group_size = in_channels * self.factor // out_channels
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if (
+            x.is_cuda
+            and not torch.is_grad_enabled()
+            and x.ndim == 5
+            and x.dtype in (torch.bfloat16, torch.float16, torch.float32)
+        ):
+            if self.factor_t == 1 and self.factor_s == 1 and self.in_channels == self.out_channels:
+                return x
+            return wan_vae_avg_down_3d(
+                x,
+                out_channels=self.out_channels,
+                factor_t=self.factor_t,
+                factor_s=self.factor_s,
+            )
         pad_t = (self.factor_t - x.shape[2] % self.factor_t) % self.factor_t
         pad = (0, 0, 0, 0, pad_t, 0)
         x = F.pad(x, pad)
@@ -508,8 +984,6 @@ class DupUp3D(nn.Module):
             and x.ndim == 5
             and x.dtype in (torch.bfloat16, torch.float16, torch.float32)
         ):
-            from worldfoundry.core.kernels.triton_wan_vae import wan_vae_dup_up_3d
-
             return wan_vae_dup_up_3d(
                 x,
                 out_channels=self.out_channels,
@@ -567,11 +1041,72 @@ class Down_ResidualBlock(nn.Module):
         self.downsamples = nn.Sequential(*downsamples)
 
     def forward(self, x, feat_cache=None, feat_idx=[0]):  # noqa: B006 - Keeps the upstream default object and signature.
-        x_copy = x.clone()
+        infer_fast = not self.training and not torch.is_grad_enabled() and x.is_cuda and x.ndim == 5
+        x_orig = x if infer_fast else x.clone()
+        sc = self.avg_shortcut
+        if infer_fast and type(sc) is AvgDown3D and not _has_hooks(sc) and len(self.downsamples) > 0:
+            down_modules = list(self.downsamples)
+            last = down_modules[-1]
+            if isinstance(last, Resample) and last._can_use_fused_resample(x):
+                for module in down_modules[:-1]:
+                    x, feat_cache, feat_idx = module(x, feat_cache, feat_idx)
+                h_out, h_bias, feat_cache, feat_idx = last._forward_fused_deferred(
+                    x, feat_cache, feat_idx, defer_out_bias=True, allow_4d_out=True
+                )
+                if can_use_wan_vae_avg_down_3d_add(
+                    h_out,
+                    x_orig,
+                    h_bias,
+                    out_channels=sc.out_channels,
+                    factor_t=sc.factor_t,
+                    factor_s=sc.factor_s,
+                ):
+                    out = wan_vae_avg_down_3d_add(
+                        h_out,
+                        x_orig,
+                        h_bias,
+                        out_channels=sc.out_channels,
+                        factor_t=sc.factor_t,
+                        factor_s=sc.factor_s,
+                    )
+                    return out, feat_cache, feat_idx
+                if h_out.ndim == 4:
+                    h_out = _4d_to_5d(h_out, x_orig.shape[0], h_out.shape[0] // x_orig.shape[0])
+                if h_bias is not None:
+                    h_out = wan_vae_residual_bias_add(None, h_out, h_bias)
+                return h_out + sc(x_orig), feat_cache, feat_idx
+            for module in self.downsamples:
+                x, feat_cache, feat_idx = module(x, feat_cache, feat_idx)
+            if sc.factor_t == 1 and sc.factor_s == 1 and sc.in_channels == sc.out_channels:
+                if can_use_wan_vae_residual_bias_add(x_orig, x, None):
+                    return wan_vae_residual_bias_add(x_orig, x, None), feat_cache, feat_idx
+                return x + x_orig, feat_cache, feat_idx
+            if can_use_wan_vae_avg_down_3d_add(
+                x,
+                x_orig,
+                None,
+                out_channels=sc.out_channels,
+                factor_t=sc.factor_t,
+                factor_s=sc.factor_s,
+            ):
+                return (
+                    wan_vae_avg_down_3d_add(
+                        x,
+                        x_orig,
+                        None,
+                        out_channels=sc.out_channels,
+                        factor_t=sc.factor_t,
+                        factor_s=sc.factor_s,
+                    ),
+                    feat_cache,
+                    feat_idx,
+                )
+            return x + sc(x_orig), feat_cache, feat_idx
+
         for module in self.downsamples:
             x, feat_cache, feat_idx = module(x, feat_cache, feat_idx)
 
-        return x + self.avg_shortcut(x_copy), feat_cache, feat_idx
+        return x + self.avg_shortcut(x_orig), feat_cache, feat_idx
 
 
 class Up_ResidualBlock(nn.Module):
@@ -602,14 +1137,76 @@ class Up_ResidualBlock(nn.Module):
         self.upsamples = nn.Sequential(*upsamples)
 
     def forward(self, x, feat_cache=None, feat_idx=[0], first_chunk=False):  # noqa: B006 - Keeps the upstream default object and signature.
-        x_main = x if (not self.training and not torch.is_grad_enabled()) else x.clone()
+        infer_fast = not self.training and not torch.is_grad_enabled() and x.is_cuda and x.ndim == 5
+        x_main = x if infer_fast else x.clone()
+        sc = self.avg_shortcut
+        if infer_fast and sc is not None and type(sc) is DupUp3D and not _has_hooks(sc) and len(self.upsamples) > 0:
+            up_modules = list(self.upsamples)
+            last = up_modules[-1]
+            if isinstance(last, Resample) and last._can_use_fused_resample(x_main):
+                for module in up_modules[:-1]:
+                    x_main, feat_cache, feat_idx = module(x_main, feat_cache, feat_idx)
+                h_out, h_bias, feat_cache, feat_idx = last._forward_fused_deferred(
+                    x_main, feat_cache, feat_idx, defer_out_bias=True, allow_4d_out=True
+                )
+                if can_use_wan_vae_dup_up_3d_add(
+                    h_out,
+                    x,
+                    h_bias,
+                    out_channels=sc.out_channels,
+                    factor_t=sc.factor_t,
+                    factor_s=sc.factor_s,
+                    first_chunk=bool(first_chunk),
+                ):
+                    out = wan_vae_dup_up_3d_add(
+                        h_out,
+                        x,
+                        h_bias,
+                        out_channels=sc.out_channels,
+                        factor_t=sc.factor_t,
+                        factor_s=sc.factor_s,
+                        first_chunk=bool(first_chunk),
+                    )
+                    return out, feat_cache, feat_idx
+                if h_out.ndim == 4:
+                    h_out = _4d_to_5d(h_out, x.shape[0], h_out.shape[0] // x.shape[0])
+                if h_bias is not None:
+                    h_out = wan_vae_residual_bias_add(None, h_out, h_bias)
+                return h_out + sc(x, first_chunk), feat_cache, feat_idx
+
         for module in self.upsamples:
             x_main, feat_cache, feat_idx = module(x_main, feat_cache, feat_idx)
-        if self.avg_shortcut is not None:
-            x_shortcut = self.avg_shortcut(x, first_chunk)
+        if sc is not None:
+            if (
+                infer_fast
+                and type(sc) is DupUp3D
+                and not _has_hooks(sc)
+                and can_use_wan_vae_dup_up_3d_add(
+                    x_main,
+                    x,
+                    None,
+                    out_channels=sc.out_channels,
+                    factor_t=sc.factor_t,
+                    factor_s=sc.factor_s,
+                    first_chunk=bool(first_chunk),
+                )
+            ):
+                return (
+                    wan_vae_dup_up_3d_add(
+                        x_main,
+                        x,
+                        None,
+                        out_channels=sc.out_channels,
+                        factor_t=sc.factor_t,
+                        factor_s=sc.factor_s,
+                        first_chunk=bool(first_chunk),
+                    ),
+                    feat_cache,
+                    feat_idx,
+                )
+            x_shortcut = sc(x, first_chunk)
             return x_main + x_shortcut, feat_cache, feat_idx
-        else:
-            return x_main, feat_cache, feat_idx
+        return x_main, feat_cache, feat_idx
 
 
 class Encoder3d(nn.Module):
@@ -668,7 +1265,12 @@ class Encoder3d(nn.Module):
         )
 
     def forward(self, x, feat_cache=None, feat_idx=[0]):  # noqa: B006 - Keeps the upstream default object and signature.
-        if feat_cache is not None:
+        conv1_out = (
+            _causal_conv3d_cached(x, self.conv1, feat_cache, feat_idx, align_c_lt8=True) if not self.training else None
+        )
+        if conv1_out is not None:
+            x = conv1_out
+        elif feat_cache is not None:
             idx = feat_idx[0]
             cache_x = x[:, :, -CACHE_T:, :, :].clone()
             if cache_x.shape[2] < 2 and feat_cache[idx] is not None:
@@ -779,7 +1381,10 @@ class Encoder3d_38(nn.Module):
         )
 
     def forward(self, x, feat_cache=None, feat_idx=[0]):  # noqa: B006 - Keeps the upstream default object and signature.
-        if feat_cache is not None:
+        conv1_out = _causal_conv3d_cached(x, self.conv1, feat_cache, feat_idx) if not self.training else None
+        if conv1_out is not None:
+            x = conv1_out
+        elif feat_cache is not None:
             idx = feat_idx[0]
             cache_x = x[:, :, -CACHE_T:, :, :].clone()
             if cache_x.shape[2] < 2 and feat_cache[idx] is not None:
@@ -811,6 +1416,13 @@ class Encoder3d_38(nn.Module):
                 x = layer(x)
 
         ## head
+        head_out = (
+            _try_fused_rms_silu_causal_conv3d(x, self.head[0], self.head[1], self.head[2], feat_cache, feat_idx)
+            if (not self.training and len(self.head) == 3)
+            else None
+        )
+        if head_out is not None:
+            return head_out, feat_cache, feat_idx
         for layer in self.head:
             if isinstance(layer, CausalConv3d) and feat_cache is not None:
                 idx = feat_idx[0]
@@ -889,7 +1501,10 @@ class Decoder3d(nn.Module):
 
     def forward(self, x, feat_cache=None, feat_idx=[0]):  # noqa: B006 - Keeps the upstream default object and signature.
         ## conv1
-        if feat_cache is not None:
+        conv1_out = _causal_conv3d_cached(x, self.conv1, feat_cache, feat_idx) if not self.training else None
+        if conv1_out is not None:
+            x = conv1_out
+        elif feat_cache is not None:
             idx = feat_idx[0]
             cache_x = x[:, :, -CACHE_T:, :, :].clone()
             if cache_x.shape[2] < 2 and feat_cache[idx] is not None:
@@ -991,7 +1606,10 @@ class Decoder3d_38(nn.Module):
         self.head = nn.Sequential(RMS_norm(out_dim, images=False), nn.SiLU(), CausalConv3d(out_dim, 12, 3, padding=1))
 
     def forward(self, x, feat_cache=None, feat_idx=[0], first_chunk=False):  # noqa: B006 - Keeps the upstream default object and signature.
-        if feat_cache is not None:
+        conv1_out = _causal_conv3d_cached(x, self.conv1, feat_cache, feat_idx) if not self.training else None
+        if conv1_out is not None:
+            x = conv1_out
+        elif feat_cache is not None:
             idx = feat_idx[0]
             cache_x = x[:, :, -CACHE_T:, :, :].clone()
             if cache_x.shape[2] < 2 and feat_cache[idx] is not None:
@@ -1022,6 +1640,13 @@ class Decoder3d_38(nn.Module):
                 x = layer(x)
 
         ## head
+        head_out = (
+            _try_fused_rms_silu_causal_conv3d(x, self.head[0], self.head[1], self.head[2], feat_cache, feat_idx)
+            if (not self.training and len(self.head) == 3)
+            else None
+        )
+        if head_out is not None:
+            return head_out, feat_cache, feat_idx
         for layer in self.head:
             if check_is_instance(layer, CausalConv3d) and feat_cache is not None:
                 idx = feat_idx[0]
@@ -1089,22 +1714,24 @@ class VideoVAE_(nn.Module):
     def encode(self, x, scale):
         self.clear_cache()
         ## cache
+        in_was_cl3d = is_channels_last_3d(x)
+        use_internal_cl3d = _can_use_internal_cl3d(self, x)
         t = x.shape[2]
         iter_ = 1 + (t - 1) // 4
 
+        outs = []
         for i in range(iter_):
             self._enc_conv_idx = [0]
-            if i == 0:
-                out, self._enc_feat_map, self._enc_conv_idx = self.encoder(
-                    x[:, :, :1, :, :], feat_cache=self._enc_feat_map, feat_idx=self._enc_conv_idx
-                )
-            else:
-                out_, self._enc_feat_map, self._enc_conv_idx = self.encoder(
-                    x[:, :, 1 + 4 * (i - 1) : 1 + 4 * i, :, :],
-                    feat_cache=self._enc_feat_map,
-                    feat_idx=self._enc_conv_idx,
-                )
-                out = torch.cat([out, out_], 2)
+            chunk = x[:, :, :1, :, :] if i == 0 else x[:, :, 1 + 4 * (i - 1) : 1 + 4 * i, :, :]
+            if use_internal_cl3d and not is_channels_last_3d(chunk):
+                chunk = chunk.contiguous(memory_format=torch.channels_last_3d)
+            out_, self._enc_feat_map, self._enc_conv_idx = self.encoder(
+                chunk,
+                feat_cache=self._enc_feat_map,
+                feat_idx=self._enc_conv_idx,
+            )
+            outs.append(out_)
+        out = outs[0] if len(outs) == 1 else torch.cat(outs, dim=2)
         mu, log_var = self.conv1(out).chunk(2, dim=1)
         if isinstance(scale[0], torch.Tensor):
             scale = [s.to(dtype=mu.dtype, device=mu.device) for s in scale]
@@ -1112,30 +1739,35 @@ class VideoVAE_(nn.Module):
         else:
             scale = scale.to(dtype=mu.dtype, device=mu.device)
             mu = (mu - scale[0]) * scale[1]
+        if use_internal_cl3d and not in_was_cl3d and is_channels_last_3d(mu):
+            mu = mu.contiguous()
         return mu
 
     def decode(self, z, scale):
         self.clear_cache()
         # z: [b,c,t,h,w]
+        in_was_cl3d = is_channels_last_3d(z)
+        use_internal_cl3d = _can_use_internal_cl3d(self, z)
         if isinstance(scale[0], torch.Tensor):
             scale = [s.to(dtype=z.dtype, device=z.device) for s in scale]
             z = z / scale[1].view(1, self.z_dim, 1, 1, 1) + scale[0].view(1, self.z_dim, 1, 1, 1)
         else:
             scale = scale.to(dtype=z.dtype, device=z.device)
             z = z / scale[1] + scale[0]
+        if use_internal_cl3d and not is_channels_last_3d(z):
+            z = z.contiguous(memory_format=torch.channels_last_3d)
         iter_ = z.shape[2]
         x = self.conv2(z)
+        outs = []
         for i in range(iter_):
             self._conv_idx = [0]
-            if i == 0:
-                out, self._feat_map, self._conv_idx = self.decoder(
-                    x[:, :, i : i + 1, :, :], feat_cache=self._feat_map, feat_idx=self._conv_idx
-                )
-            else:
-                out_, self._feat_map, self._conv_idx = self.decoder(
-                    x[:, :, i : i + 1, :, :], feat_cache=self._feat_map, feat_idx=self._conv_idx
-                )
-                out = torch.cat([out, out_], 2)  # may add tensor offload
+            out_, self._feat_map, self._conv_idx = self.decoder(
+                x[:, :, i : i + 1, :, :], feat_cache=self._feat_map, feat_idx=self._conv_idx
+            )
+            outs.append(out_)
+        out = outs[0] if len(outs) == 1 else torch.cat(outs, dim=2)
+        if use_internal_cl3d and not in_was_cl3d and is_channels_last_3d(out):
+            out = out.contiguous()
         return out
 
     def reparameterize(self, mu, log_var):
@@ -1469,6 +2101,8 @@ class WanVideoVAE(nn.Module):
             raise ValueError("Wan VAE temporal chunk size must be positive")
         model = self.model
         z = hidden_states.to(device)
+        in_was_cl3d = is_channels_last_3d(z)
+        use_internal_cl3d = isinstance(model, VideoVAE_) and _can_use_internal_cl3d(model, z)
         model.clear_cache()
         try:
             scale = [value.to(dtype=z.dtype, device=z.device) for value in self.scale]
@@ -1479,6 +2113,8 @@ class WanVideoVAE(nn.Module):
                 1,
                 1,
             )
+            if use_internal_cl3d and not is_channels_last_3d(z):
+                z = z.contiguous(memory_format=torch.channels_last_3d)
             x = model.conv2(z)
             output_chunks = []
             pending = []
@@ -1493,9 +2129,15 @@ class WanVideoVAE(nn.Module):
                 )
                 pending.append(decoded)
                 if len(pending) == size or index + 1 == x.shape[2]:
-                    chunk = torch.cat(pending, dim=2)
+                    chunk = pending[0] if len(pending) == 1 else torch.cat(pending, dim=2)
                     if isinstance(model, VideoVAE38_):
-                        chunk = unpatchify(chunk, patch_size=2)
+                        chunk = (
+                            wan_vae_unpatchify_2x(chunk, output_cl3d=in_was_cl3d)
+                            if use_internal_cl3d
+                            else unpatchify(chunk, patch_size=2)
+                        )
+                    elif use_internal_cl3d and not in_was_cl3d and is_channels_last_3d(chunk):
+                        chunk = chunk.contiguous()
                     output_chunks.append(chunk.to("cpu"))
                     pending.clear()
             if not output_chunks:
@@ -1718,22 +2360,22 @@ class VideoVAE38_(VideoVAE_):
 
     def encode(self, x, scale):
         self.clear_cache()
-        x = patchify(x, patch_size=2)
+        in_was_cl3d = is_channels_last_3d(x)
+        use_internal_cl3d = _can_use_internal_cl3d(self, x)
+        x = wan_vae_patchify_2x(x, output_cl3d=True) if use_internal_cl3d else patchify(x, patch_size=2)
         t = x.shape[2]
         iter_ = 1 + (t - 1) // 4
+        outs = []
         for i in range(iter_):
             self._enc_conv_idx = [0]
-            if i == 0:
-                out, self._enc_feat_map, self._enc_conv_idx = self.encoder(
-                    x[:, :, :1, :, :], feat_cache=self._enc_feat_map, feat_idx=self._enc_conv_idx
-                )
-            else:
-                out_, self._enc_feat_map, self._enc_conv_idx = self.encoder(
-                    x[:, :, 1 + 4 * (i - 1) : 1 + 4 * i, :, :],
-                    feat_cache=self._enc_feat_map,
-                    feat_idx=self._enc_conv_idx,
-                )
-                out = torch.cat([out, out_], 2)
+            chunk = x[:, :, :1, :, :] if i == 0 else x[:, :, 1 + 4 * (i - 1) : 1 + 4 * i, :, :]
+            out_, self._enc_feat_map, self._enc_conv_idx = self.encoder(
+                chunk,
+                feat_cache=self._enc_feat_map,
+                feat_idx=self._enc_conv_idx,
+            )
+            outs.append(out_)
+        out = outs[0] if len(outs) == 1 else torch.cat(outs, dim=2)
         mu, log_var = self.conv1(out).chunk(2, dim=1)
         if isinstance(scale[0], torch.Tensor):
             scale = [s.to(dtype=mu.dtype, device=mu.device) for s in scale]
@@ -1741,31 +2383,42 @@ class VideoVAE38_(VideoVAE_):
         else:
             scale = scale.to(dtype=mu.dtype, device=mu.device)
             mu = (mu - scale[0]) * scale[1]
+        if use_internal_cl3d and not in_was_cl3d and is_channels_last_3d(mu):
+            mu = mu.contiguous()
         self.clear_cache()
         return mu
 
     def decode(self, z, scale):
         self.clear_cache()
+        in_was_cl3d = is_channels_last_3d(z)
+        use_internal_cl3d = _can_use_internal_cl3d(self, z)
         if isinstance(scale[0], torch.Tensor):
             scale = [s.to(dtype=z.dtype, device=z.device) for s in scale]
             z = z / scale[1].view(1, self.z_dim, 1, 1, 1) + scale[0].view(1, self.z_dim, 1, 1, 1)
         else:
             scale = scale.to(dtype=z.dtype, device=z.device)
             z = z / scale[1] + scale[0]
+        if use_internal_cl3d and not is_channels_last_3d(z):
+            z = z.contiguous(memory_format=torch.channels_last_3d)
         iter_ = z.shape[2]
         x = self.conv2(z)
+        outs = []
         for i in range(iter_):
             self._conv_idx = [0]
             if i == 0:
-                out, self._feat_map, self._conv_idx = self.decoder(
+                out_, self._feat_map, self._conv_idx = self.decoder(
                     x[:, :, i : i + 1, :, :], feat_cache=self._feat_map, feat_idx=self._conv_idx, first_chunk=True
                 )
             else:
                 out_, self._feat_map, self._conv_idx = self.decoder(
                     x[:, :, i : i + 1, :, :], feat_cache=self._feat_map, feat_idx=self._conv_idx
                 )
-                out = torch.cat([out, out_], 2)
-        out = unpatchify(out, patch_size=2)
+            outs.append(out_)
+        out = outs[0] if len(outs) == 1 else torch.cat(outs, dim=2)
+        if use_internal_cl3d:
+            out = wan_vae_unpatchify_2x(out, output_cl3d=in_was_cl3d)
+        else:
+            out = unpatchify(out, patch_size=2)
         self.clear_cache()
         return out
 
