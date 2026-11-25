@@ -163,6 +163,141 @@ def test_piecewise_block_graph_runner_cpu_lifecycle() -> None:
     assert runner.report()["segment_count"] == 3
 
 
+def test_piecewise_block_graph_runner_share_pool_policy_cpu() -> None:
+    default_pw = PiecewiseBlockGraphRunner(warmup=1)
+    assert default_pw.share_pool is True
+    assert default_pw.report()["shared_pool"] is True
+
+    explicit_off = PiecewiseBlockGraphRunner(warmup=1, share_pool=False)
+    assert explicit_off.share_pool is False
+    assert explicit_off.report()["shared_pool"] is False
+
+    # clone_outputs=False must automatically disable cross-segment pool sharing
+    # so retained static outputs from one segment cannot be overwritten by another.
+    uncloned_pw = PiecewiseBlockGraphRunner(warmup=1, clone_outputs=False, share_pool=True)
+    assert uncloned_pw.share_pool is False
+    assert uncloned_pw.report()["shared_pool"] is False
+
+
+@pytest.mark.gpu
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required for piecewise shared graph pool test")
+@torch.inference_mode()
+def test_piecewise_block_graph_shared_pool_non_aliasing_and_vram_savings_cuda() -> None:
+    import gc
+
+    device = torch.device("cuda", torch.cuda.current_device())
+    n_segments = 4
+    rows, hidden, mlp_dim = 1024, 1024, 8192  # ~32 MiB per fp32 intermediate tensor
+    x = torch.randn((rows, hidden), device=device, dtype=torch.float32)
+    weights = [
+        (
+            torch.randn((hidden, mlp_dim), device=device, dtype=torch.float32) * 0.01,
+            torch.randn((mlp_dim, hidden), device=device, dtype=torch.float32) * 0.01,
+        )
+        for _ in range(n_segments)
+    ]
+
+    def _make_seg(wu: torch.Tensor, wd: torch.Tensor):
+        def _seg(h: torch.Tensor) -> torch.Tensor:
+            mid1 = torch.matmul(h, wu)
+            mid2 = torch.nn.functional.silu(mid1)
+            mid3 = mid2 * 1.1 + mid1 * 0.1
+            return torch.matmul(mid3, wd) + h
+
+        return _seg
+
+    def _run_case(
+        *, share_pool: bool, clone_outputs: bool
+    ) -> tuple[int, list[torch.Tensor], PiecewiseBlockGraphRunner]:
+        gc.collect()
+        torch.cuda.empty_cache()
+        torch.cuda.synchronize(device)
+        base_reserved = torch.cuda.memory_reserved(device)
+
+        pw = PiecewiseBlockGraphRunner(
+            warmup=1,
+            max_graphs_per_segment=4,
+            clone_outputs=clone_outputs,
+            share_pool=share_pool,
+        )
+        for idx, (wu, wd) in enumerate(weights):
+            pw.register_segment(f"seg_{idx}", _make_seg(wu, wd))
+
+        # Capture + replay 2 full passes, retaining every segment's output from pass 1.
+        retained_pass1: list[torch.Tensor] = []
+        h = x
+        for idx in range(n_segments):
+            h = pw.run_segment(f"seg_{idx}", h)
+            retained_pass1.append(h)
+
+        h2 = x + 0.25
+        for idx in range(n_segments):
+            h2 = pw.run_segment(f"seg_{idx}", h2)
+        torch.cuda.synchronize(device)
+        delta_reserved = torch.cuda.memory_reserved(device) - base_reserved
+        return delta_reserved, retained_pass1, pw
+
+    # Reference eager outputs for pass 1
+    expected_pass1: list[torch.Tensor] = []
+    ref = x
+    for wu, wd in weights:
+        ref = _make_seg(wu, wd)(ref)
+        expected_pass1.append(ref)
+
+    # 1. Separate pools baseline
+    sep_reserved, sep_outputs, sep_pw = _run_case(share_pool=False, clone_outputs=True)
+    sep_pools = {seg.pool for seg in sep_pw._segments.values()}
+    assert len(sep_pools) == n_segments
+    for actual, expected in zip(sep_outputs, expected_pass1, strict=True):
+        torch.testing.assert_close(actual, expected, rtol=1e-4, atol=1e-4)
+    sep_pw.invalidate()
+    del sep_pw, sep_outputs
+    gc.collect()
+    torch.cuda.empty_cache()
+
+    # 2. Shared pool (default): strictly lower reserved CUDA memory AND zero aliasing
+    shared_reserved, shared_outputs, shared_pw = _run_case(share_pool=True, clone_outputs=True)
+    shared_pools = {seg.pool for seg in shared_pw._segments.values()}
+    assert len(shared_pools) == 1
+    assert shared_pw.pool is not None and shared_pw.pool in shared_pools
+    assert shared_reserved < sep_reserved, (
+        f"Expected shared pool reserved delta ({shared_reserved / 1e6:.1f} MB) < "
+        f"separate pools ({sep_reserved / 1e6:.1f} MB)"
+    )
+    for actual, expected in zip(shared_outputs, expected_pass1, strict=True):
+        torch.testing.assert_close(actual, expected, rtol=1e-4, atol=1e-4)
+
+    # 3. Invalidation rotates the shared pool handle and survives external _pool=None resets
+    old_pool = shared_pw.pool
+    shared_pw.invalidate()
+    assert shared_pw.pool is not None and shared_pw.pool != old_pool
+    for seg in shared_pw._segments.values():
+        seg._pool = None  # mimic external caller clearing segment pool handles
+    h3 = x
+    for idx in range(n_segments):
+        h3 = shared_pw.run_segment(f"seg_{idx}", h3)
+    torch.testing.assert_close(h3, expected_pass1[-1], rtol=1e-4, atol=1e-4)
+    assert len({seg.pool for seg in shared_pw._segments.values()}) == 1
+    shared_pw.invalidate()
+    del shared_pw, shared_outputs
+    gc.collect()
+    torch.cuda.empty_cache()
+
+    # 4. clone_outputs=False automatically disables pool sharing so segment A's
+    #    retained output is never overwritten by segment B/C/D replays.
+    _, uncloned_outputs, uncloned_pw = _run_case(share_pool=True, clone_outputs=False)
+    assert uncloned_pw.share_pool is False
+    assert len({seg.pool for seg in uncloned_pw._segments.values()}) == n_segments
+    # Run pass 2 on different input ONLY through seg_1..seg_3 while checking seg_0's output
+    out0 = uncloned_pw.run_segment("seg_0", x)
+    _ = uncloned_pw.run_segment("seg_1", x + 1.0)
+    _ = uncloned_pw.run_segment("seg_2", x + 2.0)
+    _ = uncloned_pw.run_segment("seg_3", x + 3.0)
+    torch.testing.assert_close(out0, expected_pass1[0], rtol=1e-4, atol=1e-4)
+    uncloned_pw.invalidate()
+    del uncloned_pw, uncloned_outputs
+
+
 def test_transformer_protocols_and_hunyuan_seam() -> None:
     class _DummyAttn(nn.Module):
         def __init__(self) -> None:

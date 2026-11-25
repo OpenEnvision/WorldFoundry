@@ -19,7 +19,11 @@ from worldfoundry.core.kernels import layer_norm_scale_shift, residual_gate_add,
 
 from .acceleration import (
     LingBotEasyCache,
+    fused_lingbot_layernorm_adaln,
+    fused_lingbot_post_norm_residual_gate_add,
+    fused_lingbot_post_norm_residual_gate_rmsnorm_adaln,
     fused_lingbot_qk_rmsnorm_rope,
+    fused_lingbot_rmsnorm_adaln,
     lingbot_fa3_attention,
     lingbot_pisa_attention,
 )
@@ -33,6 +37,11 @@ from .sglang_moe_shim import (
     quantize_to_fp8_e4m3fn,
     sglang_fused_experts,
 )
+
+
+def _has_forward_hooks(module: nn.Module) -> bool:
+    return bool(getattr(module, "_forward_hooks", None) or getattr(module, "_forward_pre_hooks", None))
+
 
 try:
     from flash_attn_interface import flash_attn_varlen_func as flash_attn_varlen_func_v3
@@ -1017,7 +1026,20 @@ class LingBotVideoBlock(nn.Module):
         scale_msa, scale_mlp = 1.0 + scale_msa, 1.0 + scale_mlp
 
         bulk_dtype = self.attn.to_q.weight.dtype
-        attn_in = (self.norm1(x) * scale_msa + shift_msa).to(bulk_dtype)
+        use_fused = self._use_fused_kernels and not self.training and not torch.is_grad_enabled() and x.is_cuda
+
+        if use_fused and not _has_forward_hooks(self.norm1):
+            attn_in = fused_lingbot_rmsnorm_adaln(
+                x,
+                self.norm1.weight,
+                scale_msa,
+                shift_msa,
+                eps=float(self.norm1.variance_epsilon),
+                out_dtype=bulk_dtype,
+            )
+        else:
+            attn_in = (self.norm1(x) * scale_msa + shift_msa).to(bulk_dtype)
+
         attn_out = self.attn(
             attn_in,
             rotary_emb,
@@ -1026,23 +1048,47 @@ class LingBotVideoBlock(nn.Module):
             parallel_config=parallel_config,
             use_pisa=use_pisa,
         )
-        attn_normed = self.norm_post_attn(attn_out)
-        use_fused = self._use_fused_kernels and not self.training and not torch.is_grad_enabled() and x.is_cuda
-        if use_fused:
-            x = residual_gate_add(x, attn_normed.to(x.dtype), gate_msa.to(x.dtype))
-        else:
-            x = x + (gate_msa * attn_normed).to(x.dtype)
 
-        ffn_in = (self.norm2(x) * scale_mlp + shift_mlp).to(bulk_dtype)
+        if use_fused and not _has_forward_hooks(self.norm_post_attn) and not _has_forward_hooks(self.norm2):
+            x, ffn_in = fused_lingbot_post_norm_residual_gate_rmsnorm_adaln(
+                x,
+                attn_out,
+                self.norm_post_attn.weight,
+                gate_msa,
+                self.norm2.weight,
+                scale_mlp,
+                shift_mlp,
+                eps_post=float(self.norm_post_attn.variance_epsilon),
+                eps_norm2=float(self.norm2.variance_epsilon),
+                out_dtype=bulk_dtype,
+            )
+        else:
+            attn_normed = self.norm_post_attn(attn_out)
+            if use_fused:
+                x = residual_gate_add(x, attn_normed.to(x.dtype), gate_msa.to(x.dtype))
+            else:
+                x = x + (gate_msa * attn_normed).to(x.dtype)
+            ffn_in = (self.norm2(x) * scale_mlp + shift_mlp).to(bulk_dtype)
+
         if isinstance(self.ffn, LingBotVideoSparseMoeBlock):
             ffn_out = self.ffn(ffn_in, padding_mask=moe_padding_mask)
         else:
             ffn_out = self.ffn(ffn_in)
-        ffn_normed = self.norm_post_ffn(ffn_out)
-        if use_fused:
-            x = residual_gate_add(x, ffn_normed.to(x.dtype), gate_mlp.to(x.dtype))
+
+        if use_fused and not _has_forward_hooks(self.norm_post_ffn):
+            x = fused_lingbot_post_norm_residual_gate_add(
+                x,
+                ffn_out,
+                self.norm_post_ffn.weight,
+                gate_mlp,
+                eps_post=float(self.norm_post_ffn.variance_epsilon),
+            )
         else:
-            x = x + (gate_mlp * ffn_normed).to(x.dtype)
+            ffn_normed = self.norm_post_ffn(ffn_out)
+            if use_fused:
+                x = residual_gate_add(x, ffn_normed.to(x.dtype), gate_mlp.to(x.dtype))
+            else:
+                x = x + (gate_mlp * ffn_normed).to(x.dtype)
         return x
 
 
@@ -1578,16 +1624,32 @@ class LingBotVideoTransformer3DModel(ModelMixin, ConfigMixin):
         else:
             final_mod = self.norm_out_modulation(temb_input.reshape(joint.shape[0] * joint.shape[1], -1))
             shift, scale = final_mod.reshape(joint.shape[0], joint.shape[1], -1).chunk(2, dim=-1)
-        if self._lingbot_fused_kernels and not self.training and not torch.is_grad_enabled() and joint.is_cuda:
-            final_hidden = layer_norm_scale_shift(
-                joint.to(scale.dtype),
+        if (
+            self._lingbot_fused_kernels
+            and not self.training
+            and not torch.is_grad_enabled()
+            and joint.is_cuda
+            and not _has_forward_hooks(self.norm_out)
+        ):
+            final_hidden = fused_lingbot_layernorm_adaln(
+                joint,
                 scale,
                 shift,
                 eps=float(self.norm_out.eps),
+                out_dtype=self.proj_out.weight.dtype,
             )
+            projected = self.proj_out(final_hidden)
         else:
-            final_hidden = self.norm_out(joint) * (1.0 + scale) + shift
-        projected = self.proj_out(final_hidden.to(self.proj_out.weight.dtype))
+            if self._lingbot_fused_kernels and not self.training and not torch.is_grad_enabled() and joint.is_cuda:
+                final_hidden = layer_norm_scale_shift(
+                    joint.to(scale.dtype),
+                    scale,
+                    shift,
+                    eps=float(self.norm_out.eps),
+                )
+            else:
+                final_hidden = self.norm_out(joint) * (1.0 + scale) + shift
+            projected = self.proj_out(final_hidden.to(self.proj_out.weight.dtype))
         if packed_cp:
             projected = self.cp_out(projected)
             if padding_size:

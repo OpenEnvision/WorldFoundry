@@ -15,6 +15,18 @@ from torch.nn.attention.flex_attention import BlockMask, create_block_mask, flex
 from worldfoundry.core.attention.sequence.varlen import attention
 from worldfoundry.core.model_loading.model_configuration import NativeConfigMixin, register_to_config
 
+from .fast_kernels import (
+    sf_apply_rope_bshd,
+    sf_cached_t2v_cross_attention,
+    sf_exact_norms_enabled,
+    sf_fast_kernels_enabled,
+    sf_layernorm_adaln,
+    sf_qk_rmsnorm_rope_write_kv,
+    sf_residual_add_layernorm_adaln,
+    sf_residual_gate_add,
+    sf_residual_gate_add_layernorm,
+    sf_rmsnorm,
+)
 from .model import (
     WAN_CROSSATTENTION_CLASSES,
     MLPProj,
@@ -65,6 +77,24 @@ def _apply_real_rope(x: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor) -> t
     from worldfoundry.core.kernels.diffusion import apply_real_rope_bshd
 
     return apply_real_rope_bshd(x, cos, sin)
+
+
+_DEFAULT_APPLY_REAL_ROPE = _apply_real_rope
+
+
+def _use_sf_fast_kernels(module: nn.Module) -> bool:
+    """Return True when the lossless Hopper Triton fast path should run for *module*."""
+    if _apply_real_rope is not _DEFAULT_APPLY_REAL_ROPE:
+        return False
+    return sf_fast_kernels_enabled(getattr(module, "_worldfoundry_sf_fast_kernels", None))
+
+
+def _use_sf_exact_norms(module: nn.Module, attention_backend: str | None = None) -> bool:
+    """Return True when 0-ULP bit-exact norm reductions should be used for *module*."""
+    return sf_exact_norms_enabled(
+        attention_backend=attention_backend,
+        override=getattr(module, "_worldfoundry_sf_exact_norms", None),
+    )
 
 
 def causal_rope_apply(x, grid_sizes, freqs, start_frame=0):
@@ -213,15 +243,15 @@ class CausalWanSelfAttention(nn.Module):
         # query, key, value function (supports fused QKV without extra copies)
         if hasattr(self, "qkv"):
             q_proj, k_proj, v_proj = self.qkv(x).chunk(3, dim=-1)
+        else:
+            q_proj = self.q(x)
+            k_proj = self.k(x)
+            v_proj = self.v(x)
+
+        if kv_cache is None:
             q = self.norm_q(q_proj).view(b, s, n, d)
             k = self.norm_k(k_proj).view(b, s, n, d)
             v = v_proj.view(b, s, n, d)
-        else:
-            q = self.norm_q(self.q(x)).view(b, s, n, d)
-            k = self.norm_k(self.k(x)).view(b, s, n, d)
-            v = self.v(x).view(b, s, n, d)
-
-        if kv_cache is None:
             # if it is teacher forcing training?
             is_tf = s == seq_lens[0].item() * 2
             if is_tf:
@@ -321,35 +351,17 @@ class CausalWanSelfAttention(nn.Module):
         else:
             if frame_seqlen is None:
                 frame_seqlen = math.prod(grid_sizes[0][1:]).item()
-            if self.kv_cache_relative_rope:
-                roped_key = k
-            elif precomputed_rope is not None:
-                cos, sin = precomputed_rope
-                roped_query = _apply_real_rope(q, cos, sin)
-                roped_key = _apply_real_rope(k, cos, sin)
-            else:
-                current_start_frame = current_start // frame_seqlen
-                roped_query = causal_rope_apply(q, grid_sizes, freqs, start_frame=current_start_frame).type_as(v)
-                roped_key = causal_rope_apply(k, grid_sizes, freqs, start_frame=current_start_frame).type_as(v)
 
-            current_end = current_start + q.shape[1]
+            # Resolve KV slice bounds and roll any evicted window slots before writing new K/V.
+            current_end = current_start + s
             if kv_plan is not None:
                 local_start_index, local_end_index, sink_tokens, num_evicted_tokens, num_rolled_tokens, sync_tensors = (
                     kv_plan
                 )
-                if num_evicted_tokens > 0 and num_rolled_tokens > 0:
-                    kv_cache["k"][:, sink_tokens : sink_tokens + num_rolled_tokens] = kv_cache["k"][
-                        :, sink_tokens + num_evicted_tokens : sink_tokens + num_evicted_tokens + num_rolled_tokens
-                    ].clone()
-                    kv_cache["v"][:, sink_tokens : sink_tokens + num_rolled_tokens] = kv_cache["v"][
-                        :, sink_tokens + num_evicted_tokens : sink_tokens + num_evicted_tokens + num_rolled_tokens
-                    ].clone()
-                kv_cache["k"][:, local_start_index:local_end_index] = roped_key
-                kv_cache["v"][:, local_start_index:local_end_index] = v
             else:
                 sink_tokens = self.sink_size * frame_seqlen
                 kv_cache_size = kv_cache["k"].shape[1]
-                num_new_tokens = q.shape[1]
+                num_new_tokens = s
                 prev_global_end = kv_cache["global_end_index"].item()
                 prev_local_end = kv_cache["local_end_index"].item()
                 if (
@@ -359,40 +371,125 @@ class CausalWanSelfAttention(nn.Module):
                 ):
                     num_evicted_tokens = num_new_tokens + prev_local_end - kv_cache_size
                     num_rolled_tokens = prev_local_end - num_evicted_tokens - sink_tokens
-                    kv_cache["k"][:, sink_tokens : sink_tokens + num_rolled_tokens] = kv_cache["k"][
-                        :, sink_tokens + num_evicted_tokens : sink_tokens + num_evicted_tokens + num_rolled_tokens
-                    ].clone()
-                    kv_cache["v"][:, sink_tokens : sink_tokens + num_rolled_tokens] = kv_cache["v"][
-                        :, sink_tokens + num_evicted_tokens : sink_tokens + num_evicted_tokens + num_rolled_tokens
-                    ].clone()
                     local_end_index = prev_local_end + current_end - prev_global_end - num_evicted_tokens
-                    local_start_index = local_end_index - num_new_tokens
-                    kv_cache["k"][:, local_start_index:local_end_index] = roped_key
-                    kv_cache["v"][:, local_start_index:local_end_index] = v
                 else:
+                    num_evicted_tokens = 0
+                    num_rolled_tokens = 0
                     local_end_index = prev_local_end + current_end - prev_global_end
-                    local_start_index = local_end_index - num_new_tokens
-                    kv_cache["k"][:, local_start_index:local_end_index] = roped_key
-                    kv_cache["v"][:, local_start_index:local_end_index] = v
+                local_start_index = local_end_index - num_new_tokens
                 sync_tensors = 1
-            if self.kv_cache_relative_rope:
-                if precomputed_relative_rope is not None:
-                    (q_cos, q_sin), (k_cos, k_sin) = precomputed_relative_rope
-                    roped_query = _apply_real_rope(q, q_cos, q_sin).type_as(v)
-                    cached_k = _apply_real_rope(kv_cache["k"][:, :local_end_index], k_cos, k_sin).type_as(v)
-                else:
-                    roped_query, cached_k = kv_cache_relative_rope_apply(
-                        q,
-                        kv_cache["k"][:, :local_end_index],
-                        grid_sizes,
-                        freqs,
-                        query_start_frame=local_start_index // frame_seqlen,
-                    )
-                    roped_query = roped_query.type_as(v)
-                cached_v = kv_cache["v"][:, :local_end_index]
-            else:
+
+            if num_evicted_tokens > 0 and num_rolled_tokens > 0:
+                src_k = kv_cache["k"][
+                    :, sink_tokens + num_evicted_tokens : sink_tokens + num_evicted_tokens + num_rolled_tokens
+                ]
+                src_v = kv_cache["v"][
+                    :, sink_tokens + num_evicted_tokens : sink_tokens + num_evicted_tokens + num_rolled_tokens
+                ]
+                # Clone only when source and destination overlap to avoid redundant allocations.
+                if num_evicted_tokens < num_rolled_tokens:
+                    src_k = src_k.clone()
+                    src_v = src_v.clone()
+                kv_cache["k"][:, sink_tokens : sink_tokens + num_rolled_tokens].copy_(src_k)
+                kv_cache["v"][:, sink_tokens : sink_tokens + num_rolled_tokens].copy_(src_v)
+
+            use_fast = _use_sf_fast_kernels(self)
+            exact_norms = _use_sf_exact_norms(self, self.attention_backend) if use_fast else True
+            is_wan_qk_norm = type(self.norm_q) is WanRMSNorm and type(self.norm_k) is WanRMSNorm
+            is_id_qk_norm = type(self.norm_q) is nn.Identity and type(self.norm_k) is nn.Identity
+            can_fuse_qk = use_fast and (is_wan_qk_norm or is_id_qk_norm)
+
+            if can_fuse_qk and not self.kv_cache_relative_rope and precomputed_rope is not None:
+                cos, sin = precomputed_rope
+                roped_query = sf_qk_rmsnorm_rope_write_kv(
+                    q_proj,
+                    k_proj,
+                    v_proj,
+                    self.norm_q.weight if is_wan_qk_norm else None,
+                    self.norm_k.weight if is_wan_qk_norm else None,
+                    cos,
+                    sin,
+                    kv_cache["k"],
+                    kv_cache["v"],
+                    dst_start=local_start_index,
+                    num_heads=n,
+                    head_dim=d,
+                    eps=float(self.norm_q.eps) if is_wan_qk_norm else float(self.eps),
+                    rotate_k=True,
+                    exact=exact_norms,
+                    enabled=True,
+                )
                 cached_k = kv_cache["k"][:, max(0, local_end_index - self.max_attention_size) : local_end_index]
                 cached_v = kv_cache["v"][:, max(0, local_end_index - self.max_attention_size) : local_end_index]
+            elif can_fuse_qk and self.kv_cache_relative_rope and precomputed_relative_rope is not None:
+                (q_cos, q_sin), (k_cos, k_sin) = precomputed_relative_rope
+                roped_query = sf_qk_rmsnorm_rope_write_kv(
+                    q_proj,
+                    k_proj,
+                    v_proj,
+                    self.norm_q.weight if is_wan_qk_norm else None,
+                    self.norm_k.weight if is_wan_qk_norm else None,
+                    q_cos,
+                    q_sin,
+                    kv_cache["k"],
+                    kv_cache["v"],
+                    dst_start=local_start_index,
+                    num_heads=n,
+                    head_dim=d,
+                    eps=float(self.norm_q.eps) if is_wan_qk_norm else float(self.eps),
+                    rotate_k=False,
+                    exact=exact_norms,
+                    enabled=True,
+                )
+                cached_k = sf_apply_rope_bshd(kv_cache["k"][:, :local_end_index], k_cos, k_sin, enabled=True).type_as(
+                    v_proj
+                )
+                cached_v = kv_cache["v"][:, :local_end_index]
+            else:
+                if use_fast and is_wan_qk_norm:
+                    q = sf_rmsnorm(
+                        q_proj, self.norm_q.weight, eps=float(self.norm_q.eps), exact=exact_norms, enabled=True
+                    ).view(b, s, n, d)
+                    k = sf_rmsnorm(
+                        k_proj, self.norm_k.weight, eps=float(self.norm_k.eps), exact=exact_norms, enabled=True
+                    ).view(b, s, n, d)
+                else:
+                    q = self.norm_q(q_proj).view(b, s, n, d)
+                    k = self.norm_k(k_proj).view(b, s, n, d)
+                v = v_proj.view(b, s, n, d)
+
+                if self.kv_cache_relative_rope:
+                    roped_key = k
+                elif precomputed_rope is not None:
+                    cos, sin = precomputed_rope
+                    roped_query = _apply_real_rope(q, cos, sin)
+                    roped_key = _apply_real_rope(k, cos, sin)
+                else:
+                    current_start_frame = current_start // frame_seqlen
+                    roped_query = causal_rope_apply(q, grid_sizes, freqs, start_frame=current_start_frame).type_as(v)
+                    roped_key = causal_rope_apply(k, grid_sizes, freqs, start_frame=current_start_frame).type_as(v)
+
+                kv_cache["k"][:, local_start_index:local_end_index] = roped_key
+                kv_cache["v"][:, local_start_index:local_end_index] = v
+
+                if self.kv_cache_relative_rope:
+                    if precomputed_relative_rope is not None:
+                        (q_cos, q_sin), (k_cos, k_sin) = precomputed_relative_rope
+                        roped_query = _apply_real_rope(q, q_cos, q_sin).type_as(v)
+                        cached_k = _apply_real_rope(kv_cache["k"][:, :local_end_index], k_cos, k_sin).type_as(v)
+                    else:
+                        roped_query, cached_k = kv_cache_relative_rope_apply(
+                            q,
+                            kv_cache["k"][:, :local_end_index],
+                            grid_sizes,
+                            freqs,
+                            query_start_frame=local_start_index // frame_seqlen,
+                        )
+                        roped_query = roped_query.type_as(v)
+                    cached_v = kv_cache["v"][:, :local_end_index]
+                else:
+                    cached_k = kv_cache["k"][:, max(0, local_end_index - self.max_attention_size) : local_end_index]
+                    cached_v = kv_cache["v"][:, max(0, local_end_index - self.max_attention_size) : local_end_index]
             if self.attention_backend in (None, "torch"):
                 x = attention(roped_query, cached_k, cached_v)
             elif (
@@ -504,10 +601,26 @@ class CausalWanAttentionBlock(nn.Module):
         # with amp.autocast(dtype=torch.float32):
         e = (self.modulation.unsqueeze(1) + e).chunk(6, dim=2)
         # assert e[0].dtype == torch.float32
+        use_fast = _use_sf_fast_kernels(self)
+        exact_norms = _use_sf_exact_norms(self, self.self_attn.attention_backend) if use_fast else True
 
         # self-attention
+        if use_fast and type(self.norm1) is WanLayerNorm:
+            sa_in = sf_layernorm_adaln(
+                x,
+                e[1],
+                e[0],
+                num_frames=num_frames,
+                frame_seq=frame_seq,
+                eps=float(self.norm1.eps),
+                exact=exact_norms,
+                enabled=True,
+            )
+        else:
+            sa_in = (self.norm1(x).unflatten(dim=1, sizes=(num_frames, frame_seq)) * (1 + e[1]) + e[0]).flatten(1, 2)
+
         y = self.self_attn(
-            (self.norm1(x).unflatten(dim=1, sizes=(num_frames, frame_seq)) * (1 + e[1]) + e[0]).flatten(1, 2),
+            sa_in,
             seq_lens,
             grid_sizes,
             freqs,
@@ -521,20 +634,66 @@ class CausalWanAttentionBlock(nn.Module):
             frame_seqlen=frame_seq if frame_seqlen is None else frame_seqlen,
         )
 
-        # with amp.autocast(dtype=torch.float32):
-        x = x + (y.unflatten(dim=1, sizes=(num_frames, frame_seq)) * e[2]).flatten(1, 2)
-
-        # cross-attention & ffn function
-        def cross_attn_ffn(x, context, context_lens, e, crossattn_cache=None):
-            x = x + self.cross_attn(self.norm3(x), context, context_lens, crossattn_cache=crossattn_cache)
-            y = self.ffn(
-                (self.norm2(x).unflatten(dim=1, sizes=(num_frames, frame_seq)) * (1 + e[4]) + e[3]).flatten(1, 2)
+        # post-self-attention residual + norm3 super-fusion
+        if use_fast and type(self.norm3) is WanLayerNorm:
+            x, cross_in = sf_residual_gate_add_layernorm(
+                x,
+                y,
+                e[2],
+                self.norm3.weight,
+                self.norm3.bias,
+                num_frames=num_frames,
+                frame_seq=frame_seq,
+                eps=float(self.norm3.eps),
+                exact=exact_norms,
+                enabled=True,
             )
-            # with amp.autocast(dtype=torch.float32):
-            x = x + (y.unflatten(dim=1, sizes=(num_frames, frame_seq)) * e[5]).flatten(1, 2)
-            return x
+        elif use_fast:
+            x = sf_residual_gate_add(x, y, e[2], num_frames=num_frames, frame_seq=frame_seq, enabled=True)
+            cross_in = self.norm3(x)
+        else:
+            x = x + (y.unflatten(dim=1, sizes=(num_frames, frame_seq)) * e[2]).flatten(1, 2)
+            cross_in = self.norm3(x)
 
-        x = cross_attn_ffn(x, context, context_lens, e, crossattn_cache)
+        # cross-attention
+        if (
+            use_fast
+            and crossattn_cache is not None
+            and crossattn_cache.get("is_init")
+            and context_lens is None
+            and type(self.cross_attn) is WAN_CROSSATTENTION_CLASSES["t2v_cross_attn"]
+            and not self.cross_attn._forward_hooks
+            and not self.cross_attn._forward_pre_hooks
+        ):
+            cross_out = sf_cached_t2v_cross_attention(
+                self.cross_attn, cross_in, crossattn_cache, exact=exact_norms, enabled=True
+            )
+        else:
+            cross_out = self.cross_attn(cross_in, context, context_lens, crossattn_cache=crossattn_cache)
+
+        # post-cross-attention residual + norm2 + AdaLN super-fusion
+        if use_fast and type(self.norm2) is WanLayerNorm:
+            x, ffn_in = sf_residual_add_layernorm_adaln(
+                x,
+                cross_out,
+                e[4],
+                e[3],
+                num_frames=num_frames,
+                frame_seq=frame_seq,
+                eps=float(self.norm2.eps),
+                exact=exact_norms,
+                enabled=True,
+            )
+        else:
+            x = x + cross_out
+            ffn_in = (self.norm2(x).unflatten(dim=1, sizes=(num_frames, frame_seq)) * (1 + e[4]) + e[3]).flatten(1, 2)
+
+        # FFN + post-FFN residual gate add
+        y = self.ffn(ffn_in)
+        if use_fast:
+            x = sf_residual_gate_add(x, y, e[5], num_frames=num_frames, frame_seq=frame_seq, enabled=True)
+        else:
+            x = x + (y.unflatten(dim=1, sizes=(num_frames, frame_seq)) * e[5]).flatten(1, 2)
         return x
 
 
@@ -556,7 +715,7 @@ class CausalHead(nn.Module):
         # modulation
         self.modulation = nn.Parameter(torch.randn(1, 2, dim) / dim**0.5)
 
-    def forward(self, x, e):
+    def forward(self, x, e, *, exact_norms: bool | None = None):
         r"""
         Args:
             x(Tensor): Shape [B, L1, C]
@@ -566,6 +725,19 @@ class CausalHead(nn.Module):
         # with amp.autocast(dtype=torch.float32):
         num_frames, frame_seqlen = e.shape[1], x.shape[1] // e.shape[1]
         e = (self.modulation.unsqueeze(1) + e).chunk(2, dim=2)
+        if _use_sf_fast_kernels(self) and type(self.norm) is WanLayerNorm:
+            use_exact = _use_sf_exact_norms(self, None) if exact_norms is None else bool(exact_norms)
+            h = sf_layernorm_adaln(
+                x,
+                e[1],
+                e[0],
+                num_frames=num_frames,
+                frame_seq=frame_seqlen,
+                eps=float(self.norm.eps),
+                exact=use_exact,
+                enabled=True,
+            )
+            return self.head(h.unflatten(dim=1, sizes=(num_frames, frame_seqlen)))
         x = self.head(self.norm(x).unflatten(dim=1, sizes=(num_frames, frame_seqlen)) * (1 + e[1]) + e[0])
         return x
 
@@ -991,7 +1163,7 @@ class CausalWanModel(nn.Module, NativeConfigMixin):
             f_grid, h_grid, w_grid = grid_tuple
             frame_seqlen = h_grid * w_grid
             batch_size = int(x_emb.shape[0])
-            x = x_emb.flatten(2).transpose(1, 2)
+            x = x_emb.flatten(2).transpose(1, 2).contiguous()
             # Zero CUDA syncs: precomputed real (cos, sin) covers both fp64 (bitwise exact) and fp32.
             grid_sizes = None
             seq_lens = None
@@ -1008,8 +1180,15 @@ class CausalWanModel(nn.Module, NativeConfigMixin):
             assert seq_lens.max() <= seq_len
             x = torch.cat(x)
 
-        # time embeddings
-        e = self.time_embedding(sinusoidal_embedding_1d(self.freq_dim, t.flatten()).type_as(x))
+        # time embeddings — reuse per-device sinusoidal frequency table (zero H2D syncs, bitwise exact)
+        sin_cache = self.__dict__.setdefault("_worldfoundry_sinusoid_freqs", {})
+        sin_freqs = sin_cache.get(x.device)
+        if sin_freqs is None:
+            half = self.freq_dim // 2
+            sin_freqs = torch.pow(10000.0, -torch.arange(half, device=x.device, dtype=torch.float64).div(half))
+            sin_cache[x.device] = sin_freqs
+        angles = torch.outer(t.flatten().to(dtype=torch.float64), sin_freqs)
+        e = self.time_embedding(torch.cat([torch.cos(angles), torch.sin(angles)], dim=1).type_as(x))
         e0 = self.time_projection(e).unflatten(1, (6, self.dim)).unflatten(dim=0, sizes=t.shape)
 
         # context — skip redundant text MLP once all cross-attention K/V caches are initialized
@@ -1052,6 +1231,9 @@ class CausalWanModel(nn.Module, NativeConfigMixin):
                     prev_local_end = int(layer0["local_end_index"].item())
             else:
                 prev_global_end, prev_local_end = cached_pair
+                if int(current_start) == 0 and prev_global_end > current_end:
+                    # Fresh rollout restarted at slot 0 reusing pooled KV buffers without reset_causal_host_cache().
+                    prev_global_end, prev_local_end = 0, 0
             if (
                 local_attn_size != -1
                 and current_end > prev_global_end
@@ -1159,7 +1341,7 @@ class CausalWanModel(nn.Module, NativeConfigMixin):
                 x = block(x, **kwargs)
 
         if sync_after_blocks is not None and not (
-            torch.cuda.is_available() and torch.cuda.is_current_stream_capturing()
+            not torch.compiler.is_compiling() and torch.cuda.is_available() and torch.cuda.is_current_stream_capturing()
         ):
             end_global, end_local = sync_after_blocks
             for layer_cache in kv_cache:
@@ -1167,7 +1349,9 @@ class CausalWanModel(nn.Module, NativeConfigMixin):
                 layer_cache["local_end_index"].fill_(end_local)
 
         # head
-        x = self.head(x, e.unflatten(dim=0, sizes=t.shape).unsqueeze(2))
+        head_attn_backend = getattr(self.blocks[0].self_attn, "attention_backend", None) if self.blocks else None
+        head_exact = _use_sf_exact_norms(self.head, head_attn_backend)
+        x = self.head(x, e.unflatten(dim=0, sizes=t.shape).unsqueeze(2), exact_norms=head_exact)
         # unpatchify without host sync when batched
         if fast_batched:
             c = self.out_dim
@@ -1331,7 +1515,9 @@ class CausalWanModel(nn.Module, NativeConfigMixin):
             x = x[:, x.shape[1] // 2 :]
 
         # head
-        x = self.head(x, e.unflatten(dim=0, sizes=t.shape).unsqueeze(2))
+        head_attn_backend = getattr(self.blocks[0].self_attn, "attention_backend", None) if self.blocks else None
+        head_exact = _use_sf_exact_norms(self.head, head_attn_backend)
+        x = self.head(x, e.unflatten(dim=0, sizes=t.shape).unsqueeze(2), exact_norms=head_exact)
 
         # unpatchify
         x = self.unpatchify(x, grid_sizes)

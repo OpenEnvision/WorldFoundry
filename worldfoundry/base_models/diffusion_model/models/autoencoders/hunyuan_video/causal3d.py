@@ -9,6 +9,7 @@ from collections.abc import Mapping
 from pathlib import Path
 
 import torch
+from torch import distributed as dist
 from torch import nn
 
 from worldfoundry.core.model_loading import load_state_dict as load_core_state_dict
@@ -96,6 +97,8 @@ class HunyuanVideoCausal3DAutoencoder(nn.Module):
         self.tile_sample_min_size = int(spatial_size)
         self.tile_latent_min_size = max(int(spatial_size) // int(spatial_compression_ratio), 1)
         self.tile_overlap_factor = 0.25
+        self._tile_parallelism_enabled = False
+        self._tile_parallel_group: dist.ProcessGroup | None = None
 
     @classmethod
     def load_config(cls, path: str | Path) -> dict[str, object]:
@@ -144,18 +147,36 @@ class HunyuanVideoCausal3DAutoencoder(nn.Module):
     def disable_slicing(self) -> None:
         self.use_slicing = False
 
+    def enable_tile_parallelism(
+        self,
+        enabled: bool = True,
+        *,
+        group: dist.ProcessGroup | None = None,
+    ) -> None:
+        """Enable or disable multi-GPU spatial tile sharding during tiled decode."""
+        self._tile_parallelism_enabled = bool(enabled)
+        if group is not None or not self._tile_parallelism_enabled:
+            self._tile_parallel_group = group if self._tile_parallelism_enabled else None
+
+    def disable_tile_parallelism(self) -> None:
+        self.enable_tile_parallelism(False)
+
     @staticmethod
     def _blend(a: torch.Tensor, b: torch.Tensor, extent: int, dim: int) -> torch.Tensor:
         extent = min(a.shape[dim], b.shape[dim], int(extent))
         if extent <= 0:
             return b
-        for index in range(extent):
-            source = [slice(None)] * b.ndim
-            target = [slice(None)] * b.ndim
-            source[dim] = -extent + index
-            target[dim] = index
-            ratio = index / extent
-            b[tuple(target)] = a[tuple(source)] * (1.0 - ratio) + b[tuple(target)] * ratio
+        axis = dim % b.ndim
+        ratio_shape = [1] * b.ndim
+        ratio_shape[axis] = extent
+        ratios = (
+            torch.arange(extent, device=b.device, dtype=torch.float32).div_(extent).view(*ratio_shape).to(dtype=b.dtype)
+        )
+        source = [slice(None)] * b.ndim
+        target = [slice(None)] * b.ndim
+        source[axis] = slice(a.shape[axis] - extent, a.shape[axis])
+        target[axis] = slice(0, extent)
+        b[tuple(target)] = a[tuple(source)] * (1.0 - ratios) + b[tuple(target)] * ratios
         return b
 
     def _encode_moments(self, value: torch.Tensor) -> torch.Tensor:
@@ -192,7 +213,138 @@ class HunyuanVideoCausal3DAutoencoder(nn.Module):
             return moments
         return AutoencoderKLOutput(DiagonalGaussianDistribution(moments))
 
+    def _merge_spatial_rows(
+        self,
+        rows: list[list[torch.Tensor]],
+        blend: int,
+        limit: int,
+    ) -> torch.Tensor:
+        merged_rows = []
+        for row_index, row in enumerate(rows):
+            merged = []
+            for column_index, tile in enumerate(row):
+                if row_index:
+                    tile = self._blend(rows[row_index - 1][column_index], tile, blend, -2)
+                if column_index:
+                    tile = self._blend(row[column_index - 1], tile, blend, -1)
+                merged.append(tile[..., :limit, :limit])
+            merged_rows.append(torch.cat(merged, dim=-1))
+        return torch.cat(merged_rows, dim=-2)
+
+    def parallel_spatial_tiled_decode(
+        self,
+        value: torch.Tensor,
+        *,
+        group: dist.ProcessGroup | None = None,
+    ) -> DecoderOutput:
+        """Shard spatial tiles across ranks, gather via contiguous collective, and blend on-device."""
+        if not dist.is_available() or not dist.is_initialized():
+            raise RuntimeError("parallel HunyuanVideo spatial tiled decode requires an initialized process group")
+        comm_group = group if group is not None else self._tile_parallel_group
+        world_size = int(dist.get_world_size(comm_group))
+        rank = int(dist.get_rank(comm_group))
+        if world_size <= 1:
+            raise RuntimeError("parallel HunyuanVideo spatial tiled decode requires more than one rank")
+
+        batch_size, _channels, latent_frames, height, width = value.shape
+        overlap = max(int(self.tile_latent_min_size * (1.0 - self.tile_overlap_factor)), 1)
+        blend = int(self.tile_sample_min_size * self.tile_overlap_factor)
+        limit = self.tile_sample_min_size - blend
+
+        row_starts = list(range(0, height, overlap))
+        col_starts = list(range(0, width, overlap))
+        num_rows = len(row_starts)
+        num_cols = len(col_starts)
+        # Longest-processing-time-first (LPT) tile load balancing across ranks so
+        # smaller border tiles pair with full tiles and eliminate straggler ranks.
+        # Canonical (ri, rj) merge order below preserves bitwise-exact output.
+        tile_specs = [
+            (
+                ri,
+                rj,
+                min(self.tile_latent_min_size, height - row_starts[ri])
+                * min(self.tile_latent_min_size, width - col_starts[rj]),
+            )
+            for ri in range(num_rows)
+            for rj in range(num_cols)
+        ]
+        rank_loads = [0] * world_size
+        rank_bins: list[list[tuple[int, int]]] = [[] for _ in range(world_size)]
+        for ri, rj, area in sorted(tile_specs, key=lambda item: (-item[2], item[0], item[1])):
+            target = min(range(world_size), key=lambda r: (rank_loads[r], len(rank_bins[r]), r))
+            rank_bins[target].append((ri, rj))
+            rank_loads[target] += area
+        tiles_per_rank = max((len(b) for b in rank_bins), default=0)
+
+        spatial_ratio = int(self.config.spatial_compression_ratio)
+        time_ratio = int(self.config.time_compression_ratio)
+        out_channels = int(self.config.out_channels)
+        out_frames = (latent_frames - 1) * time_ratio + 1
+        max_tile_h = max(min(self.tile_latent_min_size, height - r) for r in row_starts) * spatial_ratio
+        max_tile_w = max(min(self.tile_latent_min_size, width - c) for c in col_starts) * spatial_ratio
+
+        if value.device.type in ("cuda", "cpu") and torch.is_autocast_enabled(value.device.type):
+            out_dtype = torch.get_autocast_dtype(value.device.type)
+        else:
+            conv_out = getattr(self.decoder, "conv_out", None)
+            inner_conv = getattr(conv_out, "conv", conv_out)
+            weight = getattr(inner_conv, "weight", None)
+            out_dtype = weight.dtype if isinstance(weight, torch.Tensor) else value.dtype
+
+        local_tiles = torch.zeros(
+            (tiles_per_rank, batch_size, out_channels, out_frames, max_tile_h, max_tile_w),
+            device=value.device,
+            dtype=out_dtype,
+        )
+        for slot, (ri, rj) in enumerate(rank_bins[rank]):
+            r_start = row_starts[ri]
+            c_start = col_starts[rj]
+            tile = value[
+                ...,
+                r_start : r_start + self.tile_latent_min_size,
+                c_start : c_start + self.tile_latent_min_size,
+            ]
+            dec = self._decode_sample(tile)
+            if dec.dtype != local_tiles.dtype:
+                local_tiles = local_tiles.to(dtype=dec.dtype)
+            local_tiles[slot, :, :, :, : dec.shape[-2], : dec.shape[-1]].copy_(dec)
+
+        gathered_tiles = torch.empty(
+            (world_size, *local_tiles.shape),
+            device=local_tiles.device,
+            dtype=local_tiles.dtype,
+        )
+        if local_tiles.is_cuda and hasattr(dist, "all_gather_into_tensor"):
+            dist.all_gather_into_tensor(gathered_tiles, local_tiles, group=comm_group)
+        else:
+            dist.all_gather(list(gathered_tiles.unbind(0)), local_tiles, group=comm_group)
+
+        rows: list[list[torch.Tensor | None]] = [[None for _ in range(num_cols)] for _ in range(num_rows)]
+        for r in range(world_size):
+            for k, (ri, rj) in enumerate(rank_bins[r]):
+                tile_out_h = min(self.tile_latent_min_size, height - row_starts[ri]) * spatial_ratio
+                tile_out_w = min(self.tile_latent_min_size, width - col_starts[rj]) * spatial_ratio
+                rows[ri][rj] = gathered_tiles[r, k, :, :, :, :tile_out_h, :tile_out_w]
+
+        populated_rows: list[list[torch.Tensor]] = []
+        for row in rows:
+            populated_row: list[torch.Tensor] = []
+            for tile in row:
+                if tile is None:
+                    raise RuntimeError("parallel HunyuanVideo gather did not return every spatial tile")
+                populated_row.append(tile)
+            populated_rows.append(populated_row)
+        return DecoderOutput(self._merge_spatial_rows(populated_rows, blend, limit))
+
     def _spatial_tiled_decode(self, value: torch.Tensor) -> DecoderOutput:
+        if (
+            self._tile_parallelism_enabled
+            and dist.is_available()
+            and dist.is_initialized()
+            and int(dist.get_world_size(self._tile_parallel_group)) > 1
+        ):
+            return self.parallel_spatial_tiled_decode(value, group=self._tile_parallel_group)
+
         overlap = max(int(self.tile_latent_min_size * (1.0 - self.tile_overlap_factor)), 1)
         blend = int(self.tile_sample_min_size * self.tile_overlap_factor)
         limit = self.tile_sample_min_size - blend
@@ -205,17 +357,7 @@ class HunyuanVideoCausal3DAutoencoder(nn.Module):
                 ]
                 row.append(self._decode_sample(tile))
             rows.append(row)
-        merged_rows = []
-        for row_index, row in enumerate(rows):
-            merged = []
-            for column_index, tile in enumerate(row):
-                if row_index:
-                    tile = self._blend(rows[row_index - 1][column_index], tile, blend, -2)
-                if column_index:
-                    tile = self._blend(row[column_index - 1], tile, blend, -1)
-                merged.append(tile[..., :limit, :limit])
-            merged_rows.append(torch.cat(merged, dim=-1))
-        return DecoderOutput(torch.cat(merged_rows, dim=-2))
+        return DecoderOutput(self._merge_spatial_rows(rows, blend, limit))
 
     def _temporal_tiled_encode(self, value: torch.Tensor) -> AutoencoderKLOutput:
         overlap = max(int(self.tile_sample_min_tsize * (1.0 - self.tile_overlap_factor)), 1)

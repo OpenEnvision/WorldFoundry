@@ -20,6 +20,9 @@ from collections.abc import Callable, Generator, Mapping
 from contextlib import ExitStack, contextmanager
 from typing import Any
 
+import torch
+
+from worldfoundry.core.execution.graphs.cuda_graph import graph_pool_handle
 from worldfoundry.core.execution.graphs.inference_graph import InferenceCUDAGraphRunner
 
 
@@ -37,6 +40,11 @@ class PiecewiseBlockGraphRunner:
         max_graphs_per_segment: LRU graph cap for each registered segment.
         clone_outputs: Clone static graph outputs on replay to prevent aliasing.
         enabled: Master switch; when False every segment runs eager.
+        share_pool: Share one CUDA Graph private memory pool across sequential
+            segments so intermediate activation buffers are reused instead of
+            duplicated per segment. Automatically disabled when
+            ``clone_outputs=False`` to guarantee retained static outputs cannot
+            be overwritten by another segment's replay.
     """
 
     def __init__(
@@ -46,15 +54,41 @@ class PiecewiseBlockGraphRunner:
         max_graphs_per_segment: int = 16,
         clone_outputs: bool = True,
         enabled: bool = True,
+        share_pool: bool = True,
     ) -> None:
         self._warmup = int(warmup)
         self._max_graphs_per_segment = int(max_graphs_per_segment)
         self._clone_outputs = bool(clone_outputs)
         self._enabled = bool(enabled)
+        self._share_pool = bool(share_pool)
+        # Sharing a CUDA Graph memory pool across sequential segments is only
+        # alias-safe when outputs are cloned out of the pool on replay; with
+        # clone_outputs=False a caller may retain one segment's static output
+        # buffer across another segment's replay.
+        self._use_shared_pool = self._share_pool and self._clone_outputs
+        self._shared_pool: Any | None = None
         self._segments: dict[str, InferenceCUDAGraphRunner] = {}
         self._skips: dict[str, int] = {}
         self._window_skips_baseline: dict[str, int] = {}
         self._frozen = False
+
+    def _ensure_shared_pool(self) -> Any | None:
+        """Lazily allocate one shared CUDA Graph pool handle across segments."""
+        if not self._use_shared_pool or not self._enabled or not torch.cuda.is_available():
+            return None
+        if self._shared_pool is None:
+            self._shared_pool = graph_pool_handle()
+        return self._shared_pool
+
+    @property
+    def pool(self) -> Any | None:
+        """Shared CUDA Graph memory pool handle, or None when separate/unused."""
+        return self._shared_pool
+
+    @property
+    def share_pool(self) -> bool:
+        """Whether registered segments share one CUDA Graph memory pool."""
+        return self._use_shared_pool
 
     def register_segment(
         self,
@@ -76,6 +110,7 @@ class PiecewiseBlockGraphRunner:
             clone_outputs=self._clone_outputs,
             enabled=self._enabled,
             extra_key=extra_key or f"piecewise:{segment_name}",
+            pool=self._ensure_shared_pool(),
         )
         if self._frozen:
             runner.freeze()
@@ -102,6 +137,11 @@ class PiecewiseBlockGraphRunner:
         runner = self._segments.get(name)
         if runner is None:
             raise KeyError(f"piecewise graph segment {name!r} is not registered")
+        if self._use_shared_pool and runner._pool is None:
+            shared_pool = self._ensure_shared_pool()
+            if shared_pool is not None:
+                runner._pool = shared_pool
+                runner._owns_pool = False
         return runner(*args, **kwargs)
 
     def record_skip(self, name: str, count: int = 1) -> None:
@@ -144,6 +184,15 @@ class PiecewiseBlockGraphRunner:
         """Drop all captured graphs and static buffers across every segment."""
         for runner in self._segments.values():
             runner.invalidate()
+        if self._use_shared_pool:
+            # All segments sharing this pool have synchronized and dropped their
+            # graphs above, so release the old handle to let the allocator
+            # reclaim pool memory and bind registered segments to a fresh handle.
+            self._shared_pool = None
+            fresh_pool = self._ensure_shared_pool() if self._segments else None
+            for runner in self._segments.values():
+                runner._pool = fresh_pool
+                runner._owns_pool = fresh_pool is None
 
     def report(self) -> dict[str, Any]:
         """Return aggregate and per-segment capture/replay/skip telemetry."""
@@ -192,6 +241,7 @@ class PiecewiseBlockGraphRunner:
             "mode": "piecewise-block-graph",
             "enabled": self._enabled,
             "frozen": self._frozen,
+            "shared_pool": self._use_shared_pool,
             "segment_count": len(self._segments),
             "capture": total_captures,
             "replay": total_replays,

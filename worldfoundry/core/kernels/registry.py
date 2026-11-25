@@ -30,7 +30,7 @@ import os
 import threading
 import warnings
 from collections import OrderedDict, defaultdict, deque
-from collections.abc import Callable, Generator, MutableMapping
+from collections.abc import Callable, Generator, MutableMapping, Sequence
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
@@ -40,10 +40,84 @@ from typing import Any
 KernelCallable = Callable[..., Any]
 KernelPredicate = Callable[..., bool]
 
+_TORCH_BACKENDS = frozenset({"torch", "pytorch", "native", "off", "disabled"})
+_TORCH_BACKENDS_BYTES = frozenset({b"torch", b"pytorch", b"native", b"off", b"disabled"})
+_AUTOTUNE_TRUTHY = frozenset({"1", "true", "yes", "on", "enable", "enabled"})
+_AUTOTUNE_TRUTHY_BYTES = frozenset({b"1", b"true", b"yes", b"on", b"enable", b"enabled"})
+_CACHE_MISS = object()
+_EMPTY_STR_TUPLE: tuple[str, ...] = ()
+_TORCH_MODULE: Any = None
+_TORCH_TENSOR_CLS: type[Any] | None = None
+_ORIG_CURRENT_DEVICE: Any = None
+_FAST_CUDA_GET_DEVICE: Any = None
+
+_ENV_BACKEND_KEY = "WORLDFOUNDRY_KERNEL_BACKEND"
+_ENV_BACKEND_BYTES = b"WORLDFOUNDRY_KERNEL_BACKEND"
+_ENV_AUTOTUNE_KEY = "WORLDFOUNDRY_KERNEL_AUTOTUNE_ENABLED"
+_ENV_AUTOTUNE_BYTES = b"WORLDFOUNDRY_KERNEL_AUTOTUNE_ENABLED"
+_ENV_AUTOTUNE_LEGACY_KEY = "WORLDFOUNDRY_KERNEL_AUTOTUNE"
+_ENV_AUTOTUNE_LEGACY_BYTES = b"WORLDFOUNDRY_KERNEL_AUTOTUNE"
+
 _KERNEL_DISPATCH_RECEIPT: ContextVar[MutableMapping[str, Any] | None] = ContextVar(
     "worldfoundry_kernel_dispatch_receipt",
     default=None,
 )
+
+
+def _get_torch() -> Any:
+    """Lazily import and cache ``torch`` and its fast C-level device query."""
+    global _TORCH_MODULE, _TORCH_TENSOR_CLS, _ORIG_CURRENT_DEVICE, _FAST_CUDA_GET_DEVICE
+    mod = _TORCH_MODULE
+    if mod is None:
+        import torch as mod
+
+        _TORCH_MODULE = mod
+        _TORCH_TENSOR_CLS = mod.Tensor
+        _ORIG_CURRENT_DEVICE = mod.cuda.current_device
+        _FAST_CUDA_GET_DEVICE = getattr(getattr(mod, "_C", None), "_cuda_getDevice", None)
+    return mod
+
+
+def _read_requested_backend(backend: str | None) -> str:
+    """Resolve the requested kernel backend without extra string/environ wrapper overhead."""
+    if backend is not None:
+        if backend == "auto" or backend in _TORCH_BACKENDS:
+            return backend
+        return backend.strip().casefold() or "auto"
+    env_data = getattr(os.environ, "_data", None)
+    if isinstance(env_data, dict):
+        raw_b = env_data.get(_ENV_BACKEND_BYTES)
+        if raw_b is None or raw_b == b"auto":
+            return "auto"
+        if isinstance(raw_b, bytes):
+            if raw_b in _TORCH_BACKENDS_BYTES:
+                return raw_b.decode()
+            return raw_b.decode("utf-8", "surrogateescape").strip().casefold() or "auto"
+        if raw_b == "auto" or raw_b in _TORCH_BACKENDS:
+            return raw_b
+        return str(raw_b).strip().casefold() or "auto"
+    raw = os.environ.get(_ENV_BACKEND_KEY)
+    if raw is None or raw == "auto":
+        return "auto"
+    if raw in _TORCH_BACKENDS:
+        return raw
+    return raw.strip().casefold() or "auto"
+
+
+def _find_cuda_tensor(args: tuple[Any, ...], kwargs: dict[str, Any], tensor_cls: type[Any]) -> Any:
+    """Return the first CUDA tensor in *args* or *kwargs* without unpacking allocations."""
+    if args:
+        first = args[0]
+        if isinstance(first, tensor_cls) and first.is_cuda:
+            return first
+        for value in args[1:]:
+            if isinstance(value, tensor_cls) and value.is_cuda:
+                return value
+    if kwargs:
+        for value in kwargs.values():
+            if isinstance(value, tensor_cls) and value.is_cuda:
+                return value
+    return None
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -79,8 +153,8 @@ def _publish_dispatch_receipt(
     accelerated: bool,
     fallback: bool,
     cache_hit: bool,
-    failures: list[str],
-    quarantined: list[str],
+    failures: Sequence[str],
+    quarantined: Sequence[str],
     reason: str | None = None,
 ) -> None:
     """Append one dispatch event when a request-local receipt scope is active.
@@ -192,6 +266,7 @@ class KernelRegistry:
         self._failure_messages: dict[tuple[object, ...], str] = {}
         self._failure_limit = int(failure_limit)
         self._selection_cache: OrderedDict[tuple[object, ...], KernelCandidate | None] = OrderedDict()
+        self._selection_tail_key: tuple[object, ...] | None = None
         self._autotune_records: OrderedDict[tuple[object, ...], dict[str, object]] = OrderedDict()
         self._selection_limit = int(selection_limit)
         self._lock = threading.Lock()
@@ -240,15 +315,32 @@ class KernelRegistry:
         optional custom candidates need the same protection here.
         """
 
-        import torch
-
-        tensor = next(
-            (value for value in (*args, *kwargs.values()) if isinstance(value, torch.Tensor) and value.is_cuda),
-            None,
-        )
+        torch_mod = _TORCH_MODULE
+        if torch_mod is None:
+            torch_mod = _get_torch()
+        tensor_cls = _TORCH_TENSOR_CLS
+        assert tensor_cls is not None
+        if args:
+            first = args[0]
+            if isinstance(first, tensor_cls) and first.is_cuda:
+                tensor = first
+            else:
+                tensor = _find_cuda_tensor(args, kwargs, tensor_cls)
+        elif kwargs:
+            tensor = _find_cuda_tensor(args, kwargs, tensor_cls)
+        else:
+            tensor = None
         if tensor is None:
             return candidate.implementation(*args, **kwargs)
-        with torch.cuda.device(tensor.device):
+        dev_idx = tensor.get_device()
+        cur_fn = torch_mod.cuda.current_device
+        if cur_fn is _ORIG_CURRENT_DEVICE and _FAST_CUDA_GET_DEVICE is not None:
+            cur_dev = _FAST_CUDA_GET_DEVICE()
+        else:
+            cur_dev = cur_fn()
+        if dev_idx == cur_dev:
+            return candidate.implementation(*args, **kwargs)
+        with torch_mod.cuda.device(dev_idx):
             return candidate.implementation(*args, **kwargs)
 
     def dispatch(
@@ -262,69 +354,94 @@ class KernelRegistry:
     ) -> Any:
         """Select a candidate or *fallback* for one workload *signature*.
 
-        Cache key is ``(op, requested backend, autotune flag, *signature)``.
+        Cache key is ``(op, requested backend, autotune flag, signature)``.
         Optional-kernel failures quarantine that signature; CUDA OOM,
         :class:`KeyboardInterrupt`, and :class:`SystemExit` always re-raise.
         """
 
-        requested = (
-            backend if backend is not None else os.getenv("WORLDFOUNDRY_KERNEL_BACKEND", "auto")
-        ).strip().casefold() or "auto"
-        failures: list[str] = []
-        quarantined: list[str] = []
-        if requested in {"torch", "pytorch", "native", "off", "disabled"}:
+        requested = _read_requested_backend(backend)
+        if requested in _TORCH_BACKENDS:
             result = fallback(*args, **kwargs)
-            _publish_dispatch_receipt(
-                op=op,
-                implementation="torch",
-                backend="torch",
-                accelerated=False,
-                fallback=True,
-                cache_hit=False,
-                failures=failures,
-                quarantined=quarantined,
-                reason="torch backend explicitly requested",
-            )
-            return result
-
-        selection_key = (op, requested, kernel_autotune_enabled(), *signature)
-        cached, cache_hit = self._cached_selection(selection_key)
-        skipped: set[str] = set()
-        if cache_hit:
-            if cached is None:
-                result = fallback(*args, **kwargs)
+            if _KERNEL_DISPATCH_RECEIPT.get() is not None:
                 _publish_dispatch_receipt(
                     op=op,
                     implementation="torch",
                     backend="torch",
                     accelerated=False,
                     fallback=True,
-                    cache_hit=True,
-                    failures=failures,
-                    quarantined=quarantined,
-                    reason="cached torch selection",
+                    cache_hit=False,
+                    failures=_EMPTY_STR_TUPLE,
+                    quarantined=_EMPTY_STR_TUPLE,
+                    reason="torch backend explicitly requested",
                 )
-                return result
-            failure_key = (cached.name, *signature)
-            if failure_key not in self._failures:
-                try:
-                    result = self._invoke_candidate(cached, args, kwargs)
+            return result
+
+        autotune_flag = kernel_autotune_enabled()
+        selection_key = (op, requested, autotune_flag, signature)
+        with self._lock:
+            cache = self._selection_cache
+            cached = cache.get(selection_key, _CACHE_MISS)
+            if cached is not _CACHE_MISS and len(cache) > 1 and selection_key != self._selection_tail_key:
+                cache.move_to_end(selection_key)
+                self._selection_tail_key = selection_key
+
+        if cached is not _CACHE_MISS:
+            if cached is None:
+                result = fallback(*args, **kwargs)
+                if _KERNEL_DISPATCH_RECEIPT.get() is not None:
                     _publish_dispatch_receipt(
                         op=op,
-                        implementation=cached.name,
-                        backend=cached.backend,
-                        accelerated=True,
-                        fallback=False,
+                        implementation="torch",
+                        backend="torch",
+                        accelerated=False,
+                        fallback=True,
                         cache_hit=True,
-                        failures=failures,
-                        quarantined=quarantined,
+                        failures=_EMPTY_STR_TUPLE,
+                        quarantined=_EMPTY_STR_TUPLE,
+                        reason="cached torch selection",
                     )
+                return result
+            assert isinstance(cached, KernelCandidate)
+            has_failures = bool(self._failures)
+            failure_key: tuple[object, ...] | None = (cached.name, *signature) if has_failures else None
+            if not has_failures or failure_key not in self._failures:
+                try:
+                    # Inline the common single-GPU args[0]-is-CUDA fast path.
+                    torch_mod = _TORCH_MODULE
+                    if torch_mod is None:
+                        torch_mod = _get_torch()
+                    tensor_cls = _TORCH_TENSOR_CLS
+                    assert tensor_cls is not None
+                    if (
+                        args
+                        and isinstance(args[0], tensor_cls)
+                        and args[0].is_cuda
+                        and torch_mod.cuda.current_device is _ORIG_CURRENT_DEVICE
+                        and _FAST_CUDA_GET_DEVICE is not None
+                        and args[0].get_device() == _FAST_CUDA_GET_DEVICE()
+                    ):
+                        result = cached.implementation(*args, **kwargs)
+                    else:
+                        result = self._invoke_candidate(cached, args, kwargs)
+                    if _KERNEL_DISPATCH_RECEIPT.get() is not None:
+                        _publish_dispatch_receipt(
+                            op=op,
+                            implementation=cached.name,
+                            backend=cached.backend,
+                            accelerated=True,
+                            fallback=False,
+                            cache_hit=True,
+                            failures=_EMPTY_STR_TUPLE,
+                            quarantined=_EMPTY_STR_TUPLE,
+                        )
                     return result
                 except BaseException as exc:
                     if _is_out_of_memory(exc) or isinstance(exc, (KeyboardInterrupt, SystemExit)):
                         raise
                     if not _is_optional_kernel_failure(exc):
                         raise
+                    if failure_key is None:
+                        failure_key = (cached.name, *signature)
                     self._drop_selection(selection_key)
                     if cached.autotune:
                         self._invalidate_persistent_candidate(cached, signature, args, kwargs)
@@ -334,24 +451,31 @@ class KernelRegistry:
                         RuntimeWarning,
                         stacklevel=3,
                     )
-                    failures.append(f"{cached.name}: {type(exc).__name__}: {exc}")
-                    skipped.add(cached.name)
+                    failures = [f"{cached.name}: {type(exc).__name__}: {exc}"]
+                    quarantined: list[str] = []
+                    skipped: set[str] = {cached.name}
             else:
-                quarantined.append(cached.name)
+                failures = []
+                quarantined = [cached.name]
+                skipped = set()
+        else:
+            failures = []
+            quarantined = []
+            skipped = set()
 
         for candidate in self._candidates.get(op, ()):
-            if candidate.name in skipped:
+            if skipped and candidate.name in skipped:
                 continue
             if requested != "auto" and requested not in {candidate.backend.casefold(), candidate.name.casefold()}:
                 continue
             failure_key = (candidate.name, *signature)
-            if failure_key in self._failures:
+            if self._failures and failure_key in self._failures:
                 quarantined.append(candidate.name)
                 continue
             try:
                 if not candidate.predicate(*args, **kwargs):
                     continue
-                if requested == "auto" and candidate.autotune and kernel_autotune_enabled():
+                if requested == "auto" and candidate.autotune and autotune_flag:
                     selected, result, record = self._autotune_candidate(
                         candidate,
                         fallback,
@@ -361,42 +485,44 @@ class KernelRegistry:
                     )
                     self._remember_selection(selection_key, selected)
                     self._remember_autotune(selection_key, record)
-                    if selected is None:
-                        _publish_dispatch_receipt(
-                            op=op,
-                            implementation="torch",
-                            backend="torch",
-                            accelerated=False,
-                            fallback=True,
-                            cache_hit=bool(record.get("cache_hit")),
-                            failures=failures,
-                            quarantined=quarantined,
-                            reason=f"autotune winner: {record.get('winner', 'torch')}",
-                        )
-                    else:
-                        _publish_dispatch_receipt(
-                            op=op,
-                            implementation=selected.name,
-                            backend=selected.backend,
-                            accelerated=True,
-                            fallback=False,
-                            cache_hit=bool(record.get("cache_hit")),
-                            failures=failures,
-                            quarantined=quarantined,
-                        )
+                    if _KERNEL_DISPATCH_RECEIPT.get() is not None:
+                        if selected is None:
+                            _publish_dispatch_receipt(
+                                op=op,
+                                implementation="torch",
+                                backend="torch",
+                                accelerated=False,
+                                fallback=True,
+                                cache_hit=bool(record.get("cache_hit")),
+                                failures=failures,
+                                quarantined=quarantined,
+                                reason=f"autotune winner: {record.get('winner', 'torch')}",
+                            )
+                        else:
+                            _publish_dispatch_receipt(
+                                op=op,
+                                implementation=selected.name,
+                                backend=selected.backend,
+                                accelerated=True,
+                                fallback=False,
+                                cache_hit=bool(record.get("cache_hit")),
+                                failures=failures,
+                                quarantined=quarantined,
+                            )
                     return result
                 result = self._invoke_candidate(candidate, args, kwargs)
                 self._remember_selection(selection_key, candidate)
-                _publish_dispatch_receipt(
-                    op=op,
-                    implementation=candidate.name,
-                    backend=candidate.backend,
-                    accelerated=True,
-                    fallback=False,
-                    cache_hit=False,
-                    failures=failures,
-                    quarantined=quarantined,
-                )
+                if _KERNEL_DISPATCH_RECEIPT.get() is not None:
+                    _publish_dispatch_receipt(
+                        op=op,
+                        implementation=candidate.name,
+                        backend=candidate.backend,
+                        accelerated=True,
+                        fallback=False,
+                        cache_hit=False,
+                        failures=failures,
+                        quarantined=quarantined,
+                    )
                 return result
             except BaseException as exc:
                 if _is_out_of_memory(exc) or isinstance(exc, (KeyboardInterrupt, SystemExit)):
@@ -414,17 +540,18 @@ class KernelRegistry:
                 failures.append(f"{candidate.name}: {type(exc).__name__}: {exc}")
         self._remember_selection(selection_key, None)
         result = fallback(*args, **kwargs)
-        _publish_dispatch_receipt(
-            op=op,
-            implementation="torch",
-            backend="torch",
-            accelerated=False,
-            fallback=True,
-            cache_hit=False,
-            failures=failures,
-            quarantined=quarantined,
-            reason="no accelerated candidate completed",
-        )
+        if _KERNEL_DISPATCH_RECEIPT.get() is not None:
+            _publish_dispatch_receipt(
+                op=op,
+                implementation="torch",
+                backend="torch",
+                accelerated=False,
+                fallback=True,
+                cache_hit=False,
+                failures=failures,
+                quarantined=quarantined,
+                reason="no accelerated candidate completed",
+            )
         return result
 
     def _autotune_candidate(
@@ -637,30 +764,51 @@ class KernelRegistry:
         except Exception:
             return
 
+    def _cached_selection_or_miss(self, key: tuple[object, ...]) -> KernelCandidate | None | object:
+        """LRU-touch one selection; returns ``_CACHE_MISS`` when absent."""
+
+        with self._lock:
+            cache = self._selection_cache
+            selected = cache.get(key, _CACHE_MISS)
+            if selected is _CACHE_MISS:
+                return _CACHE_MISS
+            if len(cache) > 1 and key != self._selection_tail_key:
+                cache.move_to_end(key)
+                self._selection_tail_key = key
+            return selected
+
     def _cached_selection(self, key: tuple[object, ...]) -> tuple[KernelCandidate | None, bool]:
         """LRU-touch one selection; ``(None, False)`` means the key was never stored."""
 
-        with self._lock:
-            if key not in self._selection_cache:
-                return None, False
-            selected = self._selection_cache.pop(key)
-            self._selection_cache[key] = selected
-            return selected, True
+        selected = self._cached_selection_or_miss(key)
+        if selected is _CACHE_MISS:
+            return None, False
+        assert selected is None or isinstance(selected, KernelCandidate)
+        return selected, True
 
     def _remember_selection(self, key: tuple[object, ...], selected: KernelCandidate | None) -> None:
         """Store *selected* (or explicit PyTorch ``None``) and evict the oldest entry."""
 
         with self._lock:
-            self._selection_cache.pop(key, None)
-            self._selection_cache[key] = selected
-            while len(self._selection_cache) > self._selection_limit:
-                self._selection_cache.popitem(last=False)
+            cache = self._selection_cache
+            if key in cache:
+                cache[key] = selected
+                if len(cache) > 1 and key != self._selection_tail_key:
+                    cache.move_to_end(key)
+            else:
+                cache[key] = selected
+                while len(cache) > self._selection_limit:
+                    cache.popitem(last=False)
+            self._selection_tail_key = key if cache else None
 
     def _drop_selection(self, key: tuple[object, ...]) -> None:
         """Forget one cached winner after a later optional-kernel failure."""
 
         with self._lock:
-            self._selection_cache.pop(key, None)
+            cache = self._selection_cache
+            cache.pop(key, None)
+            if key == self._selection_tail_key:
+                self._selection_tail_key = next(reversed(cache), None)
 
     def _remember_autotune(self, key: tuple[object, ...], record: dict[str, object]) -> None:
         """Retain one timing/mismatch record for :meth:`report` diagnostics."""
@@ -728,6 +876,7 @@ class KernelRegistry:
             self._failure_order.clear()
             self._failure_messages.clear()
             self._selection_cache.clear()
+            self._selection_tail_key = None
             self._autotune_records.clear()
 
 
@@ -787,17 +936,53 @@ def kernel_autotune_enabled() -> bool:
     ``WORLDFOUNDRY_KERNEL_AUTOTUNE`` name remains a fallback.
     """
 
-    configured = os.getenv("WORLDFOUNDRY_KERNEL_AUTOTUNE_ENABLED")
-    if configured is None or not configured.strip():
-        configured = os.getenv("WORLDFOUNDRY_KERNEL_AUTOTUNE", "")
-    return configured.strip().casefold() in {
-        "1",
-        "true",
-        "yes",
-        "on",
-        "enable",
-        "enabled",
-    }
+    env_data = getattr(os.environ, "_data", None)
+    if isinstance(env_data, dict):
+        raw_b = env_data.get(_ENV_AUTOTUNE_BYTES)
+        if raw_b is None or raw_b == b"":
+            raw_b = env_data.get(_ENV_AUTOTUNE_LEGACY_BYTES)
+            if raw_b is None or raw_b == b"" or raw_b == b"0":
+                return False
+            if raw_b == b"1":
+                return True
+        elif raw_b == b"0":
+            return False
+        elif raw_b == b"1":
+            return True
+        if isinstance(raw_b, bytes):
+            stripped_b = raw_b.strip()
+            if not stripped_b:
+                raw_b = env_data.get(_ENV_AUTOTUNE_LEGACY_BYTES)
+                if not raw_b or raw_b == b"0":
+                    return False
+                if raw_b == b"1":
+                    return True
+                stripped_b = raw_b.strip() if isinstance(raw_b, bytes) else str(raw_b).strip().encode()
+            return stripped_b.lower() in _AUTOTUNE_TRUTHY_BYTES
+
+    env = os.environ
+    configured = env.get(_ENV_AUTOTUNE_KEY)
+    if configured is None or configured == "":
+        configured = env.get(_ENV_AUTOTUNE_LEGACY_KEY)
+        if configured is None or configured == "" or configured == "0":
+            return False
+        if configured == "1":
+            return True
+    elif configured == "0":
+        return False
+    elif configured == "1":
+        return True
+    else:
+        stripped = configured.strip()
+        if not stripped:
+            configured = env.get(_ENV_AUTOTUNE_LEGACY_KEY, "")
+            if not configured or configured == "0":
+                return False
+            if configured == "1":
+                return True
+            stripped = configured.strip()
+        return stripped.casefold() in _AUTOTUNE_TRUTHY
+    return configured.strip().casefold() in _AUTOTUNE_TRUTHY
 
 
 def kernel_dispatch_report() -> dict[str, object]:

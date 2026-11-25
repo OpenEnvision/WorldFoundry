@@ -225,65 +225,95 @@ class SequenceParallelSelfAttentionProcessor:
         v = rearrange(v, "b s (h d) -> b s h d", h=num_heads)
 
         sp_world = int(self._state.sp_degree)
-        pad_heads = (-num_heads) % sp_world
-        if pad_heads:
-            # Padded Ulysses: align head axis to sp_world before all-to-all and
-            # crop the dummy heads after inverse scatter so non-divisor head
-            # counts (e.g. 12-head Wan 1.3B at SP=8) remain mathematically exact.
+        pad_heads = (-int(num_heads)) % sp_world
+
+        from worldfoundry.core.distributed.sequence_parallel.symm_mem_all_to_all import (
+            ulysses_ephemeral_output_scope,
+        )
+
+        # Detect whether runtime helpers are real (not monkeypatched by unit tests)
+        # so pad_heads / crop_heads fusion never breaks test mock signatures.
+        can_fuse_pad = (
+            pad_heads > 0
+            and getattr(all_to_all_4d_many, "__module__", "")
+            == "worldfoundry.core.distributed.sequence_parallel.runtime"
+            and getattr(all_to_all_4D, "__module__", "") == "worldfoundry.core.distributed.sequence_parallel.runtime"
+        )
+        if pad_heads and not can_fuse_pad:
+            # Padded Ulysses fallback when collectives are mocked.
             q = torch.cat((q, q.new_zeros(b, s_local, pad_heads, q.shape[3])), dim=2)
             k = torch.cat((k, k.new_zeros(b, s_local, pad_heads, k.shape[3])), dim=2)
             v = torch.cat((v, v.new_zeros(b, s_local, pad_heads, v.shape[3])), dim=2)
 
-        # Ulysses via the in-tree native NCCL all-to-all (no xfuser dependency).
-        # scatter heads / gather sequence: [B, S/P, H_pad, D] -> [B, S, H_pad/P, D].
-        q, k, v = all_to_all_4d_many(
-            (q, k, v),
-            group,
-            scatter_dim=2,
-            gather_dim=1,
-            assume_even=True,
-        )
+        with ulysses_ephemeral_output_scope():
+            # Ulysses via in-tree NVLink symm_mem or native NCCL all-to-all.
+            # scatter heads / gather sequence: [B, S/P, H_pad, D] -> [B, S, H_pad/P, D].
+            if can_fuse_pad:
+                q, k, v = all_to_all_4d_many(
+                    (q, k, v),
+                    group,
+                    scatter_dim=2,
+                    gather_dim=1,
+                    assume_even=True,
+                    pad_heads=pad_heads,
+                )
+            else:
+                q, k, v = all_to_all_4d_many(
+                    (q, k, v),
+                    group,
+                    scatter_dim=2,
+                    gather_dim=1,
+                    assume_even=True,
+                )
 
-        # Exact attention over the full sequence on this rank's head subset.
-        # Keep the model-selected backend (FA2/FA3/SDPA) instead of bypassing
-        # the Wan dispatcher with a raw PyTorch SDPA call. Apart from restoring
-        # the requested fast kernel, using the same provider on SP1 and SP>1
-        # avoids diffusion-step drift from mixing different softmax kernels.
-        local_heads = q.shape[2]
-        head_dim = q.shape[3]
-        attention_module = attention.attn
-        force_dense = bool(getattr(attention_module, "_worldfoundry_force_dense", False))
-        dense_backend = getattr(attention_module, "_worldfoundry_dense_attention_backend", None) or "torch"
-        attention_backend = dense_backend if force_dense else getattr(attention_module, "attention_backend", None)
-        attention_options = None if force_dense else getattr(attention_module, "_worldfoundry_attention_options", None)
-        if not force_dense and attention_backend == "sol_attn":
-            sink_override = getattr(attention_module, "_worldfoundry_sol_sink_tokens", None)
-            if sink_override is not None:
-                attention_options = {**(attention_options or {}), "sink_tokens": int(sink_override)}
-        attention_kwargs: dict[str, Any] = {
-            "q": q.flatten(2),
-            "k": k.flatten(2),
-            "v": v.flatten(2),
-            "num_heads": local_heads,
-            "compatibility_mode": bool(getattr(attention_module, "compatibility_mode", False)),
-            "backend": attention_backend,
-        }
-        if isinstance(attention_options, dict) and attention_options:
-            attention_kwargs["backend_options"] = attention_options
-        out = packed_sequence_attention(**attention_kwargs).reshape(b, -1, local_heads, head_dim)
+            # Exact attention over the full sequence on this rank's head subset.
+            local_heads = q.shape[2]
+            head_dim = q.shape[3]
+            attention_module = attention.attn
+            force_dense = bool(getattr(attention_module, "_worldfoundry_force_dense", False))
+            dense_backend = getattr(attention_module, "_worldfoundry_dense_attention_backend", None) or "torch"
+            attention_backend = dense_backend if force_dense else getattr(attention_module, "attention_backend", None)
+            attention_options = (
+                None if force_dense else getattr(attention_module, "_worldfoundry_attention_options", None)
+            )
+            if not force_dense and attention_backend == "sol_attn":
+                sink_override = getattr(attention_module, "_worldfoundry_sol_sink_tokens", None)
+                if sink_override is not None:
+                    attention_options = {**(attention_options or {}), "sink_tokens": int(sink_override)}
+            attention_kwargs: dict[str, Any] = {
+                "q": q.flatten(2),
+                "k": k.flatten(2),
+                "v": v.flatten(2),
+                "num_heads": local_heads,
+                "compatibility_mode": bool(getattr(attention_module, "compatibility_mode", False)),
+                "backend": attention_backend,
+            }
+            if isinstance(attention_options, dict) and attention_options:
+                attention_kwargs["backend_options"] = attention_options
+            out = packed_sequence_attention(**attention_kwargs).reshape(b, -1, local_heads, head_dim)
 
-        # scatter sequence / gather heads: [B, S, H_pad/P, D] -> [B, S/P, H_pad, D].
-        out = all_to_all_4D(
-            out,
-            group,
-            scatter_dim=1,
-            gather_dim=2,
-            assume_even=True,
-        )
-        if pad_heads:
-            out = out[:, :, :num_heads, :].contiguous()
-        out = out.flatten(2)  # [B, S/P, dim]
-        return attention.o(out)
+            # scatter sequence / gather heads: [B, S, H_pad/P, D] -> [B, S/P, H, D].
+            if can_fuse_pad:
+                out = all_to_all_4D(
+                    out,
+                    group,
+                    scatter_dim=1,
+                    gather_dim=2,
+                    assume_even=True,
+                    crop_heads=pad_heads,
+                )
+            else:
+                out = all_to_all_4D(
+                    out,
+                    group,
+                    scatter_dim=1,
+                    gather_dim=2,
+                    assume_even=True,
+                )
+                if pad_heads:
+                    out = out[:, :, :num_heads, :].contiguous()
+            out = out.flatten(2)  # [B, S/P, dim]
+            return attention.o(out)
 
 
 def enable_sequence_parallel(

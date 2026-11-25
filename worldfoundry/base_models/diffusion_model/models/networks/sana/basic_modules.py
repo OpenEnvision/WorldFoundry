@@ -31,6 +31,10 @@ import torch.nn.functional as F
 
 from worldfoundry.base_models.diffusion_model.models.networks.sana.activation import build_act, get_act_name
 from worldfoundry.base_models.diffusion_model.models.networks.sana.normalization import build_norm, get_norm_name
+from worldfoundry.base_models.diffusion_model.models.networks.sana.triton_glumbconv import (
+    can_use_sana_silu_dwconv3x3_glu,
+    fused_sana_silu_dwconv3x3_glu_nhwc,
+)
 from worldfoundry.core.kernels import silu_mul
 from worldfoundry.core.nn import get_same_padding, val2tuple
 from worldfoundry.core.nn.blocks.layers import Mlp
@@ -201,18 +205,30 @@ class GLUMBConv(nn.Module):
         )
 
     def _apply_spatial_fused_nhwc(self, x_nhwc: torch.Tensor) -> torch.Tensor:
-        """NHWC fused inverted bottleneck: F.linear -> channels_last depthwise conv -> silu_mul -> F.linear."""
+        """NHWC fused inverted bottleneck: F.linear -> fused silu+dwconv+GLU -> F.linear."""
         inv_conv = self.inverted_conv.conv
+        dw_conv = self.depth_conv.conv
         pt_conv = self.point_conv.conv
         assert inv_conv is not None and pt_conv is not None
         inv_w = inv_conv.weight.squeeze(-1).squeeze(-1)
-        h = F.silu(F.linear(x_nhwc, inv_w, inv_conv.bias))
-        # Permute NHWC -> NCHW view that is already channels_last contiguous!
-        h_nchw = h.permute(0, 3, 1, 2)
-        h_dw = self.depth_conv(h_nchw).permute(0, 2, 3, 1)
-        # Note operand order: GLUMBConv computes a * silu(g) where a, g = chunk(2)
-        a, g = h_dw.chunk(2, dim=-1)
-        gated = silu_mul(g.contiguous(), a.contiguous())
+        h_linear = F.linear(x_nhwc, inv_w, inv_conv.bias)
+        if (
+            isinstance(dw_conv, nn.Conv2d)
+            and not self.depth_conv._forward_hooks
+            and not self.depth_conv._forward_pre_hooks
+            and not self.inverted_conv._forward_hooks
+            and not self.inverted_conv._forward_pre_hooks
+            and can_use_sana_silu_dwconv3x3_glu(h_linear, dw_conv)
+        ):
+            gated = fused_sana_silu_dwconv3x3_glu_nhwc(h_linear, dw_conv.weight, dw_conv.bias)
+        else:
+            h = F.silu(h_linear)
+            # Permute NHWC -> NCHW view that is already channels_last contiguous!
+            h_nchw = h.permute(0, 3, 1, 2)
+            h_dw = self.depth_conv(h_nchw).permute(0, 2, 3, 1)
+            # Note operand order: GLUMBConv computes a * silu(g) where a, g = chunk(2)
+            a, g = h_dw.chunk(2, dim=-1)
+            gated = silu_mul(g.contiguous(), a.contiguous())
         pt_w = pt_conv.weight.squeeze(-1).squeeze(-1)
         return F.linear(gated, pt_w, pt_conv.bias)
 
@@ -319,6 +335,46 @@ class GLUMBConvTemp(GLUMBConv):
 
         nn.init.zeros_(self.t_conv.weight)
 
+    def _can_use_fused_temporal(self, x_spatial: torch.Tensor, c: int) -> bool:
+        tc = self.t_conv
+        if not x_spatial.is_cuda or self.training or torch.is_grad_enabled():
+            return False
+        if x_spatial.dtype not in (torch.bfloat16, torch.float16, torch.float32):
+            return False
+        if not isinstance(tc, nn.Conv2d) or tc._forward_hooks or tc._forward_pre_hooks:
+            return False
+        if tc.weight.device != x_spatial.device or tc.weight.dtype != x_spatial.dtype:
+            return False
+        if tc.bias is not None and (tc.bias.device != x_spatial.device or tc.bias.dtype != x_spatial.dtype):
+            return False
+        return (
+            tc.kernel_size == (3, 1)
+            and tc.stride == (1, 1)
+            and tc.padding == (1, 0)
+            and tc.dilation == (1, 1)
+            and tc.groups == 1
+            and tc.padding_mode == "zeros"
+            and tc.in_channels == c
+            and tc.out_channels == c
+        )
+
+    def _apply_temporal_fused_nhwc(self, x_spatial: torch.Tensor, b: int, t: int, hw: int, c: int) -> torch.Tensor:
+        """Zero-permute cuBLAS ``x + t_conv(x)`` directly on ``[B, T, HW, C]``."""
+        if b == 0 or t == 0 or hw == 0:
+            return x_spatial.reshape(b, t * hw, c)
+        x_bt = x_spatial.contiguous().reshape(b, t, hw, c)
+        w0, w1, w2 = self.t_conv.weight.squeeze(-1).permute(2, 0, 1).contiguous().unbind(0)
+        x_2d = x_bt.reshape(b * t * hw, c)
+        out = torch.addmm(x_2d, x_2d, w1.t())
+        if self.t_conv.bias is not None:
+            out = out + self.t_conv.bias
+        out_bt = out.view(b, t, hw, c)
+        if t > 1:
+            m = (t - 1) * hw
+            out_bt[:, 1:].view(b, m, c).baddbmm_(x_bt[:, :-1].view(b, m, c), w0.t().unsqueeze(0).expand(b, c, c))
+            out_bt[:, :-1].view(b, m, c).baddbmm_(x_bt[:, 1:].view(b, m, c), w2.t().unsqueeze(0).expand(b, c, c))
+        return out_bt.reshape(b, t * hw, c)
+
     def forward(self, x: torch.Tensor, HW=None, **kwargs) -> torch.Tensor:
         B, N, C = x.shape
 
@@ -327,6 +383,8 @@ class GLUMBConvTemp(GLUMBConv):
         if self._can_use_fused_spatial():
             x_nhwc = x.reshape(B * T, H, W, C)
             x_spatial = self._apply_spatial_fused_nhwc_autochunked(x_nhwc)
+            if self._can_use_fused_temporal(x_spatial, C):
+                return self._apply_temporal_fused_nhwc(x_spatial, B, T, H * W, C)
             # Temporal aggregation: [B, C, T, H*W]
             x_reshaped = x_spatial.reshape(B, T, H * W, C).permute(0, 3, 1, 2)
             x_out = x_reshaped + self.t_conv(x_reshaped)

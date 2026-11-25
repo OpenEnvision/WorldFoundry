@@ -20,6 +20,11 @@ import torch
 import torch.nn as nn
 
 from .attention import Attention
+from .triton_vit_ops import (
+    can_use_vit_scaled_residual_rmsnorm,
+    vit_rmsnorm,
+    vit_scaled_residual_add_rmsnorm,
+)
 from .vit_utils import _env_flag, _vit_torch_compile_kwargs
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
@@ -248,24 +253,84 @@ class TransformerBlock(nn.Module):
         if use_scale:
             self.scale2 = nn.Parameter(torch.zeros(dim))
 
+    @staticmethod
+    def _is_fusable_rmsnorm(norm: nn.Module) -> bool:
+        return isinstance(norm, nn.RMSNorm) and not norm._forward_hooks and not norm._forward_pre_hooks
+
+    def _forward_impl(
+        self,
+        hidden_states: torch.Tensor,
+        rotary_pos_emb: torch.Tensor | None = None,
+        pack_info: dict | None = None,
+        *,
+        pre_normed: torch.Tensor | None = None,
+        next_norm: nn.Module | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        if pack_info is None:
+            pack_info = {}
+        norm_out_dtype = (
+            torch.get_autocast_dtype("cuda")
+            if hidden_states.is_cuda and torch.is_autocast_enabled("cuda")
+            else hidden_states.dtype
+        )
+        if pre_normed is not None:
+            norm_hidden_states = pre_normed
+        elif self._is_fusable_rmsnorm(self.norm1) and not torch.is_grad_enabled() and hidden_states.is_cuda:
+            eps1 = float(self.norm1.eps) if self.norm1.eps is not None else float(torch.finfo(hidden_states.dtype).eps)
+            norm_hidden_states = vit_rmsnorm(hidden_states, self.norm1.weight, eps=eps1, out_dtype=norm_out_dtype)
+        else:
+            norm_hidden_states = self.norm1(_vit_norm_input(self.norm1, hidden_states)).to(hidden_states.dtype)
+
+        attn_output = self.attn(norm_hidden_states, rotary_pos_emb, pack_info)
+        scale1 = self.scale1 if self.use_scale else None
+        if self._is_fusable_rmsnorm(self.norm2) and can_use_vit_scaled_residual_rmsnorm(
+            hidden_states, attn_output, scale1, self.norm2.weight
+        ):
+            eps2 = float(self.norm2.eps) if self.norm2.eps is not None else float(torch.finfo(hidden_states.dtype).eps)
+            hidden_states, norm_hidden_states = vit_scaled_residual_add_rmsnorm(
+                hidden_states,
+                attn_output,
+                scale1,
+                self.norm2.weight,
+                eps=eps2,
+                norm_out_dtype=norm_out_dtype,
+            )
+        else:
+            if self.use_scale:
+                hidden_states = _scaled_residual_add(hidden_states, attn_output, self.scale1)
+            else:
+                hidden_states = hidden_states + attn_output
+            norm_hidden_states = self.norm2(_vit_norm_input(self.norm2, hidden_states)).to(hidden_states.dtype)
+
+        ff_output = self.ff(norm_hidden_states)
+        scale2 = self.scale2 if self.use_scale else None
+        if (
+            isinstance(next_norm, nn.RMSNorm)
+            and self._is_fusable_rmsnorm(next_norm)
+            and can_use_vit_scaled_residual_rmsnorm(hidden_states, ff_output, scale2, next_norm.weight)
+        ):
+            eps_n = float(next_norm.eps) if next_norm.eps is not None else float(torch.finfo(hidden_states.dtype).eps)
+            hidden_states, next_pre_normed = vit_scaled_residual_add_rmsnorm(
+                hidden_states,
+                ff_output,
+                scale2,
+                next_norm.weight,
+                eps=eps_n,
+                norm_out_dtype=norm_out_dtype,
+            )
+            return hidden_states, next_pre_normed
+
+        if self.use_scale:
+            hidden_states = _scaled_residual_add(hidden_states, ff_output, self.scale2)
+        else:
+            hidden_states = hidden_states + ff_output
+        return hidden_states, None
+
     def forward(
         self,
         hidden_states: torch.FloatTensor,
         rotary_pos_emb: torch.FloatTensor | None = None,
         pack_info: dict = {},  # noqa: B006 - Keeps the upstream default object and signature.
     ):
-        norm_hidden_states = self.norm1(_vit_norm_input(self.norm1, hidden_states)).to(hidden_states.dtype)
-        attn_output = self.attn(norm_hidden_states, rotary_pos_emb, pack_info)
-        if self.use_scale:
-            hidden_states = _scaled_residual_add(hidden_states, attn_output, self.scale1)
-        else:
-            hidden_states = hidden_states + attn_output
-
-        norm_hidden_states = self.norm2(_vit_norm_input(self.norm2, hidden_states)).to(hidden_states.dtype)
-        ff_output = self.ff(norm_hidden_states)
-        if self.use_scale:
-            hidden_states = _scaled_residual_add(hidden_states, ff_output, self.scale2)
-        else:
-            hidden_states = hidden_states + ff_output
-
+        hidden_states, _ = self._forward_impl(hidden_states, rotary_pos_emb, pack_info)
         return hidden_states

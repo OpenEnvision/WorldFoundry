@@ -38,6 +38,93 @@ from worldfoundry.core.attention.backends.model_backends import (
 from worldfoundry.core.kernels import rms_norm_scale_shift
 from worldfoundry.core.nn.blocks.normalization import rms_norm
 
+_FUSED_OP_DTYPES = (torch.bfloat16, torch.float16, torch.float32)
+_MAX_FUSED_POST_SA_FEATURES = 8192
+_MAX_FUSED_HEAD_GATE_DIM = 512
+_TRITON_DIFFUSION_MOD: Any = None
+_TRITON_DIFFUSION_UNAVAILABLE = False
+
+
+def _get_triton_diffusion() -> Any | None:
+    """Lazily load ``triton_diffusion`` on first CUDA inference call without importing Triton at import time."""
+    global _TRITON_DIFFUSION_MOD, _TRITON_DIFFUSION_UNAVAILABLE
+    if _TRITON_DIFFUSION_MOD is not None:
+        return _TRITON_DIFFUSION_MOD
+    if _TRITON_DIFFUSION_UNAVAILABLE:
+        return None
+    try:
+        from worldfoundry.core.kernels import triton_diffusion as mod
+    except ImportError:
+        _TRITON_DIFFUSION_UNAVAILABLE = True
+        return None
+    _TRITON_DIFFUSION_MOD = mod
+    return mod
+
+
+@torch.library.custom_op(
+    "worldfoundry::fused_residual_gate_add_rms_norm",
+    mutates_args=(),
+    device_types="cuda",
+)
+def _fused_residual_gate_add_rms_norm_op(
+    residual: torch.Tensor,
+    value: torch.Tensor,
+    norm_weights: torch.Tensor | None,
+    eps: float,
+    gate: torch.Tensor,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    mod = _get_triton_diffusion()
+    if mod is not None:
+        return mod.residual_gate_add_rms_norm(residual, value, norm_weights, eps, gate)
+    output = residual + value * gate
+    return output, rms_norm(output, norm_weights, eps=eps)
+
+
+@_fused_residual_gate_add_rms_norm_op.register_fake
+def _fused_residual_gate_add_rms_norm_op_fake(
+    residual: torch.Tensor,
+    value: torch.Tensor,
+    norm_weights: torch.Tensor | None,
+    eps: float,
+    gate: torch.Tensor,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    del norm_weights, eps
+    out_dtype = torch.promote_types(residual.dtype, torch.promote_types(value.dtype, gate.dtype))
+    return torch.empty_like(residual, dtype=out_dtype), torch.empty_like(residual, dtype=out_dtype)
+
+
+@torch.library.custom_op(
+    "worldfoundry::fused_head_sigmoid_gate",
+    mutates_args=(),
+    device_types="cuda",
+)
+def _fused_head_sigmoid_gate_op(
+    attention_output: torch.Tensor,
+    gate_logits: torch.Tensor,
+    heads: int,
+    dim_head: int,
+) -> torch.Tensor:
+    mod = _get_triton_diffusion()
+    if mod is not None:
+        return mod.head_sigmoid_gate(attention_output, gate_logits, heads, dim_head)
+    batch, tokens, _ = attention_output.shape
+    output = attention_output.view(batch, tokens, heads, dim_head)
+    gates = 2.0 * torch.sigmoid(gate_logits)
+    return (output * gates.unsqueeze(-1)).view(batch, tokens, heads * dim_head)
+
+
+@_fused_head_sigmoid_gate_op.register_fake
+def _fused_head_sigmoid_gate_op_fake(
+    attention_output: torch.Tensor,
+    gate_logits: torch.Tensor,
+    heads: int,
+    dim_head: int,
+) -> torch.Tensor:
+    del heads, dim_head
+    out_dtype = torch.promote_types(attention_output.dtype, gate_logits.dtype)
+    return torch.empty_like(attention_output, dtype=out_dtype)
+
+
 # ──────────────────────────────────────────────────────────────────────────
 # Hook protocols — fused kernels must match these signatures
 # ──────────────────────────────────────────────────────────────────────────
@@ -164,7 +251,7 @@ class PytorchAdaZeroFunction:
 
 
 class PytorchPostSAFunction:
-    """Residual-gate add plus RMSNorm after self-attention in eager PyTorch arithmetic."""
+    """Residual-gate add plus RMSNorm after self-attention (fused single-pass Triton on CUDA inference)."""
 
     def __call__(
         self,
@@ -176,12 +263,42 @@ class PytorchPostSAFunction:
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """``residual + value * gate``, then RMSNorm for the following FFN."""
 
+        if (
+            not torch.is_grad_enabled()
+            and isinstance(residual, torch.Tensor)
+            and residual.is_cuda
+            and isinstance(value, torch.Tensor)
+            and isinstance(gate, torch.Tensor)
+            and value.device == residual.device
+            and gate.device == residual.device
+            and residual.shape == value.shape
+            and 1 <= residual.ndim <= 5
+            and residual.numel() > 0
+            and residual.shape[-1] <= _MAX_FUSED_POST_SA_FEATURES
+            and residual.is_contiguous()
+            and value.is_contiguous()
+            and residual.dtype in _FUSED_OP_DTYPES
+            and value.dtype in _FUSED_OP_DTYPES
+            and gate.dtype in _FUSED_OP_DTYPES
+        ):
+            out_dtype = torch.promote_types(residual.dtype, torch.promote_types(value.dtype, gate.dtype))
+            weights_ok = norm_weights is None or (
+                isinstance(norm_weights, torch.Tensor)
+                and norm_weights.device == residual.device
+                and norm_weights.ndim == 1
+                and norm_weights.shape[0] == residual.shape[-1]
+                and norm_weights.is_contiguous()
+                and norm_weights.dtype == out_dtype
+            )
+            if weights_ok:
+                return _fused_residual_gate_add_rms_norm_op(residual, value, norm_weights, float(eps), gate)
+
         output = residual + value * gate
         return output, rms_norm(output, norm_weights, eps=eps)
 
 
 class PytorchGatedAttention:
-    """Apply a sigmoid gate derived from the residual to each attention head."""
+    """Apply a sigmoid gate derived from the residual to each attention head (fused Triton on CUDA inference)."""
 
     def __call__(
         self,
@@ -193,13 +310,30 @@ class PytorchGatedAttention:
 
         module = cast(Any, attention_module)
         gate_logits = module.to_gate_logits(residual)
-        batch, tokens, _ = attention_output.shape
-        output = attention_output.view(batch, tokens, module.heads, module.dim_head)
+        batch, tokens, hidden = attention_output.shape
+        heads = int(module.heads)
+        dim_head = int(module.dim_head)
+        if (
+            not torch.is_grad_enabled()
+            and attention_output.is_cuda
+            and gate_logits.device == attention_output.device
+            and attention_output.numel() > 0
+            and attention_output.is_contiguous()
+            and gate_logits.is_contiguous()
+            and attention_output.dtype in _FUSED_OP_DTYPES
+            and gate_logits.dtype in _FUSED_OP_DTYPES
+            and hidden == heads * dim_head
+            and gate_logits.shape == (batch, tokens, heads)
+            and 1 <= dim_head <= _MAX_FUSED_HEAD_GATE_DIM
+        ):
+            return _fused_head_sigmoid_gate_op(attention_output, gate_logits, heads, dim_head)
+
+        output = attention_output.view(batch, tokens, heads, dim_head)
         gates = 2.0 * torch.sigmoid(gate_logits)
         return (output * gates.unsqueeze(-1)).view(
             batch,
             tokens,
-            module.heads * module.dim_head,
+            heads * dim_head,
         )
 
 

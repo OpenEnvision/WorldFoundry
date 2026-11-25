@@ -18,6 +18,19 @@ from torch import nn
 from torch.nn import functional as F
 
 from worldfoundry.base_models.diffusion_model.models.autoencoders.ltx.video.enums import PaddingModeType
+from worldfoundry.base_models.diffusion_model.models.autoencoders.ltx.video.triton_vae_ops import (
+    _is_channels_last_3d,
+    can_use_triton_ltx_pad_3d,
+    can_use_triton_ltx_pad_3d_align_c,
+    can_use_triton_ltx_residual_bias_add,
+    triton_ltx_pad_3d,
+    triton_ltx_pad_3d_align_c,
+    triton_ltx_residual_bias_add,
+)
+
+
+def _has_hooks(module: nn.Module) -> bool:
+    return bool(module._forward_hooks or module._forward_pre_hooks)
 
 
 def make_conv_nd(
@@ -319,7 +332,95 @@ class CausalConv3d(nn.Module):
             bias=bias,
         )
 
+    def _temporal_pad(self, causal: bool) -> tuple[int, int]:
+        if causal:
+            return (self.time_kernel_size - 1, 0)
+        half = (self.time_kernel_size - 1) // 2
+        return (half, half)
+
+    def _fused_pad_spec(
+        self,
+        causal: bool,
+        *,
+        extra_pt_l: int = 0,
+    ) -> tuple[tuple[int, int, int, int, int, int], str, tuple[int, int, int]]:
+        pt_l, pt_r = self._temporal_pad(causal)
+        pt_l += extra_pt_l
+        pmode = self.conv.padding_mode
+        pad_cfg = self.conv.padding
+        if isinstance(pad_cfg, str):
+            return (0, 0, 0, 0, pt_l, pt_r), "constant", (0, 0, 0)
+        p0, p1, p2 = int(pad_cfg[0]), int(pad_cfg[1]), int(pad_cfg[2])
+        if pmode == "zeros":
+            return (0, 0, 0, 0, pt_l, pt_r), "constant", (p0, p1, p2)
+        return (p2, p2, p1, p1, pt_l, pt_r), pmode, (0, 0, 0)
+
+    def _can_use_fast_conv_path(self, x: torch.Tensor) -> bool:
+        conv = self.conv
+        return (
+            type(self) is CausalConv3d
+            and type(conv) is nn.Conv3d
+            and not _has_hooks(self)
+            and not _has_hooks(conv)
+            and x.is_cuda
+            and x.ndim == 5
+            and not torch.is_grad_enabled()
+            and conv.weight.device == x.device
+            and (conv.bias is None or conv.bias.device == x.device)
+            and conv.padding_mode in ("zeros", "reflect", "replicate")
+        )
+
+    def _forward_conv_only(
+        self,
+        x_pad: torch.Tensor,
+        conv_padding: tuple[int, int, int],
+        *,
+        defer_bias: bool = False,
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        conv = self.conv
+        out = F.conv3d(x_pad, conv.weight, None, conv.stride, conv_padding, conv.dilation, conv.groups)
+        if conv.bias is None:
+            return out, None
+        if defer_bias:
+            return out, conv.bias
+        if can_use_triton_ltx_residual_bias_add(None, out, conv.bias):
+            return triton_ltx_residual_bias_add(None, out, conv.bias), None
+        return out + conv.bias.view(1, -1, 1, 1, 1).to(out), None
+
     def forward(self, x: torch.Tensor, causal: bool = True) -> torch.Tensor:
+        if self._can_use_fast_conv_path(x):
+            conv = self.conv
+            pad, s_mode, conv_padding = self._fused_pad_spec(causal)
+            if (
+                conv.groups == 1
+                and x.shape[1] < 8
+                and conv.weight.shape[1] == x.shape[1]
+                and (_is_channels_last_3d(x) or _is_channels_last_3d(conv.weight))
+                and can_use_triton_ltx_pad_3d_align_c(x, pad, spatial_mode=s_mode, temporal_mode="replicate", align_c=8)
+            ):
+                x_pad8 = triton_ltx_pad_3d_align_c(x, pad, spatial_mode=s_mode, temporal_mode="replicate", align_c=8)
+                w = conv.weight
+                w8 = torch.empty(
+                    (w.shape[0], 8, w.shape[2], w.shape[3], w.shape[4]),
+                    device=w.device,
+                    dtype=w.dtype,
+                    memory_format=torch.channels_last_3d,
+                ).zero_()
+                w8[:, : w.shape[1]] = w
+                out = F.conv3d(x_pad8, w8, None, conv.stride, conv_padding, conv.dilation, conv.groups)
+                if conv.bias is not None:
+                    return triton_ltx_residual_bias_add(None, out, conv.bias)
+                return out
+            if all(p == 0 for p in pad) or can_use_triton_ltx_pad_3d(
+                x, pad, spatial_mode=s_mode, temporal_mode="replicate"
+            ):
+                x_pad = (
+                    x
+                    if all(p == 0 for p in pad)
+                    else triton_ltx_pad_3d(x, pad, spatial_mode=s_mode, temporal_mode="replicate")
+                )
+                out, _ = self._forward_conv_only(x_pad, conv_padding, defer_bias=False)
+                return out
         if causal:
             first_frame_pad = x[:, :, :1, :, :].expand(-1, -1, self.time_kernel_size - 1, -1, -1)
             x = torch.concatenate((first_frame_pad, x), dim=2)

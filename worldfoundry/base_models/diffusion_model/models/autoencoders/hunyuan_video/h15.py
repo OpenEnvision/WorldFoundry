@@ -31,8 +31,23 @@ from torch.nn import Conv3d
 
 from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.model import RMS_norm as RMS_norm
 from worldfoundry.core.distributed.model_parallel.sequence_mesh_state import get_parallel_state
+from worldfoundry.core.kernels.triton_pad_3d import triton_pad_3d
+from worldfoundry.core.kernels.triton_wan_vae import can_use_wan_vae_rms_norm, wan_vae_rms_norm
 from worldfoundry.core.model_loading.model_configuration import NativeConfigMixin, register_to_config
 from worldfoundry.core.nn.latent.distributions import AutoencoderKLOutput, DecoderOutput, DiagonalGaussianDistribution
+
+from .triton_h15_vae import (
+    _is_channels_last_3d,
+    can_use_triton_h15_pad_3d_align_c,
+    can_use_triton_h15_residual_bias_add,
+    can_use_triton_h15_rms_norm_silu_pad_3d,
+    triton_h15_downsample_add,
+    triton_h15_pad_3d_align_c,
+    triton_h15_repeat_add,
+    triton_h15_residual_bias_add,
+    triton_h15_rms_norm_silu_pad_3d,
+    triton_h15_upsample_add,
+)
 
 
 def swish(x: Tensor, inplace=False) -> Tensor:
@@ -81,7 +96,7 @@ class PatchCausalConv3d(nn.Conv3d):
 
     def forward(self, input):
         T = input.shape[2]  # input: NCTHW
-        memory_count = torch.prod(torch.tensor(input.shape)).item() * 2 / 1024**3
+        memory_count = math.prod(input.shape) * 2 / 1024**3
         if self.kernel_size[0] < T and memory_count > 0.6:
             kernel_size = self.kernel_size[0]
             part_num = int(memory_count / 2) + 1
@@ -145,28 +160,53 @@ class CausalConv3d(nn.Module):
             self.conv = nn.Conv3d(chan_in, chan_out, kernel_size, stride=stride, dilation=dilation, **kwargs)
 
     def forward(self, x):
-        x = F.pad(x, self.time_causal_padding, mode=self.pad_mode)
-        return self.conv(x)
+        conv = self.conv
+        if (
+            type(conv) is nn.Conv3d
+            and conv.groups == 1
+            and not _has_hooks(conv)
+            and x.shape[1] < 8
+            and conv.weight.device == x.device
+            and (conv.bias is None or conv.bias.device == x.device)
+            and conv.weight.shape[1] == x.shape[1]
+            and (_is_channels_last_3d(x) or _is_channels_last_3d(conv.weight))
+            and can_use_triton_h15_pad_3d_align_c(x, self.time_causal_padding, spatial_mode=self.pad_mode, align_c=8)
+        ):
+            x_pad8 = triton_h15_pad_3d_align_c(x, self.time_causal_padding, spatial_mode=self.pad_mode, align_c=8)
+            w = conv.weight
+            w8 = torch.empty(
+                (w.shape[0], 8, w.shape[2], w.shape[3], w.shape[4]),
+                device=w.device,
+                dtype=w.dtype,
+                memory_format=torch.channels_last_3d,
+            ).zero_()
+            w8[:, : w.shape[1]] = w
+            out = F.conv3d(x_pad8, w8, None, conv.stride, conv.padding, conv.dilation, conv.groups)
+            if conv.bias is not None:
+                return triton_h15_residual_bias_add(None, out, conv.bias)
+            return out
+        x = triton_pad_3d(x, self.time_causal_padding, spatial_mode=self.pad_mode)
+        if (
+            type(conv) is nn.Conv3d
+            and not _has_hooks(conv)
+            and conv.bias is not None
+            and x.is_cuda
+            and not torch.is_grad_enabled()
+            and conv.weight.device == x.device
+            and conv.bias.device == x.device
+        ):
+            out = F.conv3d(x, conv.weight, None, conv.stride, conv.padding, conv.dilation, conv.groups)
+            if can_use_triton_h15_residual_bias_add(None, out, conv.bias):
+                return triton_h15_residual_bias_add(None, out, conv.bias)
+            return out + conv.bias.view(1, -1, 1, 1, 1)
+        return conv(x)
 
 
 def prepare_causal_attention_mask(n_frame: int, n_hw: int, dtype, device, batch_size: int | None = None):
-    """Prepare a causal attention mask for 3D videos.
-
-    Args:
-        n_frame (int): Number of frames (temporal length).
-        n_hw (int): Product of height and width.
-        dtype: Desired mask dtype.
-        device: Device for the mask.
-        batch_size (int, optional): If set, expands for batch.
-
-    Returns:
-        torch.Tensor: Causal attention mask.
-    """
+    """Prepare a causal attention mask for 3D videos."""
     seq_len = n_frame * n_hw
-    mask = torch.full((seq_len, seq_len), float("-inf"), dtype=dtype, device=device)
-    for i in range(seq_len):
-        i_frame = i // n_hw
-        mask[i, : (i_frame + 1) * n_hw] = 0
+    frame_mask = torch.triu(torch.full((n_frame, n_frame), float("-inf"), dtype=dtype, device=device), diagonal=1)
+    mask = frame_mask[:, None, :, None].expand(n_frame, n_hw, n_frame, n_hw).reshape(seq_len, seq_len)
     if batch_size is not None:
         mask = mask.unsqueeze(0).expand(batch_size, -1, -1)
     return mask
@@ -187,22 +227,126 @@ class AttnBlock(nn.Module):
         self.proj_out = Conv3d(in_channels, in_channels, kernel_size=1)
 
     def attention(self, h_: Tensor) -> Tensor:
+        is_cl3d = _is_channels_last_3d(h_)
         h_ = self.norm(h_)
         q = self.q(h_)
         k = self.k(h_)
         v = self.v(h_)
+        is_cl3d = is_cl3d or _is_channels_last_3d(q)
 
         b, c, f, h, w = q.shape
-        q = rearrange(q, "b c f h w -> b 1 (f h w) c").contiguous()
-        k = rearrange(k, "b c f h w -> b 1 (f h w) c").contiguous()
-        v = rearrange(v, "b c f h w -> b 1 (f h w) c").contiguous()
-        attention_mask = prepare_causal_attention_mask(f, h * w, h_.dtype, h_.device, batch_size=b)
+        if _is_channels_last_3d(q):
+            q = q.permute(0, 2, 3, 4, 1).reshape(b, 1, f * h * w, c)
+            k = k.permute(0, 2, 3, 4, 1).reshape(b, 1, f * h * w, c)
+            v = v.permute(0, 2, 3, 4, 1).reshape(b, 1, f * h * w, c)
+        else:
+            q = rearrange(q, "b c f h w -> b 1 (f h w) c").contiguous()
+            k = rearrange(k, "b c f h w -> b 1 (f h w) c").contiguous()
+            v = rearrange(v, "b c f h w -> b 1 (f h w) c").contiguous()
+        attention_mask = prepare_causal_attention_mask(f, h * w, q.dtype, q.device, batch_size=b)
         h_ = nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=attention_mask.unsqueeze(1))
 
-        return rearrange(h_, "b 1 (f h w) c -> b c f h w", f=f, h=h, w=w, c=c, b=b)
+        out = h_.reshape(b, f, h, w, c).permute(0, 4, 1, 2, 3)
+        if is_cl3d:
+            return out if _is_channels_last_3d(out) else out.contiguous(memory_format=torch.channels_last_3d)
+        return out.contiguous()
 
     def forward(self, x: Tensor) -> Tensor:
         return x + self.proj_out(self.attention(x))
+
+
+def _has_hooks(module: nn.Module) -> bool:
+    return bool(module._forward_hooks or module._forward_pre_hooks)
+
+
+def _rms_norm_silu_h15(x: Tensor, norm: nn.Module) -> Tensor:
+    """Fuse ``RMS_norm -> SiLU`` via the shared Hopper Triton kernel on CUDA inference."""
+    if (
+        type(norm) is RMS_norm
+        and norm.channel_first
+        and x.is_cuda
+        and norm.gamma.device == x.device
+        and not _has_hooks(norm)
+    ):
+        bias_t = norm.bias if isinstance(norm.bias, torch.Tensor) else None
+        if (bias_t is None or bias_t.device == x.device) and can_use_wan_vae_rms_norm(
+            x, channel_first=norm.channel_first
+        ):
+            return wan_vae_rms_norm(x, norm.gamma, bias_t, scale=norm.scale, apply_silu=True)
+    return swish(norm(x), inplace=True)
+
+
+def _can_defer_conv_bias(conv: nn.Module, x: Tensor) -> bool:
+    """Return True when ``CausalConv3d`` can run ``F.conv3d(..., bias=None)`` safely."""
+    if type(conv) is not CausalConv3d or _has_hooks(conv):
+        return False
+    inner = conv.conv
+    return (
+        type(inner) is nn.Conv3d
+        and not _has_hooks(inner)
+        and inner.bias is not None
+        and x.is_cuda
+        and not torch.is_grad_enabled()
+        and inner.weight.device == x.device
+        and inner.bias.device == x.device
+    )
+
+
+def _rms_norm_silu_conv_h15(
+    x: Tensor,
+    norm: nn.Module,
+    conv: nn.Module,
+    *,
+    pre_bias: Tensor | None = None,
+    defer_bias: bool = False,
+) -> tuple[Tensor, Tensor | None]:
+    """Super-fuse ``(pre_bias +) RMS_norm -> SiLU -> CausalConv3d.pad`` and invoke ``conv.conv``.
+
+    Returns ``(output, deferred_bias)`` where ``deferred_bias`` is non-None only
+    when ``defer_bias=True`` and bias addition was safely deferred to the next
+    fused Triton kernel (eliminating PyTorch's unvectorized 5-D Conv3d bias pass).
+    """
+    if (
+        type(norm) is RMS_norm
+        and norm.channel_first
+        and type(conv) is CausalConv3d
+        and x.is_cuda
+        and norm.gamma.device == x.device
+        and not _has_hooks(norm)
+        and not _has_hooks(conv)
+        and (pre_bias is None or pre_bias.device == x.device)
+    ):
+        bias_t = norm.bias if isinstance(norm.bias, torch.Tensor) else None
+        if (bias_t is None or bias_t.device == x.device) and can_use_triton_h15_rms_norm_silu_pad_3d(
+            x, conv.time_causal_padding, spatial_mode=conv.pad_mode
+        ):
+            x_pad = triton_h15_rms_norm_silu_pad_3d(
+                x,
+                norm.gamma,
+                bias_t,
+                conv.time_causal_padding,
+                scale=norm.scale,
+                spatial_mode=conv.pad_mode,
+                apply_silu=True,
+                pre_bias=pre_bias,
+            )
+            inner = conv.conv
+            if (
+                defer_bias
+                and type(inner) is nn.Conv3d
+                and not _has_hooks(inner)
+                and inner.bias is not None
+                and inner.weight.device == x_pad.device
+                and inner.bias.device == x_pad.device
+            ):
+                return (
+                    F.conv3d(x_pad, inner.weight, None, inner.stride, inner.padding, inner.dilation, inner.groups),
+                    inner.bias,
+                )
+            return inner(x_pad), None
+    if pre_bias is not None:
+        x = x + pre_bias.view(1, -1, 1, 1, 1)
+    return conv(_rms_norm_silu_h15(x, norm)), None
 
 
 class ResnetBlock(nn.Module):
@@ -223,17 +367,20 @@ class ResnetBlock(nn.Module):
             self.nin_shortcut = Conv3d(in_channels, out_channels, kernel_size=1, stride=1, padding=0)
 
     def forward(self, x):
-        h = x
-        h = self.norm1(h)
-        h = swish(h, inplace=True)
-        h = self.conv1(h)
-
-        h = self.norm2(h)
-        h = swish(h, inplace=True)
-        h = self.conv2(h)
+        can_fuse_norm2 = (
+            type(self.norm2) is RMS_norm
+            and self.norm2.channel_first
+            and type(self.conv2) is CausalConv3d
+            and not _has_hooks(self.norm2)
+            and not _has_hooks(self.conv2)
+        )
+        h, bias1 = _rms_norm_silu_conv_h15(x, self.norm1, self.conv1, defer_bias=can_fuse_norm2)
+        h, bias2 = _rms_norm_silu_conv_h15(h, self.norm2, self.conv2, pre_bias=bias1, defer_bias=True)
 
         if self.in_channels != self.out_channels:
             x = self.nin_shortcut(x)
+        if bias2 is not None or (x.is_cuda and not torch.is_grad_enabled()):
+            return triton_h15_residual_bias_add(x, h, bias2)
         return x + h
 
 
@@ -247,33 +394,21 @@ class Downsample(nn.Module):
         self.group_size = factor * in_channels // out_channels
 
     def forward(self, x: Tensor):
-        r1 = 2 if self.add_temporal_downsample else 1
-        h = self.conv(x)
-        if self.add_temporal_downsample:
-            h_first = h[:, :, :1, :, :]
-            h_first = rearrange(h_first, "b c f (h r2) (w r3) -> b (r2 r3 c) f h w", r2=2, r3=2)
-            h_first = torch.cat([h_first, h_first], dim=1)
-            h_next = h[:, :, 1:, :, :]
-            h_next = rearrange(h_next, "b c (f r1) (h r2) (w r3) -> b (r1 r2 r3 c) f h w", r1=r1, r2=2, r3=2)
-            h = torch.cat([h_first, h_next], dim=2)
-            # shortcut computation
-            x_first = x[:, :, :1, :, :]
-            x_first = rearrange(x_first, "b c f (h r2) (w r3) -> b (r2 r3 c) f h w", r2=2, r3=2)
-            B, C, T, H, W = x_first.shape
-            x_first = x_first.view(B, h.shape[1], self.group_size // 2, T, H, W).mean(dim=2)
-
-            x_next = x[:, :, 1:, :, :]
-            x_next = rearrange(x_next, "b c (f r1) (h r2) (w r3) -> b (r1 r2 r3 c) f h w", r1=r1, r2=2, r3=2)
-            B, C, T, H, W = x_next.shape
-            x_next = x_next.view(B, h.shape[1], self.group_size, T, H, W).mean(dim=2)
-            shortcut = torch.cat([x_first, x_next], dim=2)
+        if _can_defer_conv_bias(self.conv, x):
+            x_pad = triton_pad_3d(x, self.conv.time_causal_padding, spatial_mode=self.conv.pad_mode)
+            inner = self.conv.conv
+            h = F.conv3d(x_pad, inner.weight, None, inner.stride, inner.padding, inner.dilation, inner.groups)
+            h_bias = inner.bias
         else:
-            h = rearrange(h, "b c (f r1) (h r2) (w r3) -> b (r1 r2 r3 c) f h w", r1=r1, r2=2, r3=2)
-            shortcut = rearrange(x, "b c (f r1) (h r2) (w r3) -> b (r1 r2 r3 c) f h w", r1=r1, r2=2, r3=2)
-            B, C, T, H, W = shortcut.shape
-            shortcut = shortcut.view(B, h.shape[1], self.group_size, T, H, W).mean(dim=2)
-
-        return h + shortcut
+            h = self.conv(x)
+            h_bias = None
+        return triton_h15_downsample_add(
+            h,
+            x,
+            add_temporal_downsample=self.add_temporal_downsample,
+            group_size=self.group_size,
+            h_bias=h_bias,
+        )
 
 
 class Upsample(nn.Module):
@@ -287,31 +422,21 @@ class Upsample(nn.Module):
         self.repeats = factor * out_channels // in_channels
 
     def forward(self, x: Tensor):
-        r1 = 2 if self.add_temporal_upsample else 1
-        h = self.conv(x)
-        if self.add_temporal_upsample:
-            h_first = h[:, :, :1, :, :]
-            h_first = rearrange(h_first, "b (r2 r3 c) f h w -> b c f (h r2) (w r3)", r2=2, r3=2)
-            h_first = h_first[:, : h_first.shape[1] // 2]
-            h_next = h[:, :, 1:, :, :]
-            h_next = rearrange(h_next, "b (r1 r2 r3 c) f h w -> b c (f r1) (h r2) (w r3)", r1=r1, r2=2, r3=2)
-            h = torch.cat([h_first, h_next], dim=2)
-
-            # shortcut computation
-            x_first = x[:, :, :1, :, :]
-            x_first = rearrange(x_first, "b (r2 r3 c) f h w -> b c f (h r2) (w r3)", r2=2, r3=2)
-            x_first = x_first.repeat_interleave(repeats=self.repeats // 2, dim=1)
-
-            x_next = x[:, :, 1:, :, :]
-            x_next = rearrange(x_next, "b (r1 r2 r3 c) f h w -> b c (f r1) (h r2) (w r3)", r1=r1, r2=2, r3=2)
-            x_next = x_next.repeat_interleave(repeats=self.repeats, dim=1)
-            shortcut = torch.cat([x_first, x_next], dim=2)
-
+        if _can_defer_conv_bias(self.conv, x):
+            x_pad = triton_pad_3d(x, self.conv.time_causal_padding, spatial_mode=self.conv.pad_mode)
+            inner = self.conv.conv
+            h = F.conv3d(x_pad, inner.weight, None, inner.stride, inner.padding, inner.dilation, inner.groups)
+            h_bias = inner.bias
         else:
-            h = rearrange(h, "b (r1 r2 r3 c) f h w -> b c (f r1) (h r2) (w r3)", r1=r1, r2=2, r3=2)
-            shortcut = x.repeat_interleave(repeats=self.repeats, dim=1)
-            shortcut = rearrange(shortcut, "b (r1 r2 r3 c) f h w -> b c (f r1) (h r2) (w r3)", r1=r1, r2=2, r3=2)
-        return h + shortcut
+            h = self.conv(x)
+            h_bias = None
+        return triton_h15_upsample_add(
+            h,
+            x,
+            add_temporal_upsample=self.add_temporal_upsample,
+            repeats=self.repeats,
+            h_bias=h_bias,
+        )
 
 
 class Encoder(nn.Module):
@@ -392,10 +517,19 @@ class Encoder(nn.Module):
 
         # end
         group_size = self.block_out_channels[-1] // (2 * self.z_channels)
-        shortcut = rearrange(h, "b (c r) f h w -> b c r f h w", r=group_size).mean(dim=2)
-        h = self.norm_out(h)
-        h = swish(h, inplace=True)
-        h = self.conv_out(h)
+        if _is_channels_last_3d(h):
+            b, c, f, hh, ww = h.shape
+            shortcut = (
+                h.permute(0, 2, 3, 4, 1)
+                .reshape(b, f, hh, ww, c // group_size, group_size)
+                .mean(dim=-1)
+                .permute(0, 4, 1, 2, 3)
+            )
+        else:
+            shortcut = rearrange(h, "b (c r) f h w -> b c r f h w", r=group_size).mean(dim=2)
+        h, out_bias = _rms_norm_silu_conv_h15(h, self.norm_out, self.conv_out, defer_bias=True)
+        if out_bias is not None:
+            return triton_h15_residual_bias_add(shortcut, h, out_bias)
         h += shortcut
         return h
 
@@ -461,7 +595,15 @@ class Decoder(nn.Module):
 
         # z to block_in
         repeats = self.block_out_channels[0] // (self.z_channels)
-        h = self.conv_in(z) + z.repeat_interleave(repeats=repeats, dim=1)
+        if _can_defer_conv_bias(self.conv_in, z):
+            z_pad = triton_pad_3d(z, self.conv_in.time_causal_padding, spatial_mode=self.conv_in.pad_mode)
+            inner_in = self.conv_in.conv
+            h_in = F.conv3d(
+                z_pad, inner_in.weight, None, inner_in.stride, inner_in.padding, inner_in.dilation, inner_in.groups
+            )
+            h = triton_h15_repeat_add(h_in, z, repeats, h_bias=inner_in.bias)
+        else:
+            h = triton_h15_repeat_add(self.conv_in(z), z, repeats)
 
         # middle
         h = forward_with_checkpointing(self.mid.block_1, h, use_checkpointing=use_checkpointing)
@@ -476,9 +618,7 @@ class Decoder(nn.Module):
                 h = forward_with_checkpointing(self.up[i_level].upsample, h, use_checkpointing=use_checkpointing)
 
         # end
-        h = self.norm_out(h)
-        h = swish(h, inplace=True)
-        h = self.conv_out(h)
+        h, _ = _rms_norm_silu_conv_h15(h, self.norm_out, self.conv_out)
         return h
 
 
@@ -672,80 +812,114 @@ class AutoencoderKLConv3D(nn.Module, NativeConfigMixin):
     def disable_tile_parallelism(self):
         self._tile_parallelism_enabled = False
 
-    def tile_parallel_spatial_tiled_decode(self, z: torch.Tensor):
-        B, C, T, H, W = z.shape
+    def tile_parallel_spatial_tiled_decode(
+        self,
+        z: torch.Tensor,
+        *,
+        group: dist.ProcessGroup | None = None,
+    ):
+        B, _C, T, H, W = z.shape
         overlap_size = int(self.tile_latent_min_size * (1 - self.tile_overlap_factor))
         blend_extent = int(self.tile_sample_min_size * self.tile_overlap_factor)
         row_limit = self.tile_sample_min_size - blend_extent
 
-        rank = get_parallel_state().sp_rank
-        world_size = get_parallel_state().sp
+        if group is not None:
+            comm_group = group
+            rank = int(dist.get_rank(group))
+            world_size = int(dist.get_world_size(group))
+        elif z.is_cuda:
+            ps = get_parallel_state()
+            if ps.sp > 1 and ps.sp_group is not None:
+                comm_group = ps.sp_group
+                rank = int(ps.sp_rank)
+                world_size = int(ps.sp)
+            elif dist.is_available() and dist.is_initialized() and dist.get_world_size() > 1:
+                comm_group = None
+                rank = int(dist.get_rank())
+                world_size = int(dist.get_world_size())
+            else:
+                comm_group = None
+                rank = 0
+                world_size = 1
+        elif dist.is_available() and dist.is_initialized() and dist.get_world_size() > 1:
+            comm_group = None
+            rank = int(dist.get_rank())
+            world_size = int(dist.get_world_size())
+        else:
+            comm_group = None
+            rank = 0
+            world_size = 1
 
         num_rows = math.ceil(H / overlap_size)
         num_cols = math.ceil(W / overlap_size)
-        total_tiles = num_rows * num_cols
-        tiles_per_rank = math.ceil(total_tiles / world_size)
+        tile_specs = [
+            (
+                ri,
+                rj,
+                min(self.tile_latent_min_size, H - ri * overlap_size)
+                * min(self.tile_latent_min_size, W - rj * overlap_size),
+            )
+            for ri in range(num_rows)
+            for rj in range(num_cols)
+        ]
+        rank_loads = [0] * world_size
+        rank_bins: list[list[tuple[int, int]]] = [[] for _ in range(world_size)]
+        for ri, rj, area in sorted(tile_specs, key=lambda item: (-item[2], item[0], item[1])):
+            target = min(range(world_size), key=lambda r: (rank_loads[r], len(rank_bins[r]), r))
+            rank_bins[target].append((ri, rj))
+            rank_loads[target] += area
+        tiles_per_rank = max((len(b) for b in rank_bins), default=0)
 
-        my_linear_indices = list(range(rank, total_tiles, world_size))
-        decoded_tiles = []
-        decoded_metas = []
-        H_out_std = self.tile_sample_min_size
-        W_out_std = self.tile_sample_min_size
-        for lin_idx in my_linear_indices:
-            ri = lin_idx // num_cols
-            rj = lin_idx % num_cols
+        H_out_std = max(self.tile_sample_min_size, self.tile_latent_min_size * self.ffactor_spatial)
+        W_out_std = max(self.tile_sample_min_size, self.tile_latent_min_size * self.ffactor_spatial)
+        out_T = (T - 1) * self.ffactor_temporal + 1
+        out_channels = int(getattr(self.config, "out_channels", 3))
+        if z.device.type in ("cuda", "cpu") and torch.is_autocast_enabled(z.device.type):
+            out_dtype = torch.get_autocast_dtype(z.device.type)
+        else:
+            conv_out = getattr(self.decoder, "conv_out", None)
+            inner_conv = getattr(conv_out, "conv", conv_out)
+            weight = getattr(inner_conv, "weight", None)
+            out_dtype = weight.dtype if isinstance(weight, torch.Tensor) else z.dtype
+
+        local_tiles = torch.zeros(
+            (tiles_per_rank, B, out_channels, out_T, H_out_std, W_out_std),
+            device=z.device,
+            dtype=out_dtype,
+        )
+        for slot, (ri, rj) in enumerate(rank_bins[rank]):
             i = ri * overlap_size
             j = rj * overlap_size
             tile = z[:, :, :, i : i + self.tile_latent_min_size, j : j + self.tile_latent_min_size]
             dec = self.decoder(tile)
+            if dec.dtype != local_tiles.dtype:
+                local_tiles = local_tiles.to(dtype=dec.dtype)
+            local_tiles[slot, :, :, :, : dec.shape[-2], : dec.shape[-1]].copy_(dec)
 
-            pad_h = max(0, H_out_std - dec.shape[-2])
-            pad_w = max(0, W_out_std - dec.shape[-1])
-            if pad_h > 0 or pad_w > 0:
-                dec = F.pad(dec, (0, pad_w, 0, pad_h, 0, 0), "constant", 0)
-            decoded_tiles.append(dec)
-            decoded_metas.append(torch.tensor([ri, rj, pad_w, pad_h], device=z.device, dtype=torch.int64))
-
-        while len(decoded_tiles) < tiles_per_rank:
-            zero_tile = torch.zeros(
-                [1, 3, (T - 1) * self.ffactor_temporal + 1, self.tile_sample_min_size, self.tile_sample_min_size],
-                device=dec.device,
-                dtype=dec.dtype,
+        if world_size == 1:
+            gathered_tiles = local_tiles.unsqueeze(0)
+        else:
+            gathered_tiles = torch.empty(
+                (world_size, *local_tiles.shape),
+                device=local_tiles.device,
+                dtype=local_tiles.dtype,
             )
-            decoded_tiles.append(zero_tile)
-            meta_tensor = torch.tensor(
-                [-1, -1, self.tile_sample_min_size, self.tile_sample_min_size], device=z.device, dtype=torch.int64
-            )
-            decoded_metas.append(meta_tensor)
-
-        decoded_tiles = torch.stack(decoded_tiles, dim=0)
-        decoded_metas = torch.stack(decoded_metas, dim=0)
-
-        tiles_gather_list = [torch.empty_like(decoded_tiles) for _ in range(world_size)]
-        metas_gather_list = [torch.empty_like(decoded_metas) for _ in range(world_size)]
-
-        dist.all_gather(tiles_gather_list, decoded_tiles, group=get_parallel_state().sp_group)
-        dist.all_gather(metas_gather_list, decoded_metas, group=get_parallel_state().sp_group)
+            if local_tiles.is_cuda and hasattr(dist, "all_gather_into_tensor"):
+                dist.all_gather_into_tensor(gathered_tiles, local_tiles, group=comm_group)
+            else:
+                dist.all_gather(list(gathered_tiles.unbind(0)), local_tiles, group=comm_group)
 
         if rank != 0:
-            return torch.empty(0, device=z.device)
+            return torch.empty(0, device=z.device, dtype=local_tiles.dtype)
 
-        rows = [[None for _ in range(num_cols)] for _ in range(num_rows)]
+        rows: list[list[torch.Tensor | None]] = [[None for _ in range(num_cols)] for _ in range(num_rows)]
         for r in range(world_size):
-            gathered_tiles_r = tiles_gather_list[r]  # [tiles_per_rank, B, C, T, H, W]
-            gathered_metas_r = metas_gather_list[r]  # [tiles_per_rank, 4]
-            for k in range(gathered_tiles_r.shape[0]):
-                ri = int(gathered_metas_r[k][0])
-                rj = int(gathered_metas_r[k][1])
-                if ri < 0 or rj < 0:
-                    continue
-                if ri < num_rows and rj < num_cols:
-                    # remove padding
-                    pad_w = int(gathered_metas_r[k][2])
-                    pad_h = int(gathered_metas_r[k][3])
-                    h_end = None if pad_h == 0 else -pad_h
-                    w_end = None if pad_w == 0 else -pad_w
-                    rows[ri][rj] = gathered_tiles_r[k][:, :, :, :h_end, :w_end]
+            for k, (ri, rj) in enumerate(rank_bins[r]):
+                i = ri * overlap_size
+                j = rj * overlap_size
+                tile_out_h = min(self.tile_latent_min_size, H - i) * self.ffactor_spatial
+                tile_out_w = min(self.tile_latent_min_size, W - j) * self.ffactor_spatial
+                rows[ri][rj] = gathered_tiles[r, k, :, :, :, :tile_out_h, :tile_out_w]
 
         result_rows = []
         for i, row in enumerate(rows):
@@ -754,9 +928,13 @@ class AutoencoderKLConv3D(nn.Module, NativeConfigMixin):
                 if tile is None:
                     continue
                 if i > 0:
-                    tile = self.blend_v(rows[i - 1][j], tile, blend_extent)
+                    prev_row_tile = rows[i - 1][j]
+                    assert prev_row_tile is not None
+                    tile = self.blend_v(prev_row_tile, tile, blend_extent)
                 if j > 0:
-                    tile = self.blend_h(row[j - 1], tile, blend_extent)
+                    prev_col_tile = row[j - 1]
+                    assert prev_col_tile is not None
+                    tile = self.blend_h(prev_col_tile, tile, blend_extent)
                 result_row.append(tile[:, :, :, :row_limit, :row_limit])
             result_rows.append(torch.cat(result_row, dim=-1))
 

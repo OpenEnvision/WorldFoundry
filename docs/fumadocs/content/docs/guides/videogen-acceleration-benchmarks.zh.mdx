@@ -23,12 +23,22 @@ WorldFoundry 在同一套开源推理栈中统一覆盖 **15 个基础模型**�
     ]
   },
   {
+    name: "无损 Hopper SM90 自研算子套件",
+    hintLabel: "零近似无损",
+    hint: "1.35× – 5.22×",
+    description: "零寄存器溢出（n_spills=0、严格 int64 5D 寻址、@torch.library.custom_op 全注册）的 Hopper Triton 算子无损加速 DiT、VideoVAE、AudioVAE 与声码器，多项指标比 eager BF16 更贴近 FP32 真值。",
+    reads: [
+      { label: "无损算子代表", value: "LTX-2.5 DiffVAE 5.22×（4.32s → 0.83s，60.7 dB）、LTX-2.5 音频+VocoderBWE 3.81×（80.2 → 21.1 ms，104.6 dB）、LTX-2.5 Conv VAE 编码 2.66× / 解码 1.36×、SANA-Video 2B DiT 2.32×（51.6 → 22.25s）、Wan2.1 VAE 1.96×、Wan2.2 VAE38 1.69×、HY1.5 VAE 1.88×" },
+      { label: "端到端无损新纪录", value: "LTX-2.5 22B 蒸馏 768p 音视频：2.92s（22.3 FPS，Conv VAE）/ 3.52–3.60s（2.13×，DiffVAE）；Self-Forcing 1.3B：30.56 FPS（首帧 298 ms）；Cosmos3 音频 Snake1d：1.35×（PSNR=inf 比特级一致）" }
+    ]
+  },
+  {
     name: "实时流式世界模型（4 个模型）",
     hintLabel: "流式帧率",
     hint: "20.8 – 67.55 FPS",
-    description: "无损 BF16 CUDA Graph + FlashAttention-3 + 重叠 VAE 流水线实现高帧率实时交互生成，图段数量恒定 O(1)，Prompt 切换零失效。",
+    description: "无损 BF16 CUDA Graph + FlashAttention-3 + Hopper 版 WanVideoVAE 重叠流水线实现高帧率实时交互生成，图段数量恒定 O(1)，Prompt 切换零失效。",
     reads: [
-      { label: "实测吞吐", value: "Matrix-Game-2.0 最高 67.55 FPS（无损 BF16 57.72–60.52 FPS）、LongLive-1.3B 30.16 FPS、Self-Forcing 1.3B 28.16 FPS（首帧 TTFT 313 ms）、HY-WorldPlay AR 20.84 FPS / Bi 4.73×" },
+      { label: "实测吞吐", value: "Matrix-Game-2.0 最高 67.55 FPS（无损 BF16 57.72–60.52 FPS）、Self-Forcing 1.3B 30.56 FPS（首帧 TTFT 298 ms）、LongLive-1.3B 30.16 FPS、HY-WorldPlay AR 20.84 FPS / Bi 4.73×" },
       { label: "Graph 稳定性", value: "capture=1、eager=0、recompiles=0，恒定 O(1) 4–5 个图段" }
     ]
   },
@@ -42,12 +52,22 @@ WorldFoundry 在同一套开源推理栈中统一覆盖 **15 个基础模型**�
     ]
   },
   {
+    name: "共享 Hopper 基础设施与 8× H200 NVSwitch 全节点无损扩展",
+    hintLabel: "8 卡逐比特无损",
+    hint: "7.92×–9.75× · PSNR=inf",
+    description: "Latin-Square NVSwitch 对称显存 Ulysses（2.14×，~5.3 TB/s）、NVLS SHARP TP=8 RowParallelLinear（4.31×）、GPU 常驻 LPT 多卡并行 VideoVAE（4 大 VAE 家族 8 卡 7.59×–7.79×）、TMA WGMMA FP8（1,030 TFLOPS）及零溢出核心算子，在全部 8 张 H200 上实现接近线性的逐比特无损加速。",
+    reads: [
+      { label: "8× H200 端到端无损", value: "Wan2.1-14B 480p 39.37s（7.92× / 99.0% 效率，PSNR=inf）、720p 136.23s（8 卡 VAE 仅 0.296s = 11.0× 加速，PSNR=inf）；HunyuanVideo-13B 720p SP=8 DiT 38.12s + VAE 0.47s（对比单卡 L0 达 9.75×，PSNR=inf）" },
+      { label: "核心基建与显存", value: "CUDA Graph 分发 6.28× 且共享内存池降显存 63.2%；GroupNorm+SiLU 17.66×；LayerNorm2d 16.49× CG；共享 Rotary 14.65× CG；FP64 调度器 24.5× CG（降显存 93.8%）；attention_forward 分发开销降约 18–20×" }
+    ]
+  },
+  {
     name: "全仓回归与开源卫生",
     hintLabel: "验证门禁",
-    hint: "335 GPU + 222 CPU 全过",
-    description: "全部 211 个变更 Python 模块通过 Ruff lint、Ruff format、ty 类型检查、DCO 签名及路径/凭据安全扫描，0 错误。",
+    hint: "2,100+ GPU/CPU 全过",
+    description: "全部变更模块通过 Ruff lint、Ruff format、ty 类型检查、零寄存器溢出（n_spills=0）审计、无 Triton 无卡 CPU 子进程回归、DCO 签名及路径/凭据安全扫描，0 错误。",
     reads: [
-      { label: "完整复现文档", value: "逐模型复现命令与详细数据维护在 benchmarks/videogen/BENCHMARK_REPORT.md" }
+      { label: "完整复现文档", value: "逐模型与 8 卡复现命令维护在 benchmarks/videogen/BENCHMARK_REPORT.md" }
     ]
   }
 ]} />
@@ -72,13 +92,13 @@ NVIDIA SOL Engine 的部分公开数据基于 **Blackwell B200 SM100 原生 NVFP
 | ---: | --- | --- | --- | --- | --- |
 | 1 | **Cosmos3-Super (64B)** | `704×1280×33f`, 35 步 | 1× `77.94s` → **`33.02s`** | **`2.36×`**（ref `~2.27×`） | 比特级精确 `und` 静态 KV（**显存直降 `56.2 GiB`**，`122.8→66.6 GiB`）+ 步选择 FP8 + FA3 GQA + TeaCache + Piecewise Graph · `20.35 dB / 0.9286`（`fp8_und_kv`），`16.42 dB / 0.8255`（`sol_balanced`），`fallbacks=[]` |
 | 2 | **LTX-2.3 (22B 音视频)** | `768×1280×65f`, 8+3 步 | 1× `4.648s` → **`1.974s`**（默认）/ **`1.782s`**（TeaCache） | **`2.35×`** / **`2.61×`**（DiT `2.86×`；ref `~2.38×`） | FP8 + PISA（`90/90`）+ FBCache 推荐默认（`audio_rms=0.839`，I2V `39.19 dB`）；TeaCache 档位不启用剪枝（`1.782s`）· `fallbacks=[]` |
-| 3 | **SANA-Video (2B)** | `480×832×81f`, 50 步 | 1× `55.76s` → `27.19s`（无损）→ **`19.66s`** | **`2.84×`**（无损 `2.05×`；ref `~2.77×`） | EasyCache（`0.08`）+ 编译态 FA3（`80/80` 实测验证）· **`27.43 dB / SSIM 0.9891`**（无损 `27.99 dB`），`fallbacks=[]` |
+| 3 | **SANA-Video (2B)** | `480×832×81f`, 50 步 | 1× `55.76s` → `22.25s` DiT / `23.09s` E2E（无损）→ **`19.66s`** | **`2.84×`**（无损 **`2.32×`**；ref `~2.77×`） | 混合 cuBLAS-Triton `LiteLA` + 水平滑窗 `GLUMBConv` + 零转置 `t_conv` + EasyCache（`0.08`）+ FA3（`80/80`）· **`27.43 dB / SSIM 0.9891`**（无损 `48.26 dB`），`fallbacks=[]` |
 | 4 | **Wan2.2-TI2V-5B** | `704×1280×121f`, 50 步 | 1× `112.06s` → **`38.50s`**（BF16）/ **`37.48s`**（FP8） | **`2.91×`** BF16 / **`2.99×`** FP8（DiT `3.03×`；ref `~2.89×`） | EasyCache + PISA + 编译 VideoVAE38（无 PISA FP8 `compile_fullgraph`：`40.25s / 2.78×`）· 真实 TI2V I2V（`per-token`）通过，`fallbacks=[]` |
 | 5 | **Wan2.2-T2V-A14B (28B)** | `480×832×81f`, 40 步 | 1× `253.33s` → **`112.47s`**；2× `CFG=2` `130.19s` → **`59.00s`** | **`2.25×`** 1× / **`4.29×`** 2× vs 1×（`2.21×` vs 2×；ref `~2.17×`） | 双专家融合 + EasyCache + PISA（`wan22_a14b_sol`）· `SSIM 0.711`，专家切换 `1` 次干净重置、零串扰，`fallbacks=[]` |
 | 6 | **LingBot-Video (1.3B)** | `480×832×121f`, 40 步 | 1× `114.59s` → `67.33s`（PISA）→ **`37.03s`** | **`3.10×`** E2E / **`3.22×`** DiT（ref `~2.60×`） | 算子融合 + Refiner PISA + EasyCache · `19.39 dB / SSIM 0.9207`，`fallbacks=[]` |
-| 7 | **HunyuanVideo-13B** | `720×1280×65f`, 50 步 | 1× `371.69s` → `85.49s`（均衡）→ **`71.66s`**；2× `SP=2` **`42.00s`** | **`5.19×`** 1× DiT / **`8.85×`** 2× SP=2（ref `~5.03×`） | Sol-Attn（`tau=1.0`，`dense_single=(0,-2,-1)`）+ TeaCache + FP8 + Ulysses SP（`27.13 GiB/卡`，`sp-sync` 跨卡共识）· **`22.51 dB / 0.9097`**（均衡档 `25.98 dB`），BF16 VAE `1.29×`，`fallbacks=[]` |
-| 8 | **Wan2.1-T2V-14B** | `480p` & `720p`, 81 帧 50 步 | 1× 480p `311.81s` → **`71.99s`**；4× 480p **`22.50s`**；4× 720p `316.90s` → **`71.59s`** | **`4.33×`** 1× / **`13.86×`** 4× 480p / **`4.43×`** 4× 720p（ref `~3.48×`） | FP64 Triton RoPE（`13.63×`）+ EasyCache + Sol-Attn + FP8（`use_fast_accum=False`）+ 2×2 并行 VAE（`3.26s`）· 单卡 `31.53 GiB`，720p `20.40 dB`，`fallbacks=[]` |
-| 9 | **LTX-2.5 (22B)** | `768×1280×65f`, 24 步 CFG=3 / 8+3 | 1× `dev` `30.38s` → **`13.34s`**；2× `CFG=2` `33.26s` → **`5.99s`** | **`2.28×`** 1× / **`5.56×`** 2× E2E（DiT `5.55×`；ref `~4.68×`） | 双卡 CFG=2 + FBCache + 融合（`distilled` 单卡：`3.68s → 2.29s / 1.61×`，`39.29 GiB/卡`）· **`26.26 dB / SSIM 0.9907`**，`zero_fallbacks_verified=True` |
+| 7 | **HunyuanVideo-13B** | `720×1280×65f`, 50 步 | 1× `371.69s` → `267.71s`（L1）→ **`71.66s`**（`L4`）；2× `SP=2` **`42.00s`**；**8× `SP=8` 逐比特无损 BF16**：**`38.12s` DiT（`0.47s` VAE）** | **`5.19×`** 1× / **`8.85×`** 2× / **`9.75×`** 8× 逐比特无损（ref `~5.03×`） | Sol-Attn + TeaCache + FP8（`22.51 dB`）；4×/8× `SP` Latin-Square NVSwitch SymmMem + LPT 并行 Causal3D VAE（`31.4 GiB/卡`，**`PSNR=inf / cos=1.0`**），`fallbacks=[]` |
+| 8 | **Wan2.1-T2V-14B** | `480p` & `720p`, 81 帧 50 步 | 1× 480p `311.81s` → **`71.99s`**（`sol`）；4× 480p `exact` **`76.55s`** / `sol` **`22.50s`**；**8× `CFG=2×SP=4` 逐比特无损 BF16**：480p **`39.37s`**、720p **`136.23s`**（`0.296s` 8× VAE） | **`4.33×`** 1× / **`13.86×`** 4× `sol` / **`7.92×`** 8× 无损（`99.0%` 效率） | Latin-Square NVSwitch SymmMem + 8 卡 GPU 常驻并行 VAE（720p VAE `3.26s→0.296s` 提速 `11.0×`）· **`latent/video_bitwise_equal=true, PSNR=inf`**，`fallbacks=[]` |
+| 9 | **LTX-2.5 (22B)** | `768×1280×65f`, 24 步 CFG=3 / 8+3 | 1× `dev` `30.38s` → **`13.34s`**；`distilled` 纯无损 **`2.92s`**（Conv）/ **`3.52–3.60s`**（DiffVAE，`7.51s→3.52s`）；2× `CFG=2` `33.26s` → **`5.99s`** | **`2.28×`** 1× / **`5.56×`** 2× E2E（无损 DiffVAE `2.13×`；ref `~4.68×`） | 3D 分块 WGMMA `na3d` DiffVAE（**`5.22×`**，`60.7 dB`）+ Conv VAE（音视频 `265 ms`）+ Audio/VocoderBWE（**`3.81×`**，`104.6 dB`）+ 双卡 CFG=2（`26.26 dB / SSIM 0.9907`），`zero_fallbacks_verified=True` |
 | 10 | **MiniMax-H3 (31B)** | `512p 4s` & `768p 5s` | 1× 768p 20s **`38.64s`**；2× `SP=2` 768p 20s **`20.97s`**、50s **`41.88s`**、512p **`14.36s`** | **`3.22×`** 1× / **`5.93×`–`7.42×`** 2× 768p / **`4.20×`** 512p（ref `~3.95×`） | 36L VAE **`10.97×`**（`58.36 dB`），`kv_splits=4`，Sol-Attn + FBCache + SP=2 · Rank0/Rank1 最大误差 **`0.0`**，关键帧 `fl2va` `25.53 dB`，`fallbacks=[]` |
 | 11 | **MiniMax-H3 超级加速** | `5s` & `10s` `768p` | 1× **5s** `361.41s` → **`8.92s`**；**10s** `1,054.84s` → **`19.82s`** | **`40.54×`**（5s）/ **`53.22×`**（10s）（ref `22.2×` / `27.7×`） | 4 步 H3 草稿 + 3 步 LTX-2.5 精修 + 双声道立体声 MP4 封装 + 阶段卸载（`57.14 GiB`，`cos=1.000000`）· 稳态 E2E 复用缓存文本编码；5s 基线跑满 50 步 |
 
@@ -90,8 +110,41 @@ NVIDIA SOL Engine 的部分公开数据基于 **Blackwell B200 SM100 原生 NVFP
 | --- | --- | --- | --- | --- | --- |
 | **Matrix-Game-2.0** | `universal` (69f) / `templerun` (117f) | ~25 FPS (H100) | 无损 BF16：**`57.72–60.52 FPS`**；FA3：**`67.55 FPS`** | 最高 **`67.55 FPS`** | `65.9–67.0 dB`（latent `PSNR=inf`），`capture=1, eager=0, recompiles=0, fallbacks=[]` |
 | **LongLive-1.3B** | 81f / 153f / 3-Prompt 切换 | 24.8 FPS（FP8） | 无损 BF16：**`27.17 FPS`**；FA3：**`30.09–30.16 FPS`** | 最高 **`30.16 FPS`** | eager `PSNR=inf` / 编译 `55.84 dB`，**`O(1)` 恒定 4 图段**，Prompt 切换零失效 |
-| **Self-Forcing 1.3B** | 81f / 153f 流式 | ~17 FPS 官方；~20–24 FPS 同类 | 无损 BF16 + FA3 + 重叠流水：81f **`27.90 FPS`**，153f **`28.16 FPS`** | **`28.16 FPS`**（`TTFT 313 ms`） | **`O(1)` 恒定 5 图段**，重叠 VAE 与串行比特级一致 |
+| **Self-Forcing 1.3B** | 81f / 153f 流式 | ~17 FPS 官方；~20–24 FPS 同类 | 无损 BF16 + FA3 + Hopper WanVAE 重叠流水：81f **`30.56 FPS` E2E / `30.58 FPS` 稳态**，`torch` SDPA **`27.22 FPS`**；153f **`28.16 FPS`** | **`30.56 FPS`**（**`TTFT 298 ms`**） | **`O(1)` 恒定 5 图段**，FP64 Triton RoPE，重叠 VAE 与串行比特级一致 |
 | **HY-WorldPlay (34 GB)** | Bi 12-lat (45f) & AR 8ctx | Eager `2,853 ms` Bi / `701 ms` AR | Bi 2× SP=2 Full FP8：**`603.4 ms`**；AR 2× SP=2：**`191.9 ms`** | **`4.73×`** Bi / **`20.84 FPS`**（`3.65×`）AR | RGB VAE 实测验证（BF16+FA3 `54.9 dB`，Full FP8 `37.1 dB`） |
+
+## 无损 Hopper SM90 自研算子基准（零算法近似）
+
+下列全部 Hopper Triton 算子均通过 `@torch.library.custom_op` + `.register_fake` 注册（严格保持 `channels_last` / `channels_last_3d` 步长并显式注册 Inductor fallback lowering），采用严格 `tl.int64` 寻址覆盖超过 `2^31` 元素的 5D 视频张量，编译零寄存器溢出（`n_spills == 0`），惰性加载 Triton 保障无卡 CPU CI 通过，且不引入任何算法近似。
+
+| 模块 / 模型 | 真实权重负载（独占 H200，BF16） | 基线 → Hopper 算子 | 加速比 | 无损精度回执 |
+| --- | --- | --- | ---: | --- |
+| **LTX-2.5 DiffVAE（`na3d` + `joint_na3d`）** | `768×1280×65f` 解码（`11×11×11` NA3D `6.91×`） | `4,317.8 ms` → **`826.5 ms`**（直省 `3.49s`） | **`5.22×`** | `60.71 dB / cos 0.999996`（`joint_na3d` `4.36×`，`82.9–95.3 dB`） |
+| **LTX-2.5 Conv VideoVAE** | `768×1280×65f` CL3D 解码 / 编码 | 解码 `338.6 → 248.6 ms` · 编码 `651.1 → 244.8 ms` | **`1.36×` / `2.66×`** | BF16 `57.12 dB` · FP32 `130.71 dB`（`91.3%` 纯 Conv3d） |
+| **LTX-2.5 AudioVAE + VocoderWithBWE + Upsampler** | 5.1s 48kHz 立体声 / `16×32×48` x2 上采样 | 音频 `80.2 → 21.1 ms`（CG）· 上采样 `28.2 → 21.6 ms` | **`3.81×` / `1.30×`** | Vocoder BF16 **`104.58 dB`**（`cos 1.000000`）· 上采样 FP32 `130.7 dB` |
+| **Wan2.1 VideoVAE（8 个模型共用）** | `480×832×81f` 解码 / 编码 | 解码 `1,644.1 → 839.2 ms` · 编码 `1,023.4 → 540.0 ms` | **`1.96×` / `1.90×`** | `59.64 dB`（比 eager BF16 **更近 FP32 真值 `+0.24 dB`**） |
+| **Wan2.2 VideoVAE38（Wan2.2-5B & Cosmos3）** | `704×1280×121f` 解码 / 编码 | 解码 `5,437.9 → 3,210.9 ms` · 编码 `1,600.0 → 915.6 ms` | **`1.69×` / `1.75×`** | `65.55 dB`（比 eager BF16 **更近 FP32 真值 `+0.31–0.60 dB`**） |
+| **HunyuanVideo-1.5 VideoVAE** | `480p 65f` 解码 / 编码（720p `7.67B` 元素验证） | 解码 `1,989 → 1,115 ms` · 编码 `1,250 → 665 ms` | **`1.78×` / `1.88×`** | 比 eager BF16 **更近 FP32 真值 `+1.04–1.12 dB`** |
+| **MiniMax-H3 36L ViT3D VAE + CNN 编码** | `768p 5s` 分块 / `720p 121f` / `768p 17f` 编码 | `11.50 → 8.69s` · `11.78 → 8.68s` · `929 → 363 ms` | **`1.32–1.37×` / `2.56×`** | `65.07–65.37 dB`（解码）· `55.29 dB`（编码） |
+| **SANA-Video 2B DiT（纯无损 Eager）** | `480×832×81f` CFG=2，50 步（无编译无缓存） | `1,032.1 ms/步 (51.60s)` → **`444.9 ms/步 (22.25s)`** | **`2.32×`** | `48.26 dB / cos 0.9998` vs BF16（高于 BF16 底噪 `+12 dB`） |
+| **HunyuanVideo-13B & Wan2.2 DiT 块融合** | `720p 65f` HY-13B / `704p` Wan2.2-5B / `480p` A14B | HY `6,468 → 5,333 ms` · 5B `904 → 803 ms` · A14B `2,757 → 2,502 ms` | **`1.10×`–`1.21×`** | `54.14–60.38 dB`（零溢出 `triton_dit_block_ops`） |
+| **LingBot / LongLive / Matrix-Game / Cosmos3 音频** | 零同步流式 DiT + 5s 48kHz 立体声 `Snake1d` | LingBot Fast `98.0 → 66.8 ms` · Cosmos3 音频 `41.2 → 30.6 ms` | **`1.35×`–`1.47×`** | Cosmos3 音频 **`PSNR=inf`**（`max_diff = 0.0`）· LingBot `66.3 dB` |
+
+## 共享核心基础设施与 8× H200 NVSwitch 全节点无损扩展
+
+以下基础设施级优化覆盖多卡集合通信、CUDA Graph 运行时、GPU 常驻并行 VideoVAE 与通用 Hopper SM90 算子，惠及全仓所有视频生成与世界模型，全部遵循 **100% 无损**、`n_spills == 0`、严格 `tl.int64` 及惰性加载 Triton（无卡 CPU CI 通过）。
+
+| 核心基础设施层级 | 独占 8× / 1× H200 实测负载 | 基线 → 优化结果 | 加速比 / 扩展比 | 无损精度回执 |
+| --- | --- | --- | ---: | --- |
+| **8× H200 NVSwitch 对称显存 Ulysses** | `Wan 720p (S=75600, 40h)` QKV+O（`~5.3 TB/s` 聚合） | `2.239 ms` → **`1.044 ms/层`**（Latin-Square 直写） | **`2.14×`**（`2.05×–2.14×`） | **逐比特一致**（`torch.equal`） |
+| **8× H200 NVLS SHARP TP=8 `RowParallelLinear`** | `[4096×1728→5120]` & `[1024×1536→3072]` BF16 | `1.965 → 0.528 ms` · `0.403 → 0.093 ms` | **`3.72×` / `4.31×`** | 跨卡 FP32 精确抵消 |
+| **8× H200 并行 VideoVAE（4 大真实权重家族）** | Wan2.1（`291.6 / 627.7 ms`）、Wan2.2（`567.8 / 775.2 ms`）、HY-Causal3D（`470.8 ms`）、LTX-2.5（`59.6 / 184.7 ms`） | GPU 常驻 + 8 瓦片均衡 + LPT 负载均衡 | **`6.23×–7.79×`**（`97.4%` 效率 / 对比 dense **`4.02×–7.25×`**） | **逐比特一致**（`PSNR=inf`）· LTX `75–78.7 dB` |
+| **8× H200 `Wan2.1-T2V-14B` `exact` BF16** | `480p` & `720p` 81f，50 步（`CFG=2×SP=4` + 8× VAE） | 480p `311.8s → 39.37s`；720p 4× `316.9s` → 8× **`136.23s`**（`0.296s` VAE） | **`7.92×`**（`99.0%` 效率）· **`11.0×`** VAE | **逐比特一致**（`PSNR=inf, SSIM=1.0`） |
+| **8× H200 `HunyuanVideo-13B` `L1 exact` BF16** | `720p×65f`，50 步（`SP=8` + 8× Causal3D VAE） | 1× L0 `371.7s` / L1 `267.7s` → **`38.12s` DiT** + **`0.47s` VAE** | **`9.75×`** vs 1× L0 | **逐比特一致** vs 1×（`PSNR=inf, cos=1.0`） |
+| **CUDA Graph 运行时与共享显存池** | 调度分发延迟 & 分段 Graph 共享池峰值显存 | 分发 `79.1 → 15.8 µs` · 显存池 `2,972 → 1,093 MB` | **`4.99×–6.28×`** · **省 `63.2%` 显存** | 逐比特一致 |
+| **Hopper TMA WGMMA `triton_fp8_linear` 与量化器** | E4M3 / E5M2×E5M2 GEMM + 宽行 & 融合 `silu_mul` | `330 → 1,030 TFLOPS`（E5M2 `1,006 TFLOPS`）；`silu_mul` `4.21 TB/s` | **`2.90×–3.61×`** / **`4.95×`** | FP32 累加优于 `_scaled_mm` |
+| **核心 GroupNorm+SiLU、MoE、3D RoPE 与共享 Rotary** | 5D NDHWC GN+SiLU · WGMMA MoE · 5 项共享 Rotary | GN `17.66×` · MoE `424.5 TFLOPS (10.9×)` · Rotary `5.77×–14.65×`（`3.82 TB/s`） | **`3.38×`–`17.66×`** | 零 NaN Chan 归约 / **逐比特** Rotary |
+| **核心层、FP64 调度器、时间步与注意力分发** | `LayerNorm2d`、`convert_*`、`FlowMatch.step`、`dispatch` | LN2d `16.49×` CG · `convert_*` `24.5×` CG（**省 `93.8%` 显存**）· 注意力分发 `2.1 µs` | **`3.6×`–`50.4×`** / **`~18–20×`** | **逐比特一致** 调度器与 `PostSA` |
 
 ## 画质拦截与主动否决记录
 

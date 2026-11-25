@@ -472,8 +472,26 @@ def silu_and_mul(input: torch.Tensor) -> torch.Tensor:
 
 
 # ──────────────────────────────────────────────────────────────────────────
-# group_norm_silu — NCHW/NCDHW contiguous; channels divisible by num_groups
+# group_norm_silu — NCHW/NCDHW and channels_last/channels_last_3d; C % G == 0
 # ──────────────────────────────────────────────────────────────────────────
+
+_CHANNELS_LAST_GROUP_NORM_MIN_ELEMENTS = 65536
+
+
+def _is_channels_last_group_norm(tensor: torch.Tensor) -> bool:
+    """Return True when *tensor* is stored in 4D channels_last or 5D channels_last_3d."""
+
+    if tensor.ndim == 4:
+        return tensor.is_contiguous(memory_format=torch.channels_last) and (
+            not tensor.is_contiguous()
+            or (tensor.shape[1] > 1 and tensor.stride(1) == 1 and tensor.stride(3) == tensor.shape[1])
+        )
+    if tensor.ndim == 5:
+        return tensor.is_contiguous(memory_format=torch.channels_last_3d) and (
+            not tensor.is_contiguous()
+            or (tensor.shape[1] > 1 and tensor.stride(1) == 1 and tensor.stride(4) == tensor.shape[1])
+        )
+    return False
 
 
 def _group_norm_silu_torch(
@@ -495,7 +513,7 @@ def _eligible_group_norm_silu(
     num_groups: int,
     eps: float,
 ) -> bool:
-    """Contiguous NCHW-family tensors with matching affine vectors of length C."""
+    """Contiguous NCHW/NCDHW or channels-last 4D/5D tensors with affine vectors of length C."""
 
     del eps
     return (
@@ -509,7 +527,7 @@ def _eligible_group_norm_silu(
         and input.numel() > 0
         and int(num_groups) > 0
         and input.shape[1] % int(num_groups) == 0
-        and input.is_contiguous()
+        and (input.is_contiguous() or _is_channels_last_group_norm(input))
         and weight.is_contiguous()
         and bias.is_contiguous()
         and weight.shape == bias.shape == (input.shape[1],)
@@ -523,11 +541,20 @@ def _group_norm_silu_triton(
     num_groups: int,
     eps: float,
 ) -> torch.Tensor:
-    """Lazy-import the in-tree GroupNorm+SiLU Triton kernel."""
+    """Lazy-import the in-tree GroupNorm+SiLU Triton custom op."""
 
     from worldfoundry.core.kernels.triton_group_norm_silu import group_norm_silu as implementation
 
     return implementation(input, weight, bias, int(num_groups), float(eps))
+
+
+def _group_norm_silu_effective_threshold(input: torch.Tensor) -> int:
+    """Return element floor for ``auto`` GroupNorm+SiLU, honoring explicit env overrides."""
+
+    threshold = _kernel_threshold(input, "group_norm_silu")
+    if os.getenv("WORLDFOUNDRY_GROUP_NORM_SILU_MIN_ELEMENTS") is None and _is_channels_last_group_norm(input):
+        return min(threshold, _CHANNELS_LAST_GROUP_NORM_MIN_ELEMENTS)
+    return threshold
 
 
 def group_norm_silu(
@@ -538,22 +565,28 @@ def group_norm_silu(
     num_groups: int,
     eps: float = 1e-5,
 ) -> torch.Tensor:
-    """Fuse affine GroupNorm and SiLU for contiguous NCHW/NCDHW tensors.
+    """Fuse affine GroupNorm and SiLU for contiguous and channels-last 2D–5D tensors.
 
-    The eager accelerator uses the in-tree Triton kernel; training, CPU,
-    unsupported layouts, and compiled graphs use exact PyTorch.
+    Uses the in-tree Hopper Triton custom op in both eager and ``torch.compile``
+    inference paths; training/autograd, CPU, ``WORLDFOUNDRY_KERNEL_BACKEND=torch``,
+    and unsupported layouts retain exact PyTorch semantics.
     """
 
     args = (input, weight, bias, int(num_groups), float(eps))
     requested = _requested_kernel_backend()
-    if (
-        torch.compiler.is_compiling()
-        or requested in _TORCH_BACKENDS
-        or (
-            requested == "auto"
-            and not kernel_autotune_enabled()
-            and input.numel() < _kernel_threshold(input, "group_norm_silu")
-        )
+    if torch.compiler.is_compiling():
+        if (
+            requested not in _TORCH_BACKENDS
+            and requested in {"auto", "triton", "triton_group_norm_silu"}
+            and (requested != "auto" or input.numel() >= _group_norm_silu_effective_threshold(input))
+            and _eligible_group_norm_silu(*args)
+        ):
+            return _group_norm_silu_triton(*args)
+        return _group_norm_silu_torch(*args)
+    if requested in _TORCH_BACKENDS or (
+        requested == "auto"
+        and not kernel_autotune_enabled()
+        and input.numel() < _group_norm_silu_effective_threshold(input)
     ):
         return _group_norm_silu_torch(*args)
     return KERNEL_REGISTRY.dispatch(

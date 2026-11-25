@@ -505,20 +505,58 @@ class LiteLAReLURope(Attention_):
         B, N, C = x.shape
 
         if self._fast_litela_rope and not self.training and self.qkv_store_buffer is None and rotary_emb is not None:
-            qkv = self.qkv(x).reshape(B, N, 3, C)
-            q, k, v = qkv.unbind(2)
-            dtype = q.dtype
+            qkv_raw = self.qkv(x)
             heads = C // self.dim
-
-            q = F.relu(self.q_norm(q)).view(B, N, heads, self.dim)
-            k = F.relu(self.k_norm(k)).view(B, N, heads, self.dim)
-            v = v.view(B, N, heads, self.dim)
 
             if isinstance(rotary_emb, tuple):
                 cos, sin = rotary_emb
             else:
                 cos = rotary_emb.real.transpose(1, 2).contiguous()
                 sin = rotary_emb.imag.transpose(1, 2).contiguous()
+
+            use_fp32_attention = getattr(self, "fp32_attention", False)
+            q_norm_ok = isinstance(self.q_norm, nn.Identity) or (
+                isinstance(self.q_norm, RMSNorm)
+                and self.q_norm.norm_dim in (-1, 2)
+                and not self.q_norm._forward_hooks
+                and not self.q_norm._forward_pre_hooks
+            )
+            k_norm_ok = isinstance(self.k_norm, nn.Identity) or (
+                isinstance(self.k_norm, RMSNorm)
+                and self.k_norm.norm_dim in (-1, 2)
+                and not self.k_norm._forward_hooks
+                and not self.k_norm._forward_pre_hooks
+            )
+            if q_norm_ok and k_norm_ok:
+                from .triton_litela_rope import can_use_triton_litela_relu_rope, fused_sana_litela_relu_rope
+
+                if can_use_triton_litela_relu_rope(qkv_raw, cos, sin, num_heads=heads, head_dim=self.dim):
+                    q_w = self.q_norm.weight if isinstance(self.q_norm, RMSNorm) else None
+                    k_w = self.k_norm.weight if isinstance(self.k_norm, RMSNorm) else None
+                    q_eps = float(self.q_norm.eps) if isinstance(self.q_norm, RMSNorm) else 1e-5
+                    k_eps = float(self.k_norm.eps) if isinstance(self.k_norm, RMSNorm) else 1e-5
+                    out = fused_sana_litela_relu_rope(
+                        qkv_raw,
+                        cos,
+                        sin,
+                        num_heads=heads,
+                        head_dim=self.dim,
+                        q_weight=q_w,
+                        k_weight=k_w,
+                        q_eps=q_eps,
+                        k_eps=k_eps,
+                        attn_eps=float(self.eps),
+                        use_fp32_attention=bool(use_fp32_attention),
+                    )
+                    return self.proj(out)
+
+            qkv = qkv_raw.reshape(B, N, 3, C)
+            q, k, v = qkv.unbind(2)
+            dtype = q.dtype
+
+            q = F.relu(self.q_norm(q)).view(B, N, heads, self.dim)
+            k = F.relu(self.k_norm(k)).view(B, N, heads, self.dim)
+            v = v.view(B, N, heads, self.dim)
 
             q_rotated = apply_real_rope_bshd(q, cos, sin)
             k_rotated = apply_real_rope_bshd(k, cos, sin)
@@ -528,7 +566,6 @@ class LiteLAReLURope(Attention_):
             k_rot_h = k_rotated.transpose(1, 2)
             v_h = v.transpose(1, 2)
 
-            use_fp32_attention = getattr(self, "fp32_attention", False)
             if use_fp32_attention:
                 q_rot_h = q_rot_h.float()
                 k_rot_h = k_rot_h.float()

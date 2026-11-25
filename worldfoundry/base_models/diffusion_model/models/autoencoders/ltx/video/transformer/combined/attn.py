@@ -12,6 +12,7 @@ from worldfoundry.core.execution.compile_numerics import nested_compile_region
 
 from ..attention import NeighborhoodAttention3D
 from ..rope_math import h_positions, rot_abs_axis_impl, t_positions
+from ..triton_diffvae_ops import diffvae_rmsnorm_3d_abs_rope, diffvae_rmsnorm_modulate
 
 # Transparent path: innermost per-axis rotation is a nested compile region.
 _rot_abs_axis = nested_compile_region(rot_abs_axis_impl)
@@ -91,14 +92,50 @@ def _qkv_nested_rope(
     its (possibly fractional) plane times there.
     """
     q, k, v = attn.project_qkv(x)
-    q = attn.q_norm(q) * attn.scale
-    k = attn.k_norm(k)
     inv_freqs = (
         attn.rope_inv_t.to(device=x.device),
         attn.rope_inv_h.to(device=x.device),
         attn.rope_inv_w.to(device=x.device),
     )
     positions = None if t_pos is None else t_pos.to(device=x.device, dtype=torch.float32)
+    if (
+        isinstance(attn.q_norm, nn.RMSNorm)
+        and isinstance(attn.k_norm, nn.RMSNorm)
+        and not attn.q_norm._forward_hooks
+        and not attn.q_norm._forward_pre_hooks
+        and not attn.k_norm._forward_hooks
+        and not attn.k_norm._forward_pre_hooks
+        and not torch.compiler.is_compiling()
+    ):
+        eps_q = float(attn.q_norm.eps) if attn.q_norm.eps is not None else float(torch.finfo(q.dtype).eps)
+        eps_k = float(attn.k_norm.eps) if attn.k_norm.eps is not None else float(torch.finfo(k.dtype).eps)
+        rope_bf16 = attn.rope_compute_dtype == torch.bfloat16
+        q = diffvae_rmsnorm_3d_abs_rope(
+            q,
+            attn.q_norm.weight,
+            attn.rope_dim_split,
+            inv_freqs,
+            t_pos=positions,
+            eps=eps_q,
+            attn_scale=float(attn.scale),
+            do_rmsnorm=True,
+            rope_compute_bf16=rope_bf16,
+        )
+        k = diffvae_rmsnorm_3d_abs_rope(
+            k,
+            attn.k_norm.weight,
+            attn.rope_dim_split,
+            inv_freqs,
+            t_pos=positions,
+            eps=eps_k,
+            attn_scale=1.0,
+            do_rmsnorm=True,
+            rope_compute_bf16=rope_bf16,
+        )
+        return q, k, v
+
+    q = attn.q_norm(q) * attn.scale
+    k = attn.k_norm(k)
     q = _apply_nested_full_volume_rope(
         q,
         attn.rope_dim_split,
@@ -145,8 +182,13 @@ def full_with_keyframes(
     batch, t, h, w, _ = x.shape
     planes = keyframe_x.shape[1]
 
-    y = norm(x) * (1.0 + scale) + shift
-    keyframe_y = norm(keyframe_x) * (1.0 + scale) + shift
+    if isinstance(norm, nn.RMSNorm) and not norm._forward_hooks and not norm._forward_pre_hooks:
+        eps = float(norm.eps) if norm.eps is not None else float(torch.finfo(x.dtype).eps)
+        y = diffvae_rmsnorm_modulate(x, norm.weight, scale, shift, eps=eps)
+        keyframe_y = diffvae_rmsnorm_modulate(keyframe_x, norm.weight, scale, shift, eps=eps)
+    else:
+        y = norm(x) * (1.0 + scale) + shift
+        keyframe_y = norm(keyframe_x) * (1.0 + scale) + shift
 
     q, k, v = _qkv_nested_rope(attn, y)
     keyframe_q, keyframe_k, keyframe_v = _qkv_nested_rope(attn, keyframe_y, keyframe_times)
@@ -179,7 +221,11 @@ def full(
     shift: torch.Tensor,
 ) -> torch.Tensor:
     """``x + NA(modulate(norm(x)))`` with nested full-volume abs-RoPE."""
-    y = norm(x) * (1.0 + scale) + shift
+    if isinstance(norm, nn.RMSNorm) and not norm._forward_hooks and not norm._forward_pre_hooks:
+        eps = float(norm.eps) if norm.eps is not None else float(torch.finfo(x.dtype).eps)
+        y = diffvae_rmsnorm_modulate(x, norm.weight, scale, shift, eps=eps)
+    else:
+        y = norm(x) * (1.0 + scale) + shift
     batch, t, h, w, _ = y.shape
     kt, kh, kw = attn.kernel_size
     if t < kt or h < kh or w < kw:

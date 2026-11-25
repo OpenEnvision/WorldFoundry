@@ -345,6 +345,58 @@ def indexed_gate(
     return (x + gate.index_select(0, indices) * other).to(dtype)
 
 
+def indexed_gate_rms_norm_indexed_scale_shift(
+    x: torch.Tensor,
+    gate: torch.Tensor,
+    other: torch.Tensor,
+    norm: nn.RMSNorm,
+    shift: torch.Tensor,
+    scale: torch.Tensor,
+    indices: torch.Tensor,
+    *,
+    dtype: torch.dtype,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Return ``(x_out, norm(x_out) * (1 + scale[idx]) + shift[idx])`` in one kernel when eligible."""
+
+    weight = norm.weight
+    if (
+        dtype == _BF16
+        and isinstance(norm, nn.RMSNorm)
+        and weight is not None
+        and x.ndim == 2
+        and gate.ndim == 2
+        and other.ndim == 2
+        and weight.ndim == 1
+        and shift.ndim == 2
+        and scale.ndim == 2
+        and indices.ndim == 1
+        and indices.is_cuda
+        and indices.device == x.device
+        and x.shape == other.shape
+        and x.shape[0] == indices.shape[0]
+        and x.shape[1] == gate.shape[1] == weight.shape[0] == shift.shape[1] == scale.shape[1]
+        and not _autograd_active(x, gate, other, weight, shift, scale)
+        and can_use_fused_indexed_modulation(x, gate, other, weight, shift, scale)
+    ):
+        from worldfoundry.base_models.diffusion_model.models.networks.minimax_h3.triton_modulation import (
+            indexed_gate_rms_norm_indexed_scale_shift_bf16,
+        )
+
+        return indexed_gate_rms_norm_indexed_scale_shift_bf16(
+            x,
+            gate,
+            other,
+            weight,
+            shift,
+            scale,
+            _as_index_tensor(indices),
+            eps=_resolve_rms_norm_eps(norm, x.dtype),
+        )
+    x_out = indexed_gate(x, gate, other, indices, dtype=dtype)
+    h_out = rms_norm_indexed_scale_shift(x_out, norm, shift, scale, indices, dtype=dtype)
+    return x_out, h_out
+
+
 def make_rms_norm(size: int, *, eps: float, dtype: torch.dtype = _BF16) -> nn.RMSNorm:
     """Build an RMSNorm with fp32-accumulation semantics (reference contract)."""
 
@@ -357,6 +409,7 @@ __all__ = [
     "can_use_fused_indexed_modulation",
     "can_use_fused_qknorm_rope",
     "indexed_gate",
+    "indexed_gate_rms_norm_indexed_scale_shift",
     "indexed_scale_shift",
     "make_rms_norm",
     "qk_norm_rope",

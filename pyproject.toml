@@ -908,6 +908,9 @@ include-package-data = true
 "worldfoundry.base_models.three_dimensions.slam.mega_sam_runtime" = [
     "UniDepth/**/*",
 ]
+"worldfoundry.synthesis.visual_generation" = [
+    "open_sora/open_sora_runtime/**/*",
+]
 "worldfoundry.synthesis.visual_generation.hunyuan_world" = [
     "hunyuan_game_craft/**/*",
     "hunyuan_world_voyager/**/*",

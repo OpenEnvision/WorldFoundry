@@ -62,6 +62,16 @@ from worldfoundry.core.kernels import (
     residual_gate_layer_norm,
 )
 from worldfoundry.core.kernels.registry import kernel_dispatch_receipt_scope
+from worldfoundry.core.kernels.triton_dit_block_ops import (
+    dit_block_ops_enabled,
+    fused_dit_layernorm_adaln,
+    fused_wan_head_ln_adaln,
+    fused_wan_modulation_ln_adaln,
+    fused_wan_res_add_ln_adaln,
+    fused_wan_res_gate_add,
+    fused_wan_res_gate_ln_affine,
+    fused_wan_rmsnorm,
+)
 from worldfoundry.core.nn import RMSNorm, sinusoidal_embedding_1d
 from worldfoundry.core.nn import scale_shift as modulate  # noqa: F401 - Historical import path.
 from worldfoundry.core.nn.checkpointing.gradient import gradient_checkpoint_forward
@@ -76,6 +86,24 @@ _SELF_ATTENTION_INTERNAL_KWARGS = (
     "_worldfoundry_rope_table",
     "_worldfoundry_sparse_grid",
 )
+
+
+def _module_has_no_hooks(module: nn.Module) -> bool:
+    return not module._forward_hooks and not module._forward_pre_hooks
+
+
+def _apply_wan_rmsnorm(norm_mod: nn.Module, x: torch.Tensor) -> torch.Tensor:
+    if (
+        x.is_cuda
+        and not torch.is_grad_enabled()
+        and isinstance(norm_mod, RMSNorm)
+        and type(norm_mod) is RMSNorm
+        and norm_mod.compute_mode == "fp32"
+        and norm_mod.weight is not None
+        and _module_has_no_hooks(norm_mod)
+    ):
+        return fused_wan_rmsnorm(x, norm_mod.weight, eps=float(norm_mod.eps))
+    return norm_mod(x)
 
 
 class AttentionModule(nn.Module):
@@ -277,8 +305,8 @@ def apply_wan_qk_norm_rope(
             output = indexed_fused_call()
         runtime_state.record_eager_dispatch(receipt)
         return output
-    q = attention.norm_q(q)
-    k = attention.norm_k(k)
+    q = _apply_wan_rmsnorm(attention.norm_q, q)
+    k = _apply_wan_rmsnorm(attention.norm_k, k)
     compute_dtype = torch.float32 if normalized_precision == "fp32" else torch.float64
     return (
         rope_apply(q, freqs, attention.num_heads, compute_dtype=compute_dtype),
@@ -342,9 +370,9 @@ def project_wan_cross_kv(
     fusion = getattr(attention, "_worldfoundry_cross_kv_fusion", None)
     if fusion is not None:
         key, value = fusion.project(attention, context, image=image)
-        return norm_key(key), value
+        return _apply_wan_rmsnorm(norm_key, key), value
     key, value = (attention.k_img, attention.v_img) if image else (attention.k, attention.v)
-    return norm_key(key(context)), value(context)
+    return _apply_wan_rmsnorm(norm_key, key(context)), value(context)
 
 
 class CrossAttentionProcessor:
@@ -373,7 +401,7 @@ class CrossAttentionProcessor:
             text_context = context[:, 257:]
         else:
             text_context = context
-        query = attention.norm_q(attention.q(x))
+        query = _apply_wan_rmsnorm(attention.norm_q, attention.q(x))
 
         def project() -> tuple[torch.Tensor, ...]:
             projected = project_wan_cross_kv(attention, text_context)
@@ -527,6 +555,24 @@ class DiTBlock(nn.Module):
         self.modulation = nn.Parameter(torch.randn(1, 6, dim) / dim**0.5)
         self.gate = GateModule()
 
+    def _can_use_hopper_block_ops(self, x: torch.Tensor) -> bool:
+        return (
+            x.is_cuda
+            and not torch.is_grad_enabled()
+            and dit_block_ops_enabled()
+            and type(self.norm1) is nn.LayerNorm
+            and not self.norm1.elementwise_affine
+            and type(self.norm2) is nn.LayerNorm
+            and not self.norm2.elementwise_affine
+            and type(self.norm3) is nn.LayerNorm
+            and self.norm3.normalized_shape == (self.dim,)
+            and type(self.gate) is GateModule
+            and _module_has_no_hooks(self.norm1)
+            and _module_has_no_hooks(self.norm2)
+            and _module_has_no_hooks(self.norm3)
+            and _module_has_no_hooks(self.gate)
+        )
+
     def forward(
         self,
         x,
@@ -557,11 +603,26 @@ class DiTBlock(nn.Module):
             raise TypeError("Wan internal inplace-residual flag must be a bool")
         inplace_residual = inplace_residual and not torch.is_grad_enabled()
         fused_adaln = bool(kwargs.pop("_worldfoundry_fused_adaln", False))
+        use_hopper_block = self._can_use_hopper_block_ops(x)
         ln_mod = fused_layer_norm_scale_shift if fused_adaln else layer_norm_scale_shift
         if run_remaining:
             if modifiers is None:
                 raise ValueError("Wan block modifiers are required for run_remaining")
             shift_mlp, scale_mlp, gate_mlp = modifiers
+            if use_hopper_block:
+                input_x = fused_dit_layernorm_adaln(
+                    x,
+                    scale_mlp,
+                    shift_mlp,
+                    eps=self.norm2.eps,
+                )
+                return fused_wan_res_gate_add(
+                    x,
+                    self.ffn(input_x),
+                    None,
+                    gate_mlp,
+                    inplace=inplace_residual,
+                )
             input_x = ln_mod(
                 x,
                 scale_mlp,
@@ -572,6 +633,55 @@ class DiTBlock(nn.Module):
                 x,
                 gate_mlp,
                 self.ffn(input_x),
+                inplace=inplace_residual,
+            )
+
+        if t_mod is None:
+            raise ValueError("Wan block t_mod is required unless run_remaining=True")
+
+        if use_hopper_block and not return_partial and modifiers is None:
+            input_x = fused_wan_modulation_ln_adaln(
+                x,
+                self.modulation,
+                t_mod,
+                eps=self.norm1.eps,
+            )
+            self_attention_kwargs = {}
+            if "_worldfoundry_request_batch_sizes" in kwargs:
+                self_attention_kwargs["_worldfoundry_request_batch_sizes"] = kwargs["_worldfoundry_request_batch_sizes"]
+            for key in _SELF_ATTENTION_INTERNAL_KWARGS:
+                if key in kwargs:
+                    self_attention_kwargs[key] = kwargs.pop(key)
+            self_attn_out = self.self_attn(input_x, freqs, **self_attention_kwargs)
+            x, cross_in = fused_wan_res_gate_ln_affine(
+                x,
+                self_attn_out,
+                self.modulation,
+                t_mod,
+                self.norm3.weight,
+                self.norm3.bias,
+                eps=self.norm3.eps,
+                inplace=inplace_residual,
+            )
+            cross_attn_out = self.cross_attn(
+                cross_in,
+                context,
+                **kwargs,
+            )
+            x, input_x = fused_wan_res_add_ln_adaln(
+                x,
+                cross_attn_out,
+                self.modulation,
+                t_mod,
+                eps=self.norm2.eps,
+                inplace=inplace_residual,
+            )
+            return fused_wan_res_gate_add(
+                x,
+                self.ffn(input_x),
+                self.modulation,
+                t_mod,
+                slot_gate=5,
                 inplace=inplace_residual,
             )
 
@@ -684,6 +794,61 @@ class DiTBlock(nn.Module):
             raise TypeError("Wan internal inplace-residual flag must be a bool")
         inplace_residual = inplace_residual and not torch.is_grad_enabled()
         fused_adaln = bool(kwargs.pop("_worldfoundry_fused_adaln", False))
+        if cached_phases is None and self._can_use_hopper_block_ops(x):
+            input_x = fused_wan_modulation_ln_adaln(
+                x,
+                self.modulation,
+                t_mod,
+                eps=self.norm1.eps,
+            )
+            self_attention_kwargs = {}
+            if "_worldfoundry_request_batch_sizes" in kwargs:
+                self_attention_kwargs["_worldfoundry_request_batch_sizes"] = kwargs["_worldfoundry_request_batch_sizes"]
+            for key in _SELF_ATTENTION_INTERNAL_KWARGS:
+                if key in kwargs:
+                    self_attention_kwargs[key] = kwargs.pop(key)
+            self_attn_out = self.self_attn(
+                input_x,
+                freqs,
+                **self_attention_kwargs,
+            )
+            x, cross_in = fused_wan_res_gate_ln_affine(
+                x,
+                self_attn_out,
+                self.modulation,
+                t_mod,
+                self.norm3.weight,
+                self.norm3.bias,
+                eps=self.norm3.eps,
+                inplace=inplace_residual,
+            )
+            cross_attn_out = self.cross_attn(
+                cross_in,
+                context,
+                **kwargs,
+            )
+            x, input_x = fused_wan_res_add_ln_adaln(
+                x,
+                cross_attn_out,
+                self.modulation,
+                t_mod,
+                eps=self.norm2.eps,
+                inplace=inplace_residual,
+            )
+            ffn_out = self.ffn(input_x)
+            x = fused_wan_res_gate_add(
+                x,
+                ffn_out,
+                self.modulation,
+                t_mod,
+                slot_gate=5,
+                inplace=inplace_residual,
+            )
+            return x, {
+                "self_attn_out": self_attn_out,
+                "cross_attn_out": cross_attn_out,
+                "ffn_out": ffn_out,
+            }
         ln_mod = fused_layer_norm_scale_shift if fused_adaln else layer_norm_scale_shift
 
         has_seq = t_mod.ndim == 4
@@ -868,7 +1033,26 @@ class Head(nn.Module):
             t_mod: Time embedding before the 6-way split (``[B, C]`` or ``[B, L, C]``).
         """
         with torch.autocast(device_type=x.device.type, enabled=False):
-            head_dtype = self.head.weight.dtype
+            head_weight = getattr(self.head, "weight", None)
+            head_dtype = head_weight.dtype if head_weight is not None else x.dtype
+            if (
+                x.is_cuda
+                and not torch.is_grad_enabled()
+                and dit_block_ops_enabled()
+                and type(self.norm) is nn.LayerNorm
+                and not self.norm.elementwise_affine
+                and _module_has_no_hooks(self.norm)
+                and head_dtype in (torch.bfloat16, torch.float16, torch.float32)
+            ):
+                return self.head(
+                    fused_wan_head_ln_adaln(
+                        x,
+                        self.modulation,
+                        t_mod,
+                        eps=self.norm.eps,
+                        out_dtype=head_dtype,
+                    )
+                )
             if len(t_mod.shape) == 3:
                 shift, scale = (
                     self.modulation.unsqueeze(0).to(

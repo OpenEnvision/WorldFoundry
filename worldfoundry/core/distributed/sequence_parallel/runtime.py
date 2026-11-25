@@ -21,6 +21,19 @@ import torch.distributed as dist
 from torch.nn import functional as F
 
 from worldfoundry.core.distributed.collectives.device_mesh import all_to_all_tensor
+from worldfoundry.core.distributed.sequence_parallel.symm_mem_all_to_all import (
+    try_symm_mem_all_to_all_o,
+    try_symm_mem_all_to_all_qkv,
+    ulysses_backend_mode,
+)
+from worldfoundry.core.distributed.sequence_parallel.triton_ulysses_ops import (
+    ulysses_pack_o_scatter_seq,
+    ulysses_pack_qkv,
+    ulysses_pack_single_scatter_head,
+    ulysses_unpack_o_gather_head,
+    ulysses_unpack_qkv,
+    ulysses_unpack_single_gather_seq,
+)
 
 # ──────────────────────────────────────────────────────────────────────────
 # Process-local SP snapshot — not the vLLM GroupCoordinator source of truth
@@ -311,6 +324,7 @@ def _all_to_all_4D(
     group=None,
     *,
     assume_even: bool = False,
+    crop_heads: int = 0,
 ) -> torch.Tensor:
     """
     all-to-all for QKV
@@ -320,6 +334,8 @@ def _all_to_all_4D(
         scatter_idx (int): default 1
         gather_idx (int): default 2
         group : torch process group
+        assume_even (bool): skip sequence-length metadata probe when even
+        crop_heads (int): optional trailing padded heads to drop when gathering dim 2
 
     Returns:
         torch.tensor: resharded tensor (bs, seqlen/P, hc, hs)
@@ -328,6 +344,7 @@ def _all_to_all_4D(
 
     group = _resolve_group(group)
     seq_world_size = dist.get_world_size(group)
+    backend = ulysses_backend_mode()
 
     if scatter_idx == 2 and gather_idx == 1:
         # Wan pads the token sequence before sharding, so its Ulysses path can
@@ -353,6 +370,21 @@ def _all_to_all_4D(
         seqlen = shard_seqlen * seq_world_size
         assert hc % seq_world_size == 0, f"Invalid size: {hc}, which should be divisible by {seq_world_size}"
         shard_hc = hc // seq_world_size
+
+        if backend != "torch" and seq_world_size > 1:
+            # Pack as (P, B, S_L, H_L, D) so post-NCCL B==1 is zero-copy (1, P*S_L, H_L, D).
+            input_t = ulysses_pack_single_scatter_head(input, seq_world_size)
+            output = torch.empty_like(input_t)
+            _increment_collective_counter("all_to_all_calls")
+            _increment_collective_counter(
+                "all_to_all_input_bytes",
+                input_t.numel() * input_t.element_size(),
+            )
+            dist.all_to_all_single(output, input_t, group=group)
+            output = ulysses_unpack_single_gather_seq(output, seq_world_size)
+            if gap > 0:
+                output = output[:, :-gap]
+            return output
 
         # transpose groups of heads with the seq-len parallel dimension, so that we can scatter them!
         # (bs, seqlen/P, hc, hs) -reshape-> (bs, seq_len/P, P, hc/P, hs) -transpose(0,2)-> (P, seq_len/P, bs, hc/P, hs)
@@ -385,6 +417,7 @@ def _all_to_all_4D(
         bs, seqlen, shard_hc, hs = input.shape
 
         hc = shard_hc * seq_world_size
+        out_heads = hc - int(crop_heads) if int(crop_heads) > 0 else hc
         if seqlen % seq_world_size != 0:
             new_seqlen = (seqlen // seq_world_size + 1) * seq_world_size
             gap = new_seqlen - seqlen
@@ -397,6 +430,30 @@ def _all_to_all_4D(
 
         shard_seqlen = seqlen // seq_world_size
         seq_world_size = dist.get_world_size(group)
+
+        if seq_world_size > 1 and backend != "torch":
+            symm_out = try_symm_mem_all_to_all_o(input, group, out_heads=out_heads)
+            if symm_out is not None:
+                _increment_collective_counter("all_to_all_calls")
+                _increment_collective_counter(
+                    "all_to_all_input_bytes",
+                    input.numel() * input.element_size(),
+                )
+                output = symm_out
+            else:
+                # For B==1 contiguous input, (P, 1, S_L, H_L, D) is zero-copy before NCCL!
+                input_t = ulysses_pack_o_scatter_seq(input, seq_world_size)
+                exchanged = torch.empty_like(input_t)
+                _increment_collective_counter("all_to_all_calls")
+                _increment_collective_counter(
+                    "all_to_all_input_bytes",
+                    input_t.numel() * input_t.element_size(),
+                )
+                dist.all_to_all_single(exchanged, input_t, group=group)
+                output = ulysses_unpack_o_gather_head(exchanged, seq_world_size, out_heads=out_heads)
+            if gap > 0 and _rank_in_group(group) == seq_world_size - 1:
+                output = output[:, :-gap]
+            return output
 
         # transpose groups of heads with the seq-len parallel dimension, so that we can scatter them!
         # (bs, seqlen, hc/P, hs) -reshape-> (bs, P, seq_len/P, hc/P, hs) -transpose(0, 3)->
@@ -427,6 +484,8 @@ def _all_to_all_4D(
 
         # (hc, seqlen/N, bs, hs) -tranpose(0,2)-> (bs, seqlen/N, hc, hs)
         output = output.transpose(0, 2).contiguous().reshape(bs, shard_seqlen, hc, hs)
+        if out_heads < hc:
+            output = output[:, :, :out_heads, :].contiguous()
 
         if gap > 0 and _rank_in_group(group) == seq_world_size - 1:
             output = output[:, :-gap]
@@ -499,17 +558,30 @@ def all_to_all_4D(
     gather_dim: int = 1,
     *,
     assume_even: bool = False,
+    crop_heads: int = 0,
 ):
     """Public 4D Ulysses hop; ``assume_even`` skips a metadata all-gather when safe."""
 
     group = _resolve_group(group)
-    return SeqAllToAll4D.apply(
+    if not torch.is_grad_enabled() and not input_.requires_grad:
+        return _all_to_all_4D(
+            input_,
+            scatter_dim,
+            gather_dim,
+            group=group,
+            assume_even=assume_even,
+            crop_heads=int(crop_heads),
+        )
+    out = SeqAllToAll4D.apply(
         group,
         input_,
         scatter_dim,
         gather_dim,
         assume_even,
     )
+    if int(crop_heads) > 0 and scatter_dim == 1 and gather_dim == 2:
+        out = out[:, :, : out.shape[2] - int(crop_heads), :].contiguous()
+    return out
 
 
 def all_to_all_4d_many(
@@ -519,8 +591,9 @@ def all_to_all_4d_many(
     gather_dim: int = 1,
     *,
     assume_even: bool = False,
+    pad_heads: int = 0,
 ) -> tuple[torch.Tensor, ...]:
-    """Fuse equal-shaped 4D Q/K/V exchanges along their batch dimension."""
+    """Fuse equal-shaped 4D Q/K/V exchanges along one collective hop."""
 
     values = tuple(tensors)
     if len(values) < 2:
@@ -538,8 +611,13 @@ def all_to_all_4d_many(
     except ValueError:
         max_bytes = 512 * 1024**2
     total_bytes = sum(value.numel() * value.element_size() for value in values)
+    pad_h = int(pad_heads)
     if not compatible or max_bytes == 0 or total_bytes > max_bytes:
         _increment_collective_counter("unfused_multi_tensor_all_to_all_calls")
+        if pad_h > 0:
+            values = tuple(
+                torch.cat((v, v.new_zeros((v.shape[0], v.shape[1], pad_h, v.shape[3]))), dim=2) for v in values
+            )
         return tuple(
             all_to_all_4D(
                 value,
@@ -550,7 +628,50 @@ def all_to_all_4d_many(
             )
             for value in values
         )
+
+    backend = ulysses_backend_mode()
+    resolved_group = _resolve_group(group)
+    if (
+        len(values) == 3
+        and scatter_dim == 2
+        and gather_dim == 1
+        and assume_even
+        and backend != "torch"
+        and not torch.is_grad_enabled()
+        and not any(value.requires_grad for value in values)
+        and dist.is_available()
+        and dist.is_initialized()
+    ):
+        seq_world_size = int(dist.get_world_size(resolved_group))
+        if seq_world_size > 1 and (first.shape[2] + pad_h) % seq_world_size == 0:
+            q, k, v = values
+            _increment_collective_counter("fused_multi_tensor_all_to_all_calls")
+            symm_out = try_symm_mem_all_to_all_qkv(q, k, v, resolved_group, pad_heads=pad_h)
+            if symm_out is not None:
+                _increment_collective_counter("all_to_all_calls")
+                _increment_collective_counter(
+                    "all_to_all_input_bytes",
+                    3
+                    * first.shape[0]
+                    * first.shape[1]
+                    * (first.shape[2] + pad_h)
+                    * first.shape[3]
+                    * first.element_size(),
+                )
+                return symm_out
+            packed = ulysses_pack_qkv(q, k, v, seq_world_size, pad_heads=pad_h)
+            exchanged = torch.empty_like(packed)
+            _increment_collective_counter("all_to_all_calls")
+            _increment_collective_counter(
+                "all_to_all_input_bytes",
+                packed.numel() * packed.element_size(),
+            )
+            dist.all_to_all_single(exchanged, packed, group=resolved_group)
+            return ulysses_unpack_qkv(exchanged, seq_world_size)
+
     _increment_collective_counter("fused_multi_tensor_all_to_all_calls")
+    if pad_h > 0:
+        values = tuple(torch.cat((v, v.new_zeros((v.shape[0], v.shape[1], pad_h, v.shape[3]))), dim=2) for v in values)
     packed = torch.cat(values, dim=0)
     exchanged = all_to_all_4D(
         packed,
@@ -963,6 +1084,21 @@ def sequence_parallel_all_gather(x: torch.Tensor, dim: int = 1) -> torch.Tensor:
     if not dist.is_initialized() or group is None or dist.get_world_size(group) <= 1:
         return x
     _increment_collective_counter("sequence_output_all_gather_calls")
-    shards = [torch.empty_like(x) for _ in range(dist.get_world_size(group))]
+    world_size = int(dist.get_world_size(group))
+    gather_into = getattr(dist, "all_gather_into_tensor", None)
+    if callable(gather_into):
+        norm_dim = int(dim) % x.ndim
+        x_contig = x.contiguous()
+        flat_out = x_contig.new_empty((world_size * x_contig.shape[0], *x_contig.shape[1:]))
+        gather_into(flat_out, x_contig, group=group)
+        if norm_dim == 0:
+            return flat_out
+        if norm_dim == 1 and x_contig.shape[0] == 1:
+            return flat_out.reshape(1, world_size * x_contig.shape[1], *x_contig.shape[2:])
+        gathered = flat_out.reshape(world_size, *x_contig.shape)
+        out_shape = list(x_contig.shape)
+        out_shape[norm_dim] *= world_size
+        return gathered.movedim(0, norm_dim).contiguous().reshape(out_shape)
+    shards = [torch.empty_like(x) for _ in range(world_size)]
     dist.all_gather(shards, x.contiguous(), group=group)
     return torch.cat(shards, dim=dim)

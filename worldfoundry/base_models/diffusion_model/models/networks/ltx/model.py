@@ -747,15 +747,7 @@ class LTXModel(torch.nn.Module):
             and type(self.block_input_processor) is BlockPerturbationsProcessor
             and self.TRANSFORMER_BLOCK_CLS.forward is BasicAVTransformerBlock.forward
         ):
-            for block in self.transformer_blocks:
-                video, audio = gradient_checkpoint_forward(
-                    block,
-                    self._enable_gradient_checkpointing and self.training,
-                    False,
-                    video,
-                    audio,
-                )
-            return video, audio
+            return self._run_blocks_range_direct(video, audio, 0, len(self.transformer_blocks))
 
         if perturbations is None:
             perturbations = self._keep_all_perturbations(video or audio)
@@ -786,6 +778,74 @@ class LTXModel(torch.nn.Module):
                 audio,
             )
 
+        return video, audio
+
+    def _run_blocks_range_direct(
+        self,
+        video: TransformerArgs | None,
+        audio: TransformerArgs | None,
+        start_block: int,
+        end_block: int,
+    ) -> tuple[TransformerArgs | None, TransformerArgs | None]:
+        """Run blocks ``[start_block, end_block)`` with lossless inter-block FFN->MSA boundary fusion."""
+        can_fuse = not self.training and not torch.is_grad_enabled() and not self._enable_gradient_checkpointing
+        pre_norm_vx: torch.Tensor | None = None
+        pre_norm_ax: torch.Tensor | None = None
+        cached_v_ada: tuple[torch.Tensor, ...] | None = None
+        cached_a_ada: tuple[torch.Tensor, ...] | None = None
+
+        for idx in range(start_block, end_block):
+            block = self.transformer_blocks[idx]
+            cur_v_ada = cached_v_ada
+            cur_a_ada = cached_a_ada
+            cached_v_ada = None
+            cached_a_ada = None
+
+            if (
+                can_fuse
+                and type(block) is BasicAVTransformerBlock
+                and block._use_fused_residual_gate
+                and not block._forward_hooks
+                and not block._forward_pre_hooks
+            ):
+                next_v_msa: tuple[torch.Tensor, torch.Tensor] | None = None
+                next_a_msa: tuple[torch.Tensor, torch.Tensor] | None = None
+                if idx + 1 < end_block:
+                    nb = self.transformer_blocks[idx + 1]
+                    if (
+                        type(nb) is BasicAVTransformerBlock
+                        and nb._use_fused_residual_gate
+                        and not nb._forward_hooks
+                        and not nb._forward_pre_hooks
+                    ):
+                        if video is not None and video.enabled and video.x.numel() > 0:
+                            cached_v_ada = nb._all_ada_values(nb.scale_shift_table, video.x.shape[0], video.timesteps)
+                            next_v_msa = (cached_v_ada[0], cached_v_ada[1])
+                        if audio is not None and audio.enabled and audio.x.numel() > 0:
+                            cached_a_ada = nb._all_ada_values(
+                                nb.audio_scale_shift_table, audio.x.shape[0], audio.timesteps
+                            )
+                            next_a_msa = (cached_a_ada[0], cached_a_ada[1])
+                video, audio, pre_norm_vx, pre_norm_ax = block._forward_impl(
+                    video,
+                    audio,
+                    pre_norm_vx=pre_norm_vx,
+                    pre_norm_ax=pre_norm_ax,
+                    v_ada_precomputed=cur_v_ada,
+                    a_ada_precomputed=cur_a_ada,
+                    next_v_msa_adaln=next_v_msa,
+                    next_a_msa_adaln=next_a_msa,
+                )
+            else:
+                pre_norm_vx = None
+                pre_norm_ax = None
+                video, audio = gradient_checkpoint_forward(
+                    block,
+                    self._enable_gradient_checkpointing and self.training,
+                    False,
+                    video,
+                    audio,
+                )
         return video, audio
 
     def _run_block_range_maybe_graphed(
@@ -822,6 +882,12 @@ class LTXModel(torch.nn.Module):
         ) -> tuple[TransformerArgs | None, TransformerArgs | None]:
             if full_stack:
                 return self._process_transformer_blocks(video=v_in, audio=a_in, perturbations=perturbations)
+            if (
+                perturbations is None
+                and type(self.block_input_processor) is BlockPerturbationsProcessor
+                and self.TRANSFORMER_BLOCK_CLS.forward is BasicAVTransformerBlock.forward
+            ):
+                return self._run_blocks_range_direct(v_in, a_in, start_block, end_block)
             v_cur, a_cur = v_in, a_in
             for idx in range(start_block, end_block):
                 v_cur, a_cur = gradient_checkpoint_forward(

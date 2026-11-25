@@ -181,15 +181,15 @@ if _TRITON_AVAILABLE:
         pid_m = tl.program_id(0)
         pid_n = tl.program_id(1)
 
-        offs_m = pid_m * BLOCK_M + tl.arange(0, BLOCK_M)
-        offs_n = pid_n * BLOCK_N + tl.arange(0, BLOCK_N)
+        offs_m = (pid_m * BLOCK_M + tl.arange(0, BLOCK_M)).to(tl.int64)
+        offs_n = (pid_n * BLOCK_N + tl.arange(0, BLOCK_N)).to(tl.int64)
         mask_m = offs_m < M
         mask_n = offs_n < N
 
         gate_acc = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.float32)
         up_acc = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.float32)
         for k0 in range(0, K, BLOCK_K):
-            offs_k = k0 + tl.arange(0, BLOCK_K)
+            offs_k = (k0 + tl.arange(0, BLOCK_K)).to(tl.int64)
             mask_k = offs_k < K
             x = tl.load(
                 x_ptr + offs_m[:, None] * stride_xm + offs_k[None, :] * stride_xk,
@@ -260,7 +260,12 @@ def _fused_gate_up_swiglu_triton(
         )
     m, k = x.shape
     n = w_gate.shape[0]
-    block_m, block_n, block_k = 64, 64, 32
+    if m >= 1024:
+        block_m, block_n, block_k = 128, 64, 64
+        num_warps, num_stages = 8, 3
+    else:
+        block_m, block_n, block_k = 64, 64, 32
+        num_warps, num_stages = 4, 3
     grid = (triton.cdiv(m, block_m), triton.cdiv(n, block_n))
     with torch.cuda.device(x.device):
         _fused_gate_up_swiglu_kernel[grid](
@@ -282,6 +287,8 @@ def _fused_gate_up_swiglu_triton(
             BLOCK_M=block_m,
             BLOCK_N=block_n,
             BLOCK_K=block_k,
+            num_warps=num_warps,
+            num_stages=num_stages,
         )
 
 

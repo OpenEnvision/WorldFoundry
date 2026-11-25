@@ -210,11 +210,18 @@ def _build_pipeline_options(args: argparse.Namespace, world_size: int, sm_major:
         elif args.height <= 480:
             opts.setdefault("vae_tile_size", (30, 52))
             opts.setdefault("vae_tile_stride", (15, 26))
-        elif sm_major >= 9 and int(opts.get("vae_parallel", 1)) >= 4 and args.height == 720 and args.width == 1280:
-            # 2x2 balanced grid for 720p latents (90x160): 4 tiles = 1 tile/GPU
-            # with 18x20 latent feathering overlap (1.35x vs 3.21x pixel work and fewer seams).
-            opts.setdefault("vae_tile_size", (54, 90))
-            opts.setdefault("vae_tile_stride", (36, 70))
+        elif sm_major >= 9 and int(opts.get("vae_parallel", 1)) >= 4 and args.height >= 720:
+            from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.model import WanVideoVAE
+
+            vae_p = int(opts["vae_parallel"])
+            auto_tile, auto_stride = WanVideoVAE.parallel_tile_config_for_world_size(
+                args.height // 8,
+                args.width // 8,
+                vae_p,
+                min_overlap=4,
+            )
+            opts.setdefault("vae_tile_size", auto_tile)
+            opts.setdefault("vae_tile_stride", auto_stride)
         else:
             opts.setdefault("vae_tile_size", (34, 34))
             opts.setdefault("vae_tile_stride", (18, 18))

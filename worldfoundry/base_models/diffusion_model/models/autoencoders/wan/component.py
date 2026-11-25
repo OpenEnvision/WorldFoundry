@@ -876,16 +876,21 @@ class WanVideoDecoder:
         if self.parallel_degree > 1:
             self._parallel_tiled_decode_calls += 1
             self._lifetime_parallel_tiled_decode_calls += 1
+            source = (
+                prepared
+                if (torch.device(self.device).type == "cuda" and not self.temporal_chunk_size)
+                else prepared.to("cpu")
+            )
             with self.vae._decode_autocast(prepared.dtype):
                 videos = [
                     self.vae.parallel_tiled_decode(
-                        hidden_state.unsqueeze(0),
+                        source[batch_index : batch_index + 1],
                         self.device,
                         self.tile_size,
                         self.tile_stride,
                         temporal_chunk_size=self.temporal_chunk_size,
                     ).squeeze(0)
-                    for hidden_state in prepared.to("cpu")
+                    for batch_index in range(source.shape[0])
                 ]
             return torch.stack(videos)
 

@@ -16,6 +16,8 @@ import os
 import torch.nn as nn
 import torch.nn.functional as F
 
+from worldfoundry.core.kernels.triton_pad_3d import triton_pad_3d
+
 from .conv import BaseConv3d
 from .norm import get_group_norm_3d, get_spatial_norm_3d
 
@@ -67,8 +69,33 @@ class Downsample3D(nn.Module):
 
     def forward(self, x):
         if self.space_stride == 2:
+            if (
+                type(self.conv) is BaseConv3d
+                and not self.conv._forward_hooks
+                and not self.conv._forward_pre_hooks
+                and self.conv.padding[1] == 0
+                and self.conv.padding[2] == 0
+                and x.shape[2] > 1
+            ):
+                pt_l = self.conv.padding[0] * 2 if self.conv.causal else self.conv.padding[0]
+                pt_r = 0 if self.conv.causal else self.conv.padding[0]
+                x = triton_pad_3d(
+                    x,
+                    (0, 1, 0, 1, pt_l, pt_r),
+                    spatial_mode=self.pad_mode,
+                    temporal_mode=self.conv.pad_mode_t,
+                )
+                return F.conv3d(
+                    x,
+                    self.conv.weight,
+                    self.conv.bias,
+                    stride=self.conv.stride,
+                    padding=0,
+                    dilation=self.conv.dilation,
+                    groups=self.conv.groups,
+                )
             pad = (0, 1, 0, 1, 0, 0)
-            x = F.pad(x, pad, mode=self.pad_mode)
+            x = triton_pad_3d(x, pad, spatial_mode=self.pad_mode)
         return self.conv(x)
 
 

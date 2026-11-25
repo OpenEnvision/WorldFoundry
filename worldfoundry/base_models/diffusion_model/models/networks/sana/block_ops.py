@@ -129,6 +129,88 @@ def _contains_tensor(obj: object) -> bool:
     return False
 
 
+def _can_interblock_fuse_sana_video(block: nn.Module, hidden: torch.Tensor, t_arg: torch.Tensor) -> bool:
+    if hasattr(block, "_orig_mod") or block._forward_hooks or block._forward_pre_hooks:
+        return False
+    check_fn = getattr(block, "_can_use_hopper_block_ops", None)
+    if not callable(check_fn):
+        return False
+    return bool(check_fn(hidden, t_arg, getattr(block, "block_hook", None) is not None))
+
+
+def _run_sana_block_sequence(
+    blocks: nn.ModuleList,
+    hidden: torch.Tensor,
+    stack_args: tuple[object, ...],
+    stack_kwargs: dict[str, object],
+) -> torch.Tensor:
+    can_chain = (
+        not torch.is_grad_enabled()
+        and hidden.is_cuda
+        and len(blocks) > 1
+        and len(stack_args) >= 2
+        and isinstance(stack_args[0], torch.Tensor)
+        and isinstance(stack_args[1], torch.Tensor)
+        and stack_args[1].ndim == 2
+        and stack_kwargs.get("kv_cache") is None
+    )
+    if not can_chain:
+        for block in blocks:
+            hidden = block(hidden, *stack_args, **stack_kwargs)
+        return hidden
+
+    y_arg = stack_args[0]
+    t_arg = stack_args[1]
+    assert isinstance(t_arg, torch.Tensor)
+    mask_arg = stack_args[2] if len(stack_args) > 2 else stack_kwargs.get("mask")
+    thw_arg = stack_args[3] if len(stack_args) > 3 else stack_kwargs.get("THW")
+    rope_arg = stack_args[4] if len(stack_args) > 4 else stack_kwargs.get("rotary_emb")
+    chunk_arg = stack_args[5] if len(stack_args) > 5 else stack_kwargs.get("chunk_index")
+    extra_kwargs = {k: v for k, v in stack_kwargs.items() if k not in {"mask", "THW", "rotary_emb", "chunk_index"}}
+
+    num_blocks = len(blocks)
+    pre_norm: torch.Tensor | None = None
+    for idx in range(num_blocks):
+        block = blocks[idx]
+        cur_ok = _can_interblock_fuse_sana_video(block, hidden, t_arg)
+        forward_fused = getattr(block, "_forward_hopper_fused", None) if cur_ok else None
+        if cur_ok and callable(forward_fused):
+            nxt = blocks[idx + 1] if idx + 1 < num_blocks else None
+            nxt_ok = nxt is not None and _can_interblock_fuse_sana_video(nxt, hidden, t_arg)
+            if nxt_ok:
+                result = forward_fused(
+                    hidden,
+                    y_arg,
+                    t_arg,
+                    mask=mask_arg,
+                    THW=thw_arg,
+                    rotary_emb=rope_arg,
+                    chunk_index=chunk_arg,
+                    pre_norm_sa_in=pre_norm,
+                    next_block=nxt,
+                    **extra_kwargs,
+                )
+                hidden, pre_norm = result  # type: ignore[misc]
+            else:
+                hidden = forward_fused(  # type: ignore[assignment]
+                    hidden,
+                    y_arg,
+                    t_arg,
+                    mask=mask_arg,
+                    THW=thw_arg,
+                    rotary_emb=rope_arg,
+                    chunk_index=chunk_arg,
+                    pre_norm_sa_in=pre_norm,
+                    next_block=None,
+                    **extra_kwargs,
+                )
+                pre_norm = None
+        else:
+            pre_norm = None
+            hidden = block(hidden, *stack_args, **stack_kwargs)
+    return hidden
+
+
 def run_sana_blocks(blocks: nn.ModuleList, value: torch.Tensor, *args, **kwargs) -> torch.Tensor:
     """One block-stack seam for stateless image/video graphs, request caches, and piecewise CUDA Graphs."""
     cache = kwargs.pop("feature_cache", None)
@@ -184,9 +266,7 @@ def run_sana_blocks(blocks: nn.ModuleList, value: torch.Tensor, *args, **kwargs)
             seg_name = f"sana_blocks:{tuple(arg_specs)}:{tuple(kw_specs)}"
 
     def _run_stack_eager(hidden: torch.Tensor, *stack_args) -> torch.Tensor:
-        for block in blocks:
-            hidden = block(hidden, *stack_args, **kwargs)
-        return hidden
+        return _run_sana_block_sequence(blocks, hidden, stack_args, kwargs)
 
     def _run_stack(hidden: torch.Tensor) -> torch.Tensor:
         if callable(on_stack_execute):
@@ -213,10 +293,7 @@ def run_sana_blocks(blocks: nn.ModuleList, value: torch.Tensor, *args, **kwargs)
                     rebuilt_kwargs[k] = tuple(seg_tensors[start_i:end_i])
                 else:
                     rebuilt_kwargs[k] = payload
-            cur = seg_hidden
-            for block in blocks:
-                cur = block(cur, *rebuilt_args, **rebuilt_kwargs)
-            return cur
+            return _run_sana_block_sequence(blocks, seg_hidden, tuple(rebuilt_args), rebuilt_kwargs)
 
         piecewise_graph.get_or_register_segment(seg_name, _segment_fn)
         return piecewise_graph.run_segment(seg_name, hidden, *flat_tensors)

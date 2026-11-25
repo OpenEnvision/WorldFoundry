@@ -992,9 +992,13 @@ class LTX25DistilledRuntime:
         self._vocoder = vocoder
         accel_cfg = self._effective_accel_config()
         if accel_cfg.compile_vocoder and torch.device(self.device).type == "cuda":
-            from worldfoundry.core.platform.compile_cache import configure_persistent_compile_cache
+            from worldfoundry.core.platform.compile_cache import (
+                configure_persistent_compile_cache,
+                register_worldfoundry_inductor_fallbacks,
+            )
 
             configure_persistent_compile_cache(namespace="ltx25-vocoder")
+            register_worldfoundry_inductor_fallbacks()
             self._compiled_vocoder = torch.compile(vocoder.vocoder, mode="default")
         if accel_cfg.audio_cuda_graph and torch.device(self.device).type == "cuda":
             from worldfoundry.core.execution.graphs.inference_graph import InferenceCUDAGraphRunner

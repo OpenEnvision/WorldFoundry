@@ -1,31 +1,62 @@
-"""Portable mixture-of-experts reference operators.
+"""Portable mixture-of-experts reference operators and Hopper Triton dispatch.
 
 These operators intentionally favor correctness and broad device support over
-specialized grouped-GEMM performance.  Model integrations can keep their
-checkpoint-compatible packed expert weights and use this module when an
-optional CUDA/Triton kernel is unavailable on the current GPU.
+specialized grouped-GEMM performance when Triton is unavailable. Model
+integrations can keep their checkpoint-compatible packed expert weights and
+dispatch transparently to Hopper WGMMA Triton kernels in both eager inference
+and ``torch.compile`` regions, with automatic PyTorch fallback for CPU,
+autograd, and unsupported layouts.
 
 Not this module:
     Grouped Triton matmuls live in :mod:`.triton_moe` and are imported only
-    after the registry predicate passes. Capability probing lives in
+    after the eligibility predicate passes. Capability probing lives in
     :mod:`.capabilities`.
 
 Public surface:
 
-- :func:`routed_swiglu_moe` — registry dispatch; Triton when eligible.
+- :func:`routed_swiglu_moe` — registry / compile dispatch; Triton when eligible.
 - :func:`routed_swiglu_moe_pytorch` — exact per-expert ``index_select`` path.
 """
 
 from __future__ import annotations
 
+import os
 from collections.abc import Callable
 from typing import Any, cast
 
 import torch
 import torch.nn.functional as F
+import torch.version
 
-from worldfoundry.core.kernels.capabilities import triton_tensor_eligible
+from worldfoundry.core.kernels.capabilities import QUALIFIED_TRITON_CAPABILITIES, triton_tensor_eligible
 from worldfoundry.core.kernels.registry import KERNEL_REGISTRY
+
+_TORCH_BACKENDS = {"torch", "pytorch", "native", "off", "disabled"}
+
+
+def _requested_kernel_backend() -> str:
+    return os.getenv("WORLDFOUNDRY_KERNEL_BACKEND", "auto").strip().casefold() or "auto"
+
+
+def _triton_device_supported(tensor: torch.Tensor) -> bool:
+    """Dynamo-safe device/dtype eligibility check for MoE Triton kernels."""
+    if not torch.compiler.is_compiling():
+        return triton_tensor_eligible(tensor)
+    if not tensor.is_cuda or bool(getattr(torch.version, "hip", None)):
+        return False
+    capability = torch.cuda.get_device_capability(tensor.device)
+    allow_untested = os.getenv("WORLDFOUNDRY_ALLOW_UNTESTED_GPU_KERNELS", "").strip().casefold() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+    if capability not in QUALIFIED_TRITON_CAPABILITIES and not allow_untested:
+        return False
+    if tensor.dtype == torch.bfloat16:
+        return capability >= (8, 0)
+    return tensor.dtype in {torch.float16, torch.float32}
+
 
 # ──────────────────────────────────────────────────────────────────────────
 # Portable reference — evaluate only routed tokens so unused experts stay cold
@@ -131,14 +162,22 @@ def _triton_candidate_eligible(
 ) -> bool:
     """Return whether packed weights and activations may enter the Triton path.
 
-    Routing tensors are ignored here: packing validates them inside the kernel
-    wrapper. Workspace is optional and checked only after launch is chosen.
+    Routing tensors are checked for same-device / 2D shape; packing validates
+    indices inside the kernel wrapper. Workspace is optional and checked only
+    after launch is chosen.
     """
 
-    del routing_weights, selected_experts, workspace
+    del workspace
     return (
         allow_triton
-        and triton_tensor_eligible(hidden_states)
+        and _triton_device_supported(hidden_states)
+        and hidden_states.ndim == 2
+        and routing_weights.ndim == 2
+        and selected_experts.ndim == 2
+        and routing_weights.shape == selected_experts.shape
+        and routing_weights.shape[0] == hidden_states.shape[0]
+        and routing_weights.device == hidden_states.device
+        and selected_experts.device == hidden_states.device
         and gate_weight.device == hidden_states.device
         and up_weight.device == hidden_states.device
         and down_weight.device == hidden_states.device
@@ -215,7 +254,7 @@ KERNEL_REGISTRY.register(
 
 
 # ──────────────────────────────────────────────────────────────────────────
-# Public dispatch — disable Triton under autograd; cache key is shape/dtype
+# Public dispatch — disable Triton under autograd; compile uses custom_op
 # ──────────────────────────────────────────────────────────────────────────
 
 
@@ -230,12 +269,48 @@ def routed_swiglu_moe(
     workspace: dict[str, torch.Tensor] | Callable[[], dict[str, torch.Tensor]] | None = None,
     allow_triton: bool | None = None,
 ) -> torch.Tensor:
-    """Dispatch packed SwiGLU MoE to Triton or the portable PyTorch reference."""
+    """Dispatch packed SwiGLU MoE to Hopper Triton or the portable PyTorch reference."""
 
     if allow_triton is None:
         allow_triton = not torch.is_grad_enabled() and not any(
             tensor.requires_grad for tensor in (hidden_states, gate_weight, up_weight, down_weight)
         )
+    if torch.compiler.is_compiling():
+        requested = _requested_kernel_backend()
+        if (
+            requested not in _TORCH_BACKENDS
+            and requested in {"auto", "triton", "worldfoundry_triton_packed_swiglu_moe"}
+            and workspace is None
+            and _triton_candidate_eligible(
+                hidden_states,
+                routing_weights,
+                selected_experts,
+                gate_weight,
+                up_weight,
+                down_weight,
+                allow_triton=bool(allow_triton),
+            )
+        ):
+            from worldfoundry.core.kernels.triton_moe import routed_swiglu_moe_triton
+
+            return routed_swiglu_moe_triton(
+                hidden_states,
+                routing_weights,
+                selected_experts,
+                gate_weight,
+                up_weight,
+                down_weight,
+                workspace=None,
+            )
+        return routed_swiglu_moe_pytorch(
+            hidden_states,
+            routing_weights,
+            selected_experts,
+            gate_weight,
+            up_weight,
+            down_weight,
+        )
+
     signature = (
         str(hidden_states.device),
         str(hidden_states.dtype),

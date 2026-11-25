@@ -31,8 +31,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from collections.abc import Callable, Mapping, Sequence
-from contextlib import AbstractContextManager
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -789,12 +788,9 @@ class NativeMiniMaxH3Pipeline(PipelineABC):
         ref_blocks: list[dict[str, Any]] | None = None,
         audio_ref_rows: torch.Tensor | None = None,
         text_token_tags: torch.Tensor | None = None,
-        action_text_spans: Sequence[tuple[int, int]] | None = None,
         negative_prompt_embeds: torch.Tensor | None = None,
         negative_text_token_tags: torch.Tensor | None = None,
-        negative_action_text_spans: Sequence[tuple[int, int]] | None = None,
         cfg_scale: float = 1.0,
-        branch_context: Callable[[MiniMaxH3DenoiseBranch], AbstractContextManager] | None = None,
         sigma_knots: tuple[float, ...] | None = None,
         renoise: bool = False,
         shared_initial_noise: bool = False,
@@ -825,7 +821,6 @@ class NativeMiniMaxH3Pipeline(PipelineABC):
         def _build_branch(
             embeds: torch.Tensor,
             tags_override: torch.Tensor | None,
-            spans: Sequence[tuple[int, int]] | None,
         ) -> tuple[dict[str, Any], MiniMaxH3DenoiseBranch]:
             branch_text_len = int(embeds.shape[0])
             if task == "ref2va":
@@ -850,7 +845,6 @@ class NativeMiniMaxH3Pipeline(PipelineABC):
                     include_keyframe_cond=include_keyframe,
                     keyframe_frame_indices=keyframe_frame_indices if include_keyframe else None,
                     frame_count=plan["frame_count"] if include_keyframe else None,
-                    action_text_spans=spans,
                 )
             branch_tags = packed_branch["token_tags"].clone()
             if tags_override is not None:
@@ -867,13 +861,12 @@ class NativeMiniMaxH3Pipeline(PipelineABC):
                 device=device,
             )
 
-        packed, branch = _build_branch(prompt_embeds, text_token_tags, action_text_spans)
+        packed, branch = _build_branch(prompt_embeds, text_token_tags)
         negative_branch: MiniMaxH3DenoiseBranch | None = None
         if negative_prompt_embeds is not None and float(cfg_scale) != 1.0:
             _, negative_branch = _build_branch(
                 negative_prompt_embeds,
                 negative_text_token_tags,
-                negative_action_text_spans if negative_action_text_spans is not None else action_text_spans,
             )
 
         generator = torch.Generator(device="cpu").manual_seed(int(seed))
@@ -952,8 +945,6 @@ class NativeMiniMaxH3Pipeline(PipelineABC):
         if negative_branch is not None:
             loop_kwargs["negative"] = negative_branch
             loop_kwargs["cfg_scale"] = float(cfg_scale)
-        if branch_context is not None:
-            loop_kwargs["branch_context"] = branch_context
         effective_step_cache = self._step_cache_config if step_cache is None else step_cache
         cache_report: dict[str, Any] | None = None
         if effective_step_cache is not None:

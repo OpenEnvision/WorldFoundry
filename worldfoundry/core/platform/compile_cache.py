@@ -191,6 +191,56 @@ def _configure_recompile_limits() -> None:
         setattr(config, attribute, value)
 
 
+def register_worldfoundry_inductor_fallbacks() -> int:
+    """Register ``worldfoundry::*`` custom ops as explicit Inductor fallbacks.
+
+    PyTorch Inductor's implicit-fallback path evaluates
+    ``log.info(..., error.operator_str(target, args, kwargs))`` eagerly even
+    when INFO logging is disabled. On deep residual graphs (such as multi-stage
+    VideoVAEs or vocoders) composed of chained ``custom_op`` nodes,
+    ``ExternKernel.__str__`` expands DAG diamonds recursively without
+    memoization in ``O(2^D)`` time and hangs compilation. Registering each
+    ``worldfoundry::*`` overload via ``make_fallback`` with Inductor's default
+    layout constraint bypasses that path while preserving stride/layout
+    contracts (including ``channels_last`` / ``channels_last_3d``).
+    """
+    try:
+        torch = importlib.import_module("torch")
+        lowering = importlib.import_module("torch._inductor.lowering")
+    except Exception:
+        return 0
+
+    ns = getattr(getattr(torch, "ops", None), "worldfoundry", None)
+    lowerings = getattr(lowering, "lowerings", None)
+    make_fallback = getattr(lowering, "make_fallback", None)
+    if ns is None or lowerings is None or not callable(make_fallback):
+        return 0
+
+    get_tag = getattr(lowering, "get_layout_constraint_tag", None)
+    tag_to_constraint = getattr(lowering, "tag_to_layout_constraint", None)
+    registered = 0
+    for name in dir(ns):
+        if name.startswith("_"):
+            continue
+        try:
+            packet = getattr(ns, name)
+        except Exception:
+            continue
+        overloads = getattr(packet, "overloads", None)
+        if not callable(overloads):
+            continue
+        for overload_name in overloads():
+            op = getattr(packet, overload_name, None)
+            if op is None or op in lowerings:
+                continue
+            constraint = None
+            if callable(get_tag) and callable(tag_to_constraint):
+                constraint = tag_to_constraint(get_tag(op, with_default=True))
+            make_fallback(op, layout_constraint=constraint, warn=False)
+            registered += 1
+    return registered
+
+
 def _compile_target(
     compile_fn: Any,
     target: Any,
@@ -199,6 +249,8 @@ def _compile_target(
     options: Mapping[str, Any] | None,
 ) -> Any:
     """Invoke ``torch.compile`` with only the policy fields that override torch defaults."""
+    if policy.backend == "inductor":
+        register_worldfoundry_inductor_fallbacks()
     kwargs: dict[str, Any] = {
         "backend": policy.backend,
     }
@@ -543,4 +595,5 @@ __all__ = [
     "compile_callable_cached",
     "compile_module_cached",
     "configure_persistent_compile_cache",
+    "register_worldfoundry_inductor_fallbacks",
 ]

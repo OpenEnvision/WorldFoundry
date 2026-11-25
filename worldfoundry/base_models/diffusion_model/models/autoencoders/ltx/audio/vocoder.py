@@ -22,6 +22,16 @@ import torch.nn.functional as F
 from torch import nn
 
 from worldfoundry.base_models.diffusion_model.models.autoencoders.ltx.audio.resnet import LRELU_SLOPE, ResBlock1
+from worldfoundry.base_models.diffusion_model.models.autoencoders.ltx.audio.triton_audio_ops import (
+    can_use_triton_activation1d_snake,
+    triton_activation1d_snake,
+    triton_mean3_1d,
+    triton_residual_bias_add_1d,
+)
+
+
+def _has_hooks(module: nn.Module) -> bool:
+    return bool(module._forward_hooks or module._forward_pre_hooks)
 
 
 def get_padding(kernel_size: int, dilation: int = 1) -> int:
@@ -196,7 +206,77 @@ class Activation1d(nn.Module):
         self.upsample = UpSample1d(up_ratio, up_kernel_size)
         self.downsample = DownSample1d(down_ratio, down_kernel_size)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def _can_use_fused_triton(
+        self,
+        x: torch.Tensor,
+        pre_bias: torch.Tensor | None = None,
+    ) -> bool:
+        if (
+            type(self) is not Activation1d
+            or _has_hooks(self)
+            or type(self.upsample) is not UpSample1d
+            or _has_hooks(self.upsample)
+            or type(self.downsample) is not DownSample1d
+            or _has_hooks(self.downsample)
+            or type(self.downsample.lowpass) is not LowPassFilter1d
+            or _has_hooks(self.downsample.lowpass)
+            or type(self.act) not in (Snake, SnakeBeta)
+            or _has_hooks(self.act)
+        ):
+            return False
+        if (
+            self.upsample.ratio != 2
+            or self.upsample.stride != 2
+            or self.upsample.kernel_size != 12
+            or self.downsample.ratio != 2
+            or self.downsample.lowpass.stride != 2
+            or self.downsample.lowpass.kernel_size != 12
+            or not self.downsample.lowpass.padding
+            or self.downsample.lowpass.padding_mode != "replicate"
+        ):
+            return False
+        act = self.act
+        up_filter = self.upsample.filter
+        down_filter = self.downsample.lowpass.filter
+        if (
+            not isinstance(act, (Snake, SnakeBeta))
+            or not isinstance(up_filter, torch.Tensor)
+            or not isinstance(down_filter, torch.Tensor)
+        ):
+            return False
+        beta = act.beta if isinstance(act, SnakeBeta) else None
+        return can_use_triton_activation1d_snake(
+            x,
+            up_filter,
+            down_filter,
+            act.alpha,
+            beta,
+            pre_bias,
+        )
+
+    def forward(self, x: torch.Tensor, *, pre_bias: torch.Tensor | None = None) -> torch.Tensor:
+        if self._can_use_fused_triton(x, pre_bias=pre_bias):
+            act = self.act
+            up_filter = self.upsample.filter
+            down_filter = self.downsample.lowpass.filter
+            if (
+                isinstance(act, (Snake, SnakeBeta))
+                and isinstance(up_filter, torch.Tensor)
+                and isinstance(down_filter, torch.Tensor)
+            ):
+                beta = act.beta if isinstance(act, SnakeBeta) else None
+                return triton_activation1d_snake(
+                    x,
+                    up_filter,
+                    down_filter,
+                    act.alpha,
+                    beta,
+                    eps=act.eps,
+                    alpha_logscale=act.alpha_logscale,
+                    pre_bias=pre_bias,
+                )
+        if pre_bias is not None:
+            x = x + pre_bias.view(1, -1, 1).to(x)
         x = self.upsample(x)
         x = self.act(x)
         return self.downsample(x)
@@ -304,13 +384,34 @@ class AMPBlock1(nn.Module):
         self.acts1 = nn.ModuleList([Activation1d(act_cls(channels)) for _ in range(len(self.convs1))])
         self.acts2 = nn.ModuleList([Activation1d(act_cls(channels)) for _ in range(len(self.convs2))])
 
+    @staticmethod
+    def _can_defer_conv1d_bias(conv: nn.Module, x: torch.Tensor) -> bool:
+        return (
+            type(conv) is nn.Conv1d
+            and not _has_hooks(conv)
+            and conv.bias is not None
+            and conv.padding_mode == "zeros"
+            and x.is_cuda
+            and not torch.is_grad_enabled()
+            and conv.weight.device == x.device
+            and conv.bias.device == x.device
+        )
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         for c1, c2, a1, a2 in zip(self.convs1, self.convs2, self.acts1, self.acts2, strict=True):
             xt = a1(x)
-            xt = c1(xt)
-            xt = a2(xt)
-            xt = c2(xt)
-            x = x + xt
+            if isinstance(c1, nn.Conv1d) and self._can_defer_conv1d_bias(c1, xt) and isinstance(a2, Activation1d):
+                xt = F.conv1d(xt, c1.weight, None, c1.stride, c1.padding, c1.dilation, c1.groups)
+                xt = a2(xt, pre_bias=c1.bias)
+            else:
+                xt = c1(xt)
+                xt = a2(xt)
+            if isinstance(c2, nn.Conv1d) and self._can_defer_conv1d_bias(c2, xt):
+                xt = F.conv1d(xt, c2.weight, None, c2.stride, c2.padding, c2.dilation, c2.groups)
+                x = triton_residual_bias_add_1d(x, xt, c2.bias)
+            else:
+                xt = c2(xt)
+                x = x + xt
         return x
 
 
@@ -444,14 +545,20 @@ class Vocoder(torch.nn.Module):
             start = i * self.num_kernels
             end = start + self.num_kernels
 
-            # Evaluate all resblocks with the same input tensor so they can run
-            # independently (and thus in parallel on accelerator hardware) before
-            # aggregating their outputs via mean.
-            block_outputs = torch.stack(
-                [self.resblocks[idx](x) for idx in range(start, end)],
-                dim=0,
-            )
-            x = block_outputs.mean(dim=0)
+            if self.num_kernels == 3 and x.is_cuda and not torch.is_grad_enabled():
+                b0 = self.resblocks[start](x)
+                b1 = self.resblocks[start + 1](x)
+                b2 = self.resblocks[start + 2](x)
+                x = triton_mean3_1d(b0, b1, b2)
+            else:
+                # Evaluate all resblocks with the same input tensor so they can run
+                # independently (and thus in parallel on accelerator hardware) before
+                # aggregating their outputs via mean.
+                block_outputs = torch.stack(
+                    [self.resblocks[idx](x) for idx in range(start, end)],
+                    dim=0,
+                )
+                x = block_outputs.mean(dim=0)
 
         x = self.act_post(x)
         x = self.conv_post(x)

@@ -79,7 +79,48 @@ def _sdpa_kernel_context():
     return sdpa_kernel(backends=[backends[backend_name]])
 
 
+_FA3_MODULE = None
+_FA3_CHECKED = False
+
+
+def _get_fa3_module():
+    global _FA3_MODULE, _FA3_CHECKED
+    if not _FA3_CHECKED:
+        _FA3_CHECKED = True
+        try:
+            import flash_attn_interface as fa3
+
+            if hasattr(fa3, "flash_attn_func"):
+                _FA3_MODULE = fa3
+        except Exception:
+            _FA3_MODULE = None
+    return _FA3_MODULE
+
+
+def _can_use_fa3_sdpa(query: torch.Tensor, key: torch.Tensor, value: torch.Tensor, attn_mask) -> bool:
+    if attn_mask is not None or torch.is_grad_enabled():
+        return False
+    backend_name = os.environ.get("MINIMAX_H3_TORCH_SDPA_BACKEND", "auto").strip().lower()
+    if backend_name not in {"", "auto", "default"} or _AUTO_SDPA_BACKEND is not None:
+        return False
+    if not (query.is_cuda and key.is_cuda and value.is_cuda):
+        return False
+    if query.dtype not in (torch.bfloat16, torch.float16) or key.dtype != query.dtype or value.dtype != query.dtype:
+        return False
+    if query.ndim != 4 or query.shape[0] <= 0 or query.shape[1] <= 0 or key.shape[1] <= 0:
+        return False
+    if query.shape[3] > 256 or query.stride(-1) != 1 or key.stride(-1) != 1 or value.stride(-1) != 1:
+        return False
+    if torch.cuda.get_device_capability(query.device)[0] != 9:
+        return False
+    return _get_fa3_module() is not None
+
+
 def _sdpa_attention(query, key, value, causal=False, attn_mask=None):
+    if _can_use_fa3_sdpa(query, key, value, attn_mask):
+        fa3 = _get_fa3_module()
+        out = fa3.flash_attn_func(query, key, value, causal=bool(causal))
+        return out[0] if isinstance(out, tuple) else out
     # query/key/value arrive as [B, S, H, D]; PyTorch SDPA expects
     # [B, H, S, D].
     q = query.transpose(1, 2)

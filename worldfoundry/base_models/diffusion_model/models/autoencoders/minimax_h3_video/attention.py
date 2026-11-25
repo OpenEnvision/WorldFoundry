@@ -19,6 +19,7 @@ import torch
 import torch.nn as nn
 
 from .flash import flash_attn
+from .triton_vit_ops import can_use_vit_qk_rmsnorm_rope, vit_fused_qk_rmsnorm_rope
 from .vit_utils import _env_flag, apply_rotary_pos_emb_qk
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
@@ -160,13 +161,39 @@ class Attention(nn.Module):
         qkv = qkv.view(batch_size, seq_len, -1, 3 * self.dim_head)
         query, key, value = torch.chunk(qkv, 3, dim=-1)
 
-        if self.norm_q is not None:
-            query = _apply_qk_norm(self.norm_q, query)
-        if self.norm_k is not None:
-            key = _apply_qk_norm(self.norm_k, key)
+        fused_qk_rope = False
+        if (
+            rotary_pos_emb is not None
+            and isinstance(self.norm_q, nn.RMSNorm)
+            and isinstance(self.norm_k, nn.RMSNorm)
+            and not self.norm_q._forward_hooks
+            and not self.norm_q._forward_pre_hooks
+            and not self.norm_k._forward_hooks
+            and not self.norm_k._forward_pre_hooks
+            and (self.norm_q.weight is None) == (self.norm_k.weight is None)
+            and (self.norm_q.eps == self.norm_k.eps)
+            and can_use_vit_qk_rmsnorm_rope(query, key, rotary_pos_emb[0], rotary_pos_emb[1])
+        ):
+            eps_val = float(self.norm_q.eps) if self.norm_q.eps is not None else float(torch.finfo(query.dtype).eps)
+            query, key = vit_fused_qk_rmsnorm_rope(
+                query,
+                key,
+                rotary_pos_emb[0],
+                rotary_pos_emb[1],
+                q_weight=self.norm_q.weight,
+                k_weight=self.norm_k.weight,
+                eps=eps_val,
+            )
+            fused_qk_rope = True
 
-        if rotary_pos_emb is not None:
-            query, key = apply_rotary_pos_emb_qk(query, key, rotary_pos_emb)
+        if not fused_qk_rope:
+            if self.norm_q is not None:
+                query = _apply_qk_norm(self.norm_q, query)
+            if self.norm_k is not None:
+                key = _apply_qk_norm(self.norm_k, key)
+
+            if rotary_pos_emb is not None:
+                query, key = apply_rotary_pos_emb_qk(query, key, rotary_pos_emb)
 
         hidden_states = self.perform_attention(query, key, value, pack_info)
 

@@ -24,6 +24,14 @@ from typing import Any
 import torch
 import torch.nn.functional as F
 
+from worldfoundry.base_models.diffusion_model.models.networks.wan.variants.forcing.fast_kernels import (
+    sf_layernorm_adaln,
+    sf_qk_rmsnorm_rope_write_kv,
+    sf_residual_add_layernorm_adaln,
+    sf_residual_gate_add,
+    sf_residual_gate_add_layernorm,
+    sf_rmsnorm,
+)
 from worldfoundry.core.platform.compile_cache import configure_persistent_compile_cache
 
 configure_persistent_compile_cache(namespace="longlive-triton")
@@ -34,8 +42,17 @@ try:
     from triton.language.extra.cuda import libdevice as _libdevice
 
     @triton.jit
-    def _round_f32_to_bf16(value):
+    def _round_f32_to_bf16(value, USE_BF16_PTX: tl.constexpr):
         """Materialize an IEEE round-to-nearest-even BF16 boundary in registers."""
+        if USE_BF16_PTX:
+            return tl.inline_asm_elementwise(
+                "{ .reg .b16 rounded; cvt.rn.bf16.f32 rounded, $1; mov.b32 $0, {0, rounded}; }",
+                constraints="=f,f",
+                args=[value],
+                dtype=tl.float32,
+                is_pure=True,
+                pack=1,
+            )
         bits = value.to(tl.uint32, bitcast=True)
         rounding_bias = 0x7FFF + ((bits >> 16) & 1)
         rounded = (bits + rounding_bias) & 0xFFFF0000
@@ -54,154 +71,19 @@ try:
         )
 
     @triton.jit
-    def _round_to_dtype(value, dtype: tl.constexpr):
+    def _round_to_dtype(value, dtype: tl.constexpr, USE_BF16_PTX: tl.constexpr = True):
         if dtype == tl.bfloat16:
-            return _round_f32_to_bf16(value)
+            return _round_f32_to_bf16(value, USE_BF16_PTX)
         elif dtype == tl.float16:
             return _round_f32_to_fp16(value)
         else:
             return value
 
     @triton.jit
-    def _round_to_code(value, dtype_code: tl.constexpr):
-        if dtype_code == 1:
-            return _round_f32_to_bf16(value)
-        elif dtype_code == 2:
-            return _round_f32_to_fp16(value)
-        else:
-            return value
-
-    @triton.jit
-    def _wan_scale_shift_kernel(
-        normed_ptr,
-        scale_ptr,
-        shift_ptr,
-        out_ptr,
-        rows,
-        frame_seq,
-        hidden_size: tl.constexpr,
-        block: tl.constexpr,
-        mul_dtype_code: tl.constexpr,
-    ):
-        """Bit-exact per-frame AdaLN ``normed * (1 + scale) + shift`` on pre-normed input."""
-        row = tl.program_id(0)
-        cols = tl.arange(0, block)
-        mask = (row < rows) & (cols < hidden_size)
-
-        x_off = row.to(tl.int64) * hidden_size + cols
-        normed_in = tl.load(normed_ptr + x_off, mask=mask, other=0.0)
-        normed = normed_in.to(tl.float32)
-
-        frame_row = row // frame_seq
-        mod_off = frame_row.to(tl.int64) * hidden_size + cols
-        scale_in = tl.load(scale_ptr + mod_off, mask=mask, other=0.0)
-        shift_in = tl.load(shift_ptr + mod_off, mask=mask, other=0.0)
-
-        scale_factor = _round_to_dtype(1.0 + scale_in.to(tl.float32), scale_in.dtype)
-        modulated = _round_to_code(normed * scale_factor, mul_dtype_code)
-        out = modulated + shift_in.to(tl.float32)
-        tl.store(out_ptr + x_off, out, mask=mask)
-
-    @triton.jit
-    def _wan_layernorm_adaln_kernel(
-        x_ptr,
-        scale_ptr,
-        shift_ptr,
-        out_ptr,
-        rows,
-        num_frames,
-        frame_seq,
-        eps,
-        hidden_size: tl.constexpr,
-        block: tl.constexpr,
-        mul_dtype_code: tl.constexpr,
-    ):
-        """Fused FP64-accumulated LayerNorm (no affine) + per-frame AdaLN ``(1 + scale) + shift``."""
-        row = tl.program_id(0)
-        cols = tl.arange(0, block)
-        mask = (row < rows) & (cols < hidden_size)
-
-        x_off = row.to(tl.int64) * hidden_size + cols
-        x_in = tl.load(x_ptr + x_off, mask=mask, other=0.0)
-        x_f64 = x_in.to(tl.float64)
-
-        mean = tl.sum(x_f64, axis=0) / hidden_size
-        diff = tl.where(mask, x_f64 - mean, 0.0)
-        var = (tl.sum(diff * diff, axis=0) / hidden_size).to(tl.float32)
-        inv_std = _libdevice.rsqrt(var + eps)
-        normed = _round_to_dtype(diff.to(tl.float32) * inv_std, x_in.dtype)
-
-        frame_row = row // frame_seq
-        mod_off = frame_row.to(tl.int64) * hidden_size + cols
-        scale_in = tl.load(scale_ptr + mod_off, mask=mask, other=0.0)
-        shift_in = tl.load(shift_ptr + mod_off, mask=mask, other=0.0)
-
-        scale_factor = _round_to_dtype(1.0 + scale_in.to(tl.float32), scale_in.dtype)
-        modulated = _round_to_code(normed * scale_factor, mul_dtype_code)
-        out = modulated + shift_in.to(tl.float32)
-        tl.store(out_ptr + x_off, out, mask=mask)
-
-    @triton.jit
-    def _wan_residual_gate_add_kernel(
-        x_ptr,
-        y_ptr,
-        gate_ptr,
-        out_ptr,
-        rows,
-        frame_seq,
-        hidden_size: tl.constexpr,
-        block: tl.constexpr,
-        prod_dtype_code: tl.constexpr,
-    ):
-        """Fused ``x + (y * gate)`` where ``gate`` broadcasts across ``frame_seq`` tokens."""
-        row = tl.program_id(0)
-        cols = tl.arange(0, block)
-        mask = (row < rows) & (cols < hidden_size)
-
-        off = row.to(tl.int64) * hidden_size + cols
-        x_in = tl.load(x_ptr + off, mask=mask, other=0.0)
-        y_in = tl.load(y_ptr + off, mask=mask, other=0.0)
-
-        frame_row = row // frame_seq
-        gate_off = frame_row.to(tl.int64) * hidden_size + cols
-        gate_in = tl.load(gate_ptr + gate_off, mask=mask, other=0.0)
-
-        prod = _round_to_code(y_in.to(tl.float32) * gate_in.to(tl.float32), prod_dtype_code)
-        out = x_in.to(tl.float32) + prod
-        tl.store(out_ptr + off, out, mask=mask)
-
-    @triton.jit
-    def _wan_rmsnorm_kernel(
-        x_ptr,
-        w_ptr,
-        out_ptr,
-        rows,
-        x_row_stride,
-        eps,
-        hidden_size: tl.constexpr,
-        block: tl.constexpr,
-    ):
-        """Single-pass ``WanRMSNorm`` matching ``(x * rsqrt(mean(x^2)+eps)).type_as(x) * w``."""
-        row = tl.program_id(0)
-        cols = tl.arange(0, block)
-        mask = (row < rows) & (cols < hidden_size)
-
-        x_off = row.to(tl.int64) * x_row_stride + cols
-        x_in = tl.load(x_ptr + x_off, mask=mask, other=0.0)
-        x_f = x_in.to(tl.float32)
-        x_f64 = x_f.to(tl.float64)
-        mean_sq = (tl.sum(x_f64 * x_f64, axis=0) / hidden_size).to(tl.float32)
-        rstd = _libdevice.rsqrt(mean_sq + eps)
-        normed = _round_to_dtype(x_f * rstd, x_in.dtype)
-        w = tl.load(w_ptr + cols, mask=mask, other=0.0).to(tl.float32)
-        out = normed * w
-        out_off = row.to(tl.int64) * hidden_size + cols
-        tl.store(out_ptr + out_off, out, mask=mask)
-
-    @triton.jit
     def _wan_qk_rmsnorm_rope_write_kv_kernel(
         q_in_ptr,
         k_in_ptr,
+        v_in_ptr,
         q_w_ptr,
         k_w_ptr,
         cos_ptr,
@@ -209,120 +91,102 @@ try:
         q_out_ptr,
         k_rot_out_ptr,
         k_raw_out_ptr,
+        v_out_ptr,
         seq_len,
         q_row_stride,
         k_row_stride,
+        v_row_stride,
         k_dst_batch_stride,
         k_dst_seq_stride,
+        v_dst_batch_stride,
+        v_dst_seq_stride,
         dst_token_offset,
         eps,
         hidden_size: tl.constexpr,
         half_head_dim: tl.constexpr,
+        block: tl.constexpr,
         block_pairs: tl.constexpr,
         WRITE_RAW_K: tl.constexpr,
+        WRITE_V: tl.constexpr,
         USE_FP64: tl.constexpr,
+        USE_BF16_PTX: tl.constexpr,
     ):
-        """Fuse Q/K full-hidden WanRMSNorm + interleaved 3D RoPE + KV cache store."""
+        """Coalesced 128-bit single-pass Q/K WanRMSNorm + 3D RoPE + dual K + V cache store."""
         row = tl.program_id(0)
         batch_idx = row // seq_len
         tok_idx = row % seq_len
 
+        cols = tl.arange(0, block)
+        cmask = cols < hidden_size
         pair = tl.arange(0, block_pairs)
-        even_col = pair * 2
-        odd_col = even_col + 1
-        pmask = odd_col < hidden_size
+        pmask = pair < (hidden_size // 2)
 
         q_base = row.to(tl.int64) * q_row_stride
         k_base = row.to(tl.int64) * k_row_stride
 
-        qe_in = tl.load(q_in_ptr + q_base + even_col, mask=pmask, other=0.0)
-        qo_in = tl.load(q_in_ptr + q_base + odd_col, mask=pmask, other=0.0)
-        ke_in = tl.load(k_in_ptr + k_base + even_col, mask=pmask, other=0.0)
-        ko_in = tl.load(k_in_ptr + k_base + odd_col, mask=pmask, other=0.0)
+        if WRITE_V:
+            v_base = row.to(tl.int64) * v_row_stride
+            v_in = tl.load(v_in_ptr + v_base + cols, mask=cmask, other=0.0)
+            v_dst_base = (
+                batch_idx.to(tl.int64) * v_dst_batch_stride
+                + (dst_token_offset + tok_idx).to(tl.int64) * v_dst_seq_stride
+            )
+            tl.store(v_out_ptr + v_dst_base + cols, v_in, mask=cmask)
 
-        qe_f = qe_in.to(tl.float32)
-        qo_f = qo_in.to(tl.float32)
-        ke_f = ke_in.to(tl.float32)
-        ko_f = ko_in.to(tl.float32)
+        q_in = tl.load(q_in_ptr + q_base + cols, mask=cmask, other=0.0)
+        k_in = tl.load(k_in_ptr + k_base + cols, mask=cmask, other=0.0)
+        qf = q_in.to(tl.float32)
+        kf = k_in.to(tl.float32)
 
-        qe_64 = qe_f.to(tl.float64)
-        qo_64 = qo_f.to(tl.float64)
-        ke_64 = ke_f.to(tl.float64)
-        ko_64 = ko_f.to(tl.float64)
-        q_mean_sq = (tl.sum(qe_64 * qe_64 + qo_64 * qo_64, axis=0) / hidden_size).to(tl.float32)
-        k_mean_sq = (tl.sum(ke_64 * ke_64 + ko_64 * ko_64, axis=0) / hidden_size).to(tl.float32)
+        q_mean_sq = tl.sum(qf * qf, axis=0) / hidden_size
+        k_mean_sq = tl.sum(kf * kf, axis=0) / hidden_size
         q_rstd = _libdevice.rsqrt(q_mean_sq + eps)
         k_rstd = _libdevice.rsqrt(k_mean_sq + eps)
 
-        qwe = tl.load(q_w_ptr + even_col, mask=pmask, other=0.0).to(tl.float32)
-        qwo = tl.load(q_w_ptr + odd_col, mask=pmask, other=0.0).to(tl.float32)
-        kwe = tl.load(k_w_ptr + even_col, mask=pmask, other=0.0).to(tl.float32)
-        kwo = tl.load(k_w_ptr + odd_col, mask=pmask, other=0.0).to(tl.float32)
+        qw = tl.load(q_w_ptr + cols, mask=cmask, other=0.0).to(tl.float32)
+        kw = tl.load(k_w_ptr + cols, mask=cmask, other=0.0).to(tl.float32)
 
-        qe = _round_to_dtype(_round_to_dtype(qe_f * q_rstd, qe_in.dtype) * qwe, qe_in.dtype)
-        qo = _round_to_dtype(_round_to_dtype(qo_f * q_rstd, qo_in.dtype) * qwo, qo_in.dtype)
-        ke = _round_to_dtype(_round_to_dtype(ke_f * k_rstd, ke_in.dtype) * kwe, ke_in.dtype)
-        ko = _round_to_dtype(_round_to_dtype(ko_f * k_rstd, ko_in.dtype) * kwo, ko_in.dtype)
+        q_n = _round_to_dtype(_round_to_dtype(qf * q_rstd, q_in.dtype, USE_BF16_PTX) * qw, q_in.dtype, USE_BF16_PTX)
+        k_n = _round_to_dtype(_round_to_dtype(kf * k_rstd, k_in.dtype, USE_BF16_PTX) * kw, k_in.dtype, USE_BF16_PTX)
 
         k_dst_base = (
             batch_idx.to(tl.int64) * k_dst_batch_stride + (dst_token_offset + tok_idx).to(tl.int64) * k_dst_seq_stride
         )
         if WRITE_RAW_K:
-            tl.store(k_raw_out_ptr + k_dst_base + even_col, ke, mask=pmask)
-            tl.store(k_raw_out_ptr + k_dst_base + odd_col, ko, mask=pmask)
+            tl.store(k_raw_out_ptr + k_dst_base + cols, k_n.to(k_in.dtype), mask=cmask)
+
+        qe, qo = tl.split(tl.reshape(q_n, (block_pairs, 2)))
+        ke, ko = tl.split(tl.reshape(k_n, (block_pairs, 2)))
 
         pair_in_head = pair % half_head_dim
         cs_off = tok_idx.to(tl.int64) * half_head_dim + pair_in_head
         if USE_FP64:
             c = tl.load(cos_ptr + cs_off, mask=pmask, other=1.0).to(tl.float64)
             s = tl.load(sin_ptr + cs_off, mask=pmask, other=0.0).to(tl.float64)
-            rqe = (qe.to(tl.float64) * c - qo.to(tl.float64) * s).to(tl.float32).to(qe_in.dtype)
-            rqo = (qe.to(tl.float64) * s + qo.to(tl.float64) * c).to(tl.float32).to(qo_in.dtype)
-            rke = (ke.to(tl.float64) * c - ko.to(tl.float64) * s).to(tl.float32).to(ke_in.dtype)
-            rko = (ke.to(tl.float64) * s + ko.to(tl.float64) * c).to(tl.float32).to(ko_in.dtype)
+            rqe = (qe.to(tl.float64) * c - qo.to(tl.float64) * s).to(tl.float32).to(q_in.dtype)
+            rqo = (qe.to(tl.float64) * s + qo.to(tl.float64) * c).to(tl.float32).to(q_in.dtype)
+            rke = (ke.to(tl.float64) * c - ko.to(tl.float64) * s).to(tl.float32).to(k_in.dtype)
+            rko = (ke.to(tl.float64) * s + ko.to(tl.float64) * c).to(tl.float32).to(k_in.dtype)
         else:
             c = tl.load(cos_ptr + cs_off, mask=pmask, other=1.0).to(tl.float32)
             s = tl.load(sin_ptr + cs_off, mask=pmask, other=0.0).to(tl.float32)
-            rqe = (qe * c - qo * s).to(qe_in.dtype)
-            rqo = (qe * s + qo * c).to(qo_in.dtype)
-            rke = (ke * c - ko * s).to(ke_in.dtype)
-            rko = (ke * s + ko * c).to(ko_in.dtype)
+            rqe = (qe * c - qo * s).to(q_in.dtype)
+            rqo = (qe * s + qo * c).to(q_in.dtype)
+            rke = (ke * c - ko * s).to(k_in.dtype)
+            rko = (ke * s + ko * c).to(k_in.dtype)
+
+        rq = tl.reshape(tl.join(rqe, rqo), (block,))
+        rk = tl.reshape(tl.join(rke, rko), (block,))
 
         q_out_base = row.to(tl.int64) * hidden_size
-        tl.store(q_out_ptr + q_out_base + even_col, rqe, mask=pmask)
-        tl.store(q_out_ptr + q_out_base + odd_col, rqo, mask=pmask)
-        tl.store(k_rot_out_ptr + k_dst_base + even_col, rke, mask=pmask)
-        tl.store(k_rot_out_ptr + k_dst_base + odd_col, rko, mask=pmask)
-
-    @triton.jit
-    def _wan_apply_rstd_weight_kernel(
-        x_ptr,
-        rstd_ptr,
-        w_ptr,
-        out_ptr,
-        rows,
-        x_row_stride,
-        hidden_size: tl.constexpr,
-        block: tl.constexpr,
-    ):
-        """Bit-exact ``(x.float() * rstd).type_as(x) * w`` using precomputed exact PyTorch ``rstd``."""
-        row = tl.program_id(0)
-        cols = tl.arange(0, block)
-        mask = (row < rows) & (cols < hidden_size)
-
-        x_off = row.to(tl.int64) * x_row_stride + cols
-        x_in = tl.load(x_ptr + x_off, mask=mask, other=0.0)
-        rstd = tl.load(rstd_ptr + row, mask=row < rows, other=1.0).to(tl.float32)
-        normed = _round_to_dtype(x_in.to(tl.float32) * rstd, x_in.dtype)
-        w = tl.load(w_ptr + cols, mask=mask, other=0.0).to(tl.float32)
-        out = normed * w
-        out_off = row.to(tl.int64) * hidden_size + cols
-        tl.store(out_ptr + out_off, out, mask=mask)
+        tl.store(q_out_ptr + q_out_base + cols, rq, mask=cmask)
+        tl.store(k_rot_out_ptr + k_dst_base + cols, rk, mask=cmask)
 
     @triton.jit
     def _wan_qk_apply_rstd_rope_write_kv_kernel(
         q_in_ptr,
         k_in_ptr,
+        v_in_ptr,
         q_rstd_ptr,
         k_rstd_ptr,
         q_w_ptr,
@@ -332,78 +196,94 @@ try:
         q_out_ptr,
         k_rot_out_ptr,
         k_raw_out_ptr,
+        v_out_ptr,
         seq_len,
         q_row_stride,
         k_row_stride,
+        v_row_stride,
         k_dst_batch_stride,
         k_dst_seq_stride,
+        v_dst_batch_stride,
+        v_dst_seq_stride,
         dst_token_offset,
         hidden_size: tl.constexpr,
         half_head_dim: tl.constexpr,
+        block: tl.constexpr,
         block_pairs: tl.constexpr,
         WRITE_RAW_K: tl.constexpr,
+        WRITE_V: tl.constexpr,
         USE_FP64: tl.constexpr,
+        USE_BF16_PTX: tl.constexpr,
     ):
-        """Bit-exact fused Q/K rstd-scale + weight + raw-K write + 3D RoPE + rotated-K write."""
+        """Bit-exact coalesced 128-bit Q/K rstd-scale + weight + raw-K + 3D RoPE + rotated-K + V write."""
         row = tl.program_id(0)
         batch_idx = row // seq_len
         tok_idx = row % seq_len
 
+        cols = tl.arange(0, block)
+        cmask = cols < hidden_size
         pair = tl.arange(0, block_pairs)
-        even_col = pair * 2
-        odd_col = even_col + 1
-        pmask = odd_col < hidden_size
+        pmask = pair < (hidden_size // 2)
 
         q_base = row.to(tl.int64) * q_row_stride
         k_base = row.to(tl.int64) * k_row_stride
 
-        qe_in = tl.load(q_in_ptr + q_base + even_col, mask=pmask, other=0.0)
-        qo_in = tl.load(q_in_ptr + q_base + odd_col, mask=pmask, other=0.0)
-        ke_in = tl.load(k_in_ptr + k_base + even_col, mask=pmask, other=0.0)
-        ko_in = tl.load(k_in_ptr + k_base + odd_col, mask=pmask, other=0.0)
+        if WRITE_V:
+            v_base = row.to(tl.int64) * v_row_stride
+            v_in = tl.load(v_in_ptr + v_base + cols, mask=cmask, other=0.0)
+            v_dst_base = (
+                batch_idx.to(tl.int64) * v_dst_batch_stride
+                + (dst_token_offset + tok_idx).to(tl.int64) * v_dst_seq_stride
+            )
+            tl.store(v_out_ptr + v_dst_base + cols, v_in, mask=cmask)
 
+        q_in = tl.load(q_in_ptr + q_base + cols, mask=cmask, other=0.0)
+        k_in = tl.load(k_in_ptr + k_base + cols, mask=cmask, other=0.0)
         q_rstd = tl.load(q_rstd_ptr + row).to(tl.float32)
         k_rstd = tl.load(k_rstd_ptr + row).to(tl.float32)
 
-        qwe = tl.load(q_w_ptr + even_col, mask=pmask, other=0.0).to(tl.float32)
-        qwo = tl.load(q_w_ptr + odd_col, mask=pmask, other=0.0).to(tl.float32)
-        kwe = tl.load(k_w_ptr + even_col, mask=pmask, other=0.0).to(tl.float32)
-        kwo = tl.load(k_w_ptr + odd_col, mask=pmask, other=0.0).to(tl.float32)
+        qw = tl.load(q_w_ptr + cols, mask=cmask, other=0.0).to(tl.float32)
+        kw = tl.load(k_w_ptr + cols, mask=cmask, other=0.0).to(tl.float32)
 
-        qe = _round_to_dtype(_round_to_dtype(qe_in.to(tl.float32) * q_rstd, qe_in.dtype) * qwe, qe_in.dtype)
-        qo = _round_to_dtype(_round_to_dtype(qo_in.to(tl.float32) * q_rstd, qo_in.dtype) * qwo, qo_in.dtype)
-        ke = _round_to_dtype(_round_to_dtype(ke_in.to(tl.float32) * k_rstd, ke_in.dtype) * kwe, ke_in.dtype)
-        ko = _round_to_dtype(_round_to_dtype(ko_in.to(tl.float32) * k_rstd, ko_in.dtype) * kwo, ko_in.dtype)
+        q_n = _round_to_dtype(
+            _round_to_dtype(q_in.to(tl.float32) * q_rstd, q_in.dtype, USE_BF16_PTX) * qw, q_in.dtype, USE_BF16_PTX
+        )
+        k_n = _round_to_dtype(
+            _round_to_dtype(k_in.to(tl.float32) * k_rstd, k_in.dtype, USE_BF16_PTX) * kw, k_in.dtype, USE_BF16_PTX
+        )
 
         k_dst_base = (
             batch_idx.to(tl.int64) * k_dst_batch_stride + (dst_token_offset + tok_idx).to(tl.int64) * k_dst_seq_stride
         )
         if WRITE_RAW_K:
-            tl.store(k_raw_out_ptr + k_dst_base + even_col, ke, mask=pmask)
-            tl.store(k_raw_out_ptr + k_dst_base + odd_col, ko, mask=pmask)
+            tl.store(k_raw_out_ptr + k_dst_base + cols, k_n.to(k_in.dtype), mask=cmask)
+
+        qe, qo = tl.split(tl.reshape(q_n, (block_pairs, 2)))
+        ke, ko = tl.split(tl.reshape(k_n, (block_pairs, 2)))
 
         pair_in_head = pair % half_head_dim
         cs_off = tok_idx.to(tl.int64) * half_head_dim + pair_in_head
         if USE_FP64:
             c = tl.load(cos_ptr + cs_off, mask=pmask, other=1.0).to(tl.float64)
             s = tl.load(sin_ptr + cs_off, mask=pmask, other=0.0).to(tl.float64)
-            rqe = (qe.to(tl.float64) * c - qo.to(tl.float64) * s).to(tl.float32).to(qe_in.dtype)
-            rqo = (qe.to(tl.float64) * s + qo.to(tl.float64) * c).to(tl.float32).to(qo_in.dtype)
-            rke = (ke.to(tl.float64) * c - ko.to(tl.float64) * s).to(tl.float32).to(ke_in.dtype)
-            rko = (ke.to(tl.float64) * s + ko.to(tl.float64) * c).to(tl.float32).to(ko_in.dtype)
+            rqe = (qe.to(tl.float64) * c - qo.to(tl.float64) * s).to(tl.float32).to(q_in.dtype)
+            rqo = (qe.to(tl.float64) * s + qo.to(tl.float64) * c).to(tl.float32).to(q_in.dtype)
+            rke = (ke.to(tl.float64) * c - ko.to(tl.float64) * s).to(tl.float32).to(k_in.dtype)
+            rko = (ke.to(tl.float64) * s + ko.to(tl.float64) * c).to(tl.float32).to(k_in.dtype)
         else:
             c = tl.load(cos_ptr + cs_off, mask=pmask, other=1.0).to(tl.float32)
             s = tl.load(sin_ptr + cs_off, mask=pmask, other=0.0).to(tl.float32)
-            rqe = (qe * c - qo * s).to(qe_in.dtype)
-            rqo = (qe * s + qo * c).to(qo_in.dtype)
-            rke = (ke * c - ko * s).to(ke_in.dtype)
-            rko = (ke * s + ko * c).to(ko_in.dtype)
+            rqe = (qe * c - qo * s).to(q_in.dtype)
+            rqo = (qe * s + qo * c).to(q_in.dtype)
+            rke = (ke * c - ko * s).to(k_in.dtype)
+            rko = (ke * s + ko * c).to(k_in.dtype)
+
+        rq = tl.reshape(tl.join(rqe, rqo), (block,))
+        rk = tl.reshape(tl.join(rke, rko), (block,))
 
         q_out_base = row.to(tl.int64) * hidden_size
-        tl.store(q_out_ptr + q_out_base + even_col, rqe, mask=pmask)
-        tl.store(q_out_ptr + q_out_base + odd_col, rqo, mask=pmask)
-        tl.store(k_rot_out_ptr + k_dst_base + even_col, rke, mask=pmask)
-        tl.store(k_rot_out_ptr + k_dst_base + odd_col, rko, mask=pmask)
+        tl.store(q_out_ptr + q_out_base + cols, rq, mask=cmask)
+        tl.store(k_rot_out_ptr + k_dst_base + cols, rk, mask=cmask)
 
     @triton.jit
     def _wan_exact_real_rope_bshd_kernel(
@@ -418,48 +298,50 @@ try:
         out_batch_stride,
         out_seq_stride,
         out_head_stride,
+        head_dim: tl.constexpr,
         half_head_dim: tl.constexpr,
+        block: tl.constexpr,
         block_pairs: tl.constexpr,
         USE_FP64: tl.constexpr,
     ):
-        """Bit-exact 3D RoPE matching PyTorch ``causal_rope_apply`` (``enable_fp_fusion=False``)."""
+        """Bit-exact coalesced 128-bit 3D RoPE matching PyTorch ``causal_rope_apply``."""
         row = tl.program_id(0)
         head = tl.program_id(1)
         batch_idx = row // seq_len
         tok_idx = row % seq_len
 
+        cols = tl.arange(0, block)
+        cmask = cols < head_dim
         pair = tl.arange(0, block_pairs)
         pmask = pair < half_head_dim
-        even_col = pair * 2
-        odd_col = even_col + 1
 
         x_base = (
             batch_idx.to(tl.int64) * x_batch_stride
             + tok_idx.to(tl.int64) * x_seq_stride
             + head.to(tl.int64) * x_head_stride
         )
-        xe_in = tl.load(x_ptr + x_base + even_col, mask=pmask, other=0.0)
-        xo_in = tl.load(x_ptr + x_base + odd_col, mask=pmask, other=0.0)
+        x_in = tl.load(x_ptr + x_base + cols, mask=cmask, other=0.0)
+        xe_in, xo_in = tl.split(tl.reshape(x_in, (block_pairs, 2)))
 
         cs_off = tok_idx.to(tl.int64) * half_head_dim + pair
         if USE_FP64:
             c = tl.load(cos_ptr + cs_off, mask=pmask, other=1.0).to(tl.float64)
             s = tl.load(sin_ptr + cs_off, mask=pmask, other=0.0).to(tl.float64)
-            rxe = (xe_in.to(tl.float64) * c - xo_in.to(tl.float64) * s).to(tl.float32).to(xe_in.dtype)
-            rxo = (xe_in.to(tl.float64) * s + xo_in.to(tl.float64) * c).to(tl.float32).to(xo_in.dtype)
+            rxe = (xe_in.to(tl.float64) * c - xo_in.to(tl.float64) * s).to(tl.float32).to(x_in.dtype)
+            rxo = (xe_in.to(tl.float64) * s + xo_in.to(tl.float64) * c).to(tl.float32).to(x_in.dtype)
         else:
             c = tl.load(cos_ptr + cs_off, mask=pmask, other=1.0).to(tl.float32)
             s = tl.load(sin_ptr + cs_off, mask=pmask, other=0.0).to(tl.float32)
-            rxe = (xe_in.to(tl.float32) * c - xo_in.to(tl.float32) * s).to(xe_in.dtype)
-            rxo = (xe_in.to(tl.float32) * s + xo_in.to(tl.float32) * c).to(xo_in.dtype)
+            rxe = (xe_in.to(tl.float32) * c - xo_in.to(tl.float32) * s).to(x_in.dtype)
+            rxo = (xe_in.to(tl.float32) * s + xo_in.to(tl.float32) * c).to(x_in.dtype)
 
+        rx = tl.reshape(tl.join(rxe, rxo), (block,))
         out_base = (
             batch_idx.to(tl.int64) * out_batch_stride
             + tok_idx.to(tl.int64) * out_seq_stride
             + head.to(tl.int64) * out_head_stride
         )
-        tl.store(out_ptr + out_base + even_col, rxe, mask=pmask)
-        tl.store(out_ptr + out_base + odd_col, rxo, mask=pmask)
+        tl.store(out_ptr + out_base + cols, rx, mask=cmask)
 
     _TRITON_AVAILABLE = True
 except Exception:
@@ -490,42 +372,8 @@ def hopper_fa3_usable(device: torch.device | str | None = None) -> bool:
     return _FA3_MODULE is not None and callable(getattr(_FA3_MODULE, "flash_attn_func", None))
 
 
-def _dtype_to_round_code(dtype: torch.dtype) -> int:
-    if dtype == torch.bfloat16:
-        return 1
-    if dtype == torch.float16:
-        return 2
-    return 0
-
-
-def _prepare_frame_mod_tensor(
-    t: torch.Tensor,
-    *,
-    batch: int,
-    num_frames: int,
-    hidden: int,
-    device: torch.device,
-) -> torch.Tensor | None:
-    """Validate and materialize a ``[batch * num_frames, hidden]`` per-frame modulation tensor."""
-    if not t.is_cuda or t.device != device or t.shape[-1] != hidden:
-        return None
-    if t.ndim == 4:
-        if t.shape[2] != 1:
-            return None
-        b_s, f_s = int(t.shape[0]), int(t.shape[1])
-        if b_s not in (1, batch) or f_s not in (1, num_frames):
-            return None
-        if b_s == batch and f_s == num_frames:
-            return t.reshape(batch * num_frames, hidden).contiguous()
-        return t.expand(batch, num_frames, 1, hidden).reshape(batch * num_frames, hidden).contiguous()
-    if t.ndim == 3:
-        b_s, f_s = int(t.shape[0]), int(t.shape[1])
-        if b_s not in (1, batch) or f_s not in (1, num_frames):
-            return None
-        if b_s == batch and f_s == num_frames:
-            return t.reshape(batch * num_frames, hidden).contiguous()
-        return t.expand(batch, num_frames, hidden).reshape(batch * num_frames, hidden).contiguous()
-    return None
+def _use_bf16_ptx(device: torch.device) -> bool:
+    return device.type == "cuda" and torch.cuda.get_device_capability(device)[0] >= 8
 
 
 def wan_layernorm_adaln(
@@ -538,65 +386,17 @@ def wan_layernorm_adaln(
     eps: float = 1e-6,
     exact: bool = True,
 ) -> torch.Tensor:
-    """Bit-exact ``WanLayerNorm`` + fused Triton per-frame AdaLN ``(1 + scale) + shift``."""
-    hidden = int(x.shape[-1])
-    if (
-        _TRITON_AVAILABLE
-        and x.is_cuda
-        and not torch.is_grad_enabled()
-        and x.ndim == 3
-        and x.is_contiguous()
-        and hidden <= 4096
-        and num_frames > 0
-        and frame_seq > 0
-        and x.shape[1] == num_frames * frame_seq
-    ):
-        batch = int(x.shape[0])
-        scale_c = _prepare_frame_mod_tensor(scale, batch=batch, num_frames=num_frames, hidden=hidden, device=x.device)
-        shift_c = _prepare_frame_mod_tensor(shift, batch=batch, num_frames=num_frames, hidden=hidden, device=x.device)
-        if scale_c is not None and shift_c is not None:
-            mul_dtype = torch.promote_types(x.dtype, scale.dtype)
-            out_dtype = torch.promote_types(mul_dtype, shift.dtype)
-            mul_code = _dtype_to_round_code(mul_dtype)
-            out = torch.empty_like(x, dtype=out_dtype)
-            rows = int(x.shape[0] * x.shape[1])
-            block = triton.next_power_of_2(hidden)
-            if exact:
-                normed = F.layer_norm(x, (hidden,), weight=None, bias=None, eps=eps).type_as(x)
-                _wan_scale_shift_kernel[(rows,)](
-                    normed,
-                    scale_c,
-                    shift_c,
-                    out,
-                    rows,
-                    frame_seq,
-                    hidden_size=hidden,
-                    block=block,
-                    mul_dtype_code=mul_code,
-                    num_warps=8 if block >= 1024 else 4,
-                    enable_fp_fusion=False,
-                )
-            else:
-                _wan_layernorm_adaln_kernel[(rows,)](
-                    x,
-                    scale_c,
-                    shift_c,
-                    out,
-                    rows,
-                    num_frames,
-                    frame_seq,
-                    float(eps),
-                    hidden_size=hidden,
-                    block=block,
-                    mul_dtype_code=mul_code,
-                    num_warps=8 if block >= 1024 else 4,
-                    enable_fp_fusion=False,
-                )
-            return out
-    normed = F.layer_norm(x, (hidden,), weight=None, bias=None, eps=eps).type_as(x)
-    scale_b = scale.unsqueeze(2) if scale.ndim == 3 else scale
-    shift_b = shift.unsqueeze(2) if shift.ndim == 3 else shift
-    return (normed.unflatten(1, (num_frames, frame_seq)) * (1 + scale_b) + shift_b).flatten(1, 2)
+    """``WanLayerNorm`` + fused Triton per-frame AdaLN ``(1 + scale) + shift`` (zero mod copies)."""
+    return sf_layernorm_adaln(
+        x,
+        scale,
+        shift,
+        num_frames=num_frames,
+        frame_seq=frame_seq,
+        eps=eps,
+        exact=exact,
+        enabled=True,
+    )
 
 
 def wan_residual_gate_add(
@@ -607,100 +407,20 @@ def wan_residual_gate_add(
     num_frames: int,
     frame_seq: int,
 ) -> torch.Tensor:
-    """Fused ``x + (y.unflatten(1, (num_frames, frame_seq)) * gate).flatten(1, 2)``."""
-    hidden = int(x.shape[-1])
-    if (
-        _TRITON_AVAILABLE
-        and x.is_cuda
-        and not torch.is_grad_enabled()
-        and x.ndim == 3
-        and y.shape == x.shape
-        and y.device == x.device
-        and x.is_contiguous()
-        and y.is_contiguous()
-        and hidden <= 4096
-        and num_frames > 0
-        and frame_seq > 0
-        and x.shape[1] == num_frames * frame_seq
-    ):
-        batch = int(x.shape[0])
-        gate_c = _prepare_frame_mod_tensor(gate, batch=batch, num_frames=num_frames, hidden=hidden, device=x.device)
-        if gate_c is not None:
-            prod_dtype = torch.promote_types(y.dtype, gate.dtype)
-            out_dtype = torch.promote_types(x.dtype, prod_dtype)
-            prod_code = _dtype_to_round_code(prod_dtype)
-            out = torch.empty_like(x, dtype=out_dtype)
-            rows = int(x.shape[0] * x.shape[1])
-            block = triton.next_power_of_2(hidden)
-            _wan_residual_gate_add_kernel[(rows,)](
-                x,
-                y,
-                gate_c,
-                out,
-                rows,
-                frame_seq,
-                hidden_size=hidden,
-                block=block,
-                prod_dtype_code=prod_code,
-                num_warps=8 if block >= 1024 else 4,
-                enable_fp_fusion=False,
-            )
-            return out
-    gate_b = gate.unsqueeze(2) if gate.ndim == 3 else gate
-    return x + (y.unflatten(1, (num_frames, frame_seq)) * gate_b).flatten(1, 2)
+    """Bit-exact fused ``x + (y.unflatten(1, (num_frames, frame_seq)) * gate).flatten(1, 2)``."""
+    return sf_residual_gate_add(
+        x,
+        y,
+        gate,
+        num_frames=num_frames,
+        frame_seq=frame_seq,
+        enabled=True,
+    )
 
 
 def wan_rmsnorm(x: torch.Tensor, weight: torch.Tensor, eps: float = 1e-6, *, exact: bool = True) -> torch.Tensor:
-    """Fast ``WanRMSNorm`` supporting strided last-dim-contiguous ``[B, S, C]``."""
-    hidden = int(x.shape[-1])
-    if (
-        _TRITON_AVAILABLE
-        and x.is_cuda
-        and weight.is_cuda
-        and weight.device == x.device
-        and weight.ndim == 1
-        and weight.shape[0] == hidden
-        and weight.is_contiguous()
-        and not torch.is_grad_enabled()
-        and x.ndim == 3
-        and x.stride(-1) == 1
-        and (x.shape[0] == 1 or x.stride(0) == x.shape[1] * x.stride(1))
-        and hidden <= 4096
-    ):
-        rows = int(x.shape[0] * x.shape[1])
-        out_dtype = torch.promote_types(x.dtype, weight.dtype)
-        out = torch.empty(x.shape, dtype=out_dtype, device=x.device)
-        block = triton.next_power_of_2(hidden)
-        if exact:
-            rstd = torch.rsqrt(x.float().square_().mean(dim=-1) + eps).reshape(rows).contiguous()
-            _wan_apply_rstd_weight_kernel[(rows,)](
-                x,
-                rstd,
-                weight,
-                out,
-                rows,
-                int(x.stride(1)),
-                hidden_size=hidden,
-                block=block,
-                num_warps=8 if block >= 1024 else 4,
-                enable_fp_fusion=False,
-            )
-        else:
-            _wan_rmsnorm_kernel[(rows,)](
-                x,
-                weight,
-                out,
-                rows,
-                int(x.stride(1)),
-                float(eps),
-                hidden_size=hidden,
-                block=block,
-                num_warps=8 if block >= 1024 else 4,
-                enable_fp_fusion=False,
-            )
-        return out
-    normed = (x.float() * torch.rsqrt(x.float().pow(2).mean(dim=-1, keepdim=True) + eps)).type_as(x)
-    return normed * weight
+    """Fast coalesced ``WanRMSNorm`` supporting strided last-dim-contiguous ``[B, S, C]``."""
+    return sf_rmsnorm(x, weight, eps=eps, exact=exact, enabled=True)
 
 
 def wan_qk_rmsnorm_rope_write_kv(
@@ -718,16 +438,51 @@ def wan_qk_rmsnorm_rope_write_kv(
     head_dim: int,
     eps: float = 1e-6,
     exact: bool = True,
+    v_proj: torch.Tensor | None = None,
+    v_dst: torch.Tensor | None = None,
 ) -> torch.Tensor:
-    """Fuse Q/K WanRMSNorm + 3D RoPE + KV cache writes into one Triton kernel.
+    """Coalesced 128-bit Q/K WanRMSNorm + 3D RoPE + dual K (+ optional V) KV cache writes.
 
     When ``exact=True``, computes ``rstd`` with PyTorch's exact FP32 reduction order
-    and fuses BF16 scale, weight multiply, raw-K write, FP64 3D RoPE, and rotated-K
-    write in a single Triton pass (0-ULP bitwise exact with eager ``WanRMSNorm``).
-    When ``exact=False``, performs single-pass FP64-accumulated RMSNorm + RoPE + KV write.
+    and fuses BF16 scale, weight multiply, raw-K write, FP64 3D RoPE, rotated-K write,
+    and optional V write in a single coalesced Triton pass (0-ULP bitwise exact).
+    When ``exact=False``, performs single-pass FP32-accumulated RMSNorm + RoPE + KV write.
     """
+    if k_raw_dst is None and v_proj is not None and v_dst is not None:
+        return sf_qk_rmsnorm_rope_write_kv(
+            q_proj,
+            k_proj,
+            v_proj,
+            q_weight,
+            k_weight,
+            cos,
+            sin,
+            k_rot_dst,
+            v_dst,
+            dst_start=dst_token_offset,
+            num_heads=num_heads,
+            head_dim=head_dim,
+            eps=eps,
+            rotate_k=True,
+            exact=exact,
+            enabled=True,
+        )
     batch, seq_len, hidden = int(q_proj.shape[0]), int(q_proj.shape[1]), int(q_proj.shape[2])
     half_d = head_dim // 2
+    write_v = v_proj is not None and v_dst is not None
+    v_ok = (not write_v) or (
+        v_proj is not None
+        and v_dst is not None
+        and v_proj.is_cuda
+        and v_dst.is_cuda
+        and v_proj.device == q_proj.device
+        and v_dst.device == q_proj.device
+        and v_proj.shape == q_proj.shape
+        and v_proj.dtype == v_dst.dtype
+        and v_proj.stride(-1) == 1
+        and (batch == 1 or v_proj.stride(0) == seq_len * v_proj.stride(1))
+        and v_dst.is_contiguous()
+    )
     if (
         _TRITON_AVAILABLE
         and q_proj.is_cuda
@@ -752,76 +507,108 @@ def wan_qk_rmsnorm_rope_write_kv(
         )
         and k_rot_dst.is_contiguous()
         and (k_raw_dst is None or (k_raw_dst.is_contiguous() and k_raw_dst.shape == k_rot_dst.shape))
+        and v_ok
         and hidden <= 4096
         and hidden % 2 == 0
     ):
         q_out = torch.empty((batch, seq_len, num_heads, head_dim), dtype=q_proj.dtype, device=q_proj.device)
         rows = batch * seq_len
-        block_pairs = triton.next_power_of_2(hidden // 2)
+        block = max(32, int(triton.next_power_of_2(hidden)))
+        block_pairs = block // 2
         use_fp64 = cos.dtype == torch.float64
+        use_ptx = _use_bf16_ptx(q_proj.device)
+        num_warps = 4 if block >= 1024 else 2
+        if block > 2048:
+            num_warps = 8
         k_raw_ptr = k_rot_dst if k_raw_dst is None else k_raw_dst
+        v_in_ptr = q_proj if v_proj is None else v_proj
+        v_out_ptr = k_rot_dst if v_dst is None else v_dst
+        v_row_stride = int(v_in_ptr.stride(1))
         k_dst_batch_stride = int(k_rot_dst.stride(0))
         k_dst_seq_stride = int(k_rot_dst.stride(1))
+        v_dst_batch_stride = int(v_out_ptr.stride(0))
+        v_dst_seq_stride = int(v_out_ptr.stride(1))
+        cos_c = cos.reshape(seq_len, half_d).contiguous()
+        sin_c = sin.reshape(seq_len, half_d).contiguous()
         if exact:
             q_rstd = torch.rsqrt(q_proj.float().square_().mean(dim=-1) + eps).reshape(rows).contiguous()
             k_rstd = torch.rsqrt(k_proj.float().square_().mean(dim=-1) + eps).reshape(rows).contiguous()
             _wan_qk_apply_rstd_rope_write_kv_kernel[(rows,)](
                 q_proj,
                 k_proj,
+                v_in_ptr,
                 q_rstd,
                 k_rstd,
                 q_weight,
                 k_weight,
-                cos.contiguous(),
-                sin.contiguous(),
+                cos_c,
+                sin_c,
                 q_out,
                 k_rot_dst,
                 k_raw_ptr,
+                v_out_ptr,
                 seq_len,
                 int(q_proj.stride(1)),
                 int(k_proj.stride(1)),
+                v_row_stride,
                 k_dst_batch_stride,
                 k_dst_seq_stride,
+                v_dst_batch_stride,
+                v_dst_seq_stride,
                 int(dst_token_offset),
                 hidden_size=hidden,
                 half_head_dim=half_d,
+                block=block,
                 block_pairs=block_pairs,
                 WRITE_RAW_K=k_raw_dst is not None,
+                WRITE_V=write_v,
                 USE_FP64=use_fp64,
-                num_warps=8 if block_pairs >= 512 else 4,
+                USE_BF16_PTX=use_ptx,
+                num_warps=num_warps,
                 enable_fp_fusion=False,
             )
         else:
             _wan_qk_rmsnorm_rope_write_kv_kernel[(rows,)](
                 q_proj,
                 k_proj,
+                v_in_ptr,
                 q_weight,
                 k_weight,
-                cos.contiguous(),
-                sin.contiguous(),
+                cos_c,
+                sin_c,
                 q_out,
                 k_rot_dst,
                 k_raw_ptr,
+                v_out_ptr,
                 seq_len,
                 int(q_proj.stride(1)),
                 int(k_proj.stride(1)),
+                v_row_stride,
                 k_dst_batch_stride,
                 k_dst_seq_stride,
+                v_dst_batch_stride,
+                v_dst_seq_stride,
                 int(dst_token_offset),
                 float(eps),
                 hidden_size=hidden,
                 half_head_dim=half_d,
+                block=block,
                 block_pairs=block_pairs,
                 WRITE_RAW_K=k_raw_dst is not None,
+                WRITE_V=write_v,
                 USE_FP64=use_fp64,
-                num_warps=8 if block_pairs >= 512 else 4,
+                USE_BF16_PTX=use_ptx,
+                num_warps=num_warps,
                 enable_fp_fusion=False,
             )
         return q_out
 
     # Exact fallback
-    q_norm = wan_rmsnorm(q_proj, q_weight, eps=eps).view(batch, seq_len, num_heads, head_dim)
-    k_norm = wan_rmsnorm(k_proj, k_weight, eps=eps).view(batch, seq_len, num_heads, head_dim)
+    if write_v:
+        assert v_proj is not None and v_dst is not None
+        v_dst[:, dst_token_offset : dst_token_offset + seq_len].copy_(v_proj.view(batch, seq_len, num_heads, head_dim))
+    q_norm = wan_rmsnorm(q_proj, q_weight, eps=eps, exact=exact).view(batch, seq_len, num_heads, head_dim)
+    k_norm = wan_rmsnorm(k_proj, k_weight, eps=eps, exact=exact).view(batch, seq_len, num_heads, head_dim)
     if k_raw_dst is not None:
         k_raw_dst[:, dst_token_offset : dst_token_offset + seq_len].copy_(k_norm)
     q_rot = _wan_exact_real_rope_bshd(q_norm, cos, sin).to(q_proj.dtype)
@@ -837,7 +624,7 @@ def _wan_exact_real_rope_bshd(
     *,
     out: torch.Tensor | None = None,
 ) -> torch.Tensor:
-    """Bit-exact real-valued 3D RoPE on ``[B, S, H, D]`` matching PyTorch ``causal_rope_apply``."""
+    """Bit-exact coalesced real-valued 3D RoPE on ``[B, S, H, D]`` matching PyTorch ``causal_rope_apply``."""
     batch, seq_len, num_heads, head_dim = (int(x.shape[0]), int(x.shape[1]), int(x.shape[2]), int(x.shape[3]))
     half_d = head_dim // 2
     if (
@@ -845,17 +632,23 @@ def _wan_exact_real_rope_bshd(
         and x.is_cuda
         and cos.is_cuda
         and sin.is_cuda
+        and cos.device == x.device
+        and sin.device == x.device
         and not torch.is_grad_enabled()
         and x.stride(-1) == 1
+        and (out is None or (out.is_cuda and out.device == x.device and out.shape == x.shape and out.stride(-1) == 1))
         and head_dim % 2 == 0
         and half_d <= 256
     ):
         dst = torch.empty((batch, seq_len, num_heads, head_dim), dtype=x.dtype, device=x.device) if out is None else out
-        block_pairs = triton.next_power_of_2(half_d)
+        block = max(32, int(triton.next_power_of_2(head_dim)))
+        block_pairs = block // 2
+        cos_c = cos.reshape(seq_len, half_d).contiguous()
+        sin_c = sin.reshape(seq_len, half_d).contiguous()
         _wan_exact_real_rope_bshd_kernel[(batch * seq_len, num_heads)](
             x,
-            cos.contiguous(),
-            sin.contiguous(),
+            cos_c,
+            sin_c,
             dst,
             seq_len,
             int(x.stride(0)),
@@ -864,10 +657,12 @@ def _wan_exact_real_rope_bshd(
             int(dst.stride(0)),
             int(dst.stride(1)),
             int(dst.stride(2)),
+            head_dim=head_dim,
             half_head_dim=half_d,
+            block=block,
             block_pairs=block_pairs,
             USE_FP64=cos.dtype == torch.float64,
-            num_warps=2 if block_pairs <= 64 else 4,
+            num_warps=2 if block <= 128 else 4,
             enable_fp_fusion=False,
         )
         return dst
@@ -1202,8 +997,8 @@ class LongLiveFastDenoiserEngine:
         exact = self.exact_norms
         for idx, block in enumerate(model.blocks):
             mod = (block.modulation.unsqueeze(1) + e0).chunk(6, dim=2)
-            # 1. Fused LayerNorm + AdaLN before self-attention
-            h = wan_layernorm_adaln(
+            # 1. Fused LayerNorm + AdaLN before self-attention (zero mod copies)
+            h = sf_layernorm_adaln(
                 x,
                 mod[1],
                 mod[0],
@@ -1211,9 +1006,10 @@ class LongLiveFastDenoiserEngine:
                 frame_seq=frame_seq,
                 eps=float(block.norm1.eps),
                 exact=exact,
+                enabled=True,
             )
 
-            # 2. Self-attention QKV projection + fused QK-RMSNorm + RoPE + KV write
+            # 2. Self-attention QKV projection + coalesced 128-bit QK-RMSNorm + RoPE + K/V cache write
             sa = block.self_attn
             if hasattr(sa, "qkv"):
                 qkv_out = sa.qkv(h)
@@ -1222,12 +1018,10 @@ class LongLiveFastDenoiserEngine:
                 q_proj = sa.q(h)
                 k_proj = sa.k(h)
                 v_proj = sa.v(h)
-            v = v_proj.view(batch_size, f_grid * frame_seq, num_heads, head_dim)
 
             layer_kv = kv_cache[idx]
             k_cache = layer_kv["k"]
             v_cache = layer_kv["v"]
-            v_cache[:, local_start_index:local_end_index].copy_(v)
 
             has_qk_norm = hasattr(sa.norm_q, "weight") and hasattr(sa.norm_k, "weight")
             if has_qk_norm:
@@ -1247,28 +1041,35 @@ class LongLiveFastDenoiserEngine:
                         head_dim=head_dim,
                         eps=float(sa.norm_q.eps),
                         exact=exact,
+                        v_proj=v_proj,
+                        v_dst=v_cache,
                     )
                     attn_k = k_rot_buf[:, :local_end_index]
                     attn_v = v_cache[:, :local_end_index]
                 else:
-                    roped_q = wan_qk_rmsnorm_rope_write_kv(
+                    roped_q = sf_qk_rmsnorm_rope_write_kv(
                         q_proj,
                         k_proj,
+                        v_proj,
                         sa.norm_q.weight,
                         sa.norm_k.weight,
                         q_cos,
                         q_sin,
                         k_cache,
-                        None,
-                        dst_token_offset=local_start_index,
+                        v_cache,
+                        dst_start=local_start_index,
                         num_heads=num_heads,
                         head_dim=head_dim,
                         eps=float(sa.norm_q.eps),
+                        rotate_k=True,
                         exact=exact,
+                        enabled=True,
                     )
                     attn_k = k_cache[:, kv_read_start:local_end_index]
                     attn_v = v_cache[:, kv_read_start:local_end_index]
             else:
+                v = v_proj.view(batch_size, f_grid * frame_seq, num_heads, head_dim)
+                v_cache[:, local_start_index:local_end_index].copy_(v)
                 q_v = sa.norm_q(q_proj).view(batch_size, f_grid * frame_seq, num_heads, head_dim)
                 k_v = sa.norm_k(k_proj).view(batch_size, f_grid * frame_seq, num_heads, head_dim)
                 roped_q = _wan_exact_real_rope_bshd(q_v, q_cos, q_sin).to(v.dtype)
@@ -1286,29 +1087,51 @@ class LongLiveFastDenoiserEngine:
             attn_out = fast_longlive_self_attention(roped_q, attn_k, attn_v, backend=self.attention_backend)
             y_sa = sa.o(attn_out.reshape(batch_size, f_grid * frame_seq, model.dim))
 
-            # 3. Fused residual gate add after self-attention
-            x = wan_residual_gate_add(x, y_sa, mod[2], num_frames=f_grid, frame_seq=frame_seq)
+            # 3. 2-stage super-fusion: x = x + y_sa * mod[2] AND x_ca_in = norm3(x)
+            norm3 = block.norm3
+            if hasattr(norm3, "weight") and hasattr(norm3, "eps"):
+                x_out_dtype = torch.promote_types(x.dtype, torch.promote_types(y_sa.dtype, mod[2].dtype))
+                w3 = norm3.weight if norm3.weight.dtype == x_out_dtype else norm3.weight.to(x_out_dtype)
+                b3_raw = getattr(norm3, "bias", None)
+                b3 = None if b3_raw is None else (b3_raw if b3_raw.dtype == x_out_dtype else b3_raw.to(x_out_dtype))
+                x, x_ca_in = sf_residual_gate_add_layernorm(
+                    x,
+                    y_sa,
+                    mod[2],
+                    w3,
+                    b3,
+                    num_frames=f_grid,
+                    frame_seq=frame_seq,
+                    eps=float(norm3.eps),
+                    exact=exact,
+                    enabled=True,
+                )
+            else:
+                x = sf_residual_gate_add(x, y_sa, mod[2], num_frames=f_grid, frame_seq=frame_seq, enabled=True)
+                x_ca_in = norm3(x)
 
-            # 4. Cross-attention (cached K/V, fused RMSNorm + cuDNN SDPA)
-            x = x + fast_longlive_cross_attention(block.cross_attn, block.norm3(x), crossattn_cache[idx], exact=exact)
+            # 4. Cross-attention (cached K/V, coalesced sf_rmsnorm + cuDNN SDPA)
+            ca_out = fast_longlive_cross_attention(block.cross_attn, x_ca_in, crossattn_cache[idx], exact=exact)
 
-            # 5. Fused LayerNorm + AdaLN + FFN + Fused residual gate add
-            h_ffn = wan_layernorm_adaln(
+            # 5. 2-stage super-fusion: x = x + ca_out AND h_ffn = norm2(x) * (1 + mod[4]) + mod[3]
+            x, h_ffn = sf_residual_add_layernorm_adaln(
                 x,
+                ca_out,
                 mod[4],
                 mod[3],
                 num_frames=f_grid,
                 frame_seq=frame_seq,
                 eps=float(block.norm2.eps),
                 exact=exact,
+                enabled=True,
             )
             y_ffn = block.ffn(h_ffn)
-            x = wan_residual_gate_add(x, y_ffn, mod[5], num_frames=f_grid, frame_seq=frame_seq)
+            x = sf_residual_gate_add(x, y_ffn, mod[5], num_frames=f_grid, frame_seq=frame_seq, enabled=True)
 
         # Output head with fused LayerNorm + AdaLN
         head = model.head
         e_head = (head.modulation.unsqueeze(1) + e.unflatten(dim=0, sizes=t_in.shape).unsqueeze(2)).chunk(2, dim=2)
-        h_head = wan_layernorm_adaln(
+        h_head = sf_layernorm_adaln(
             x,
             e_head[1],
             e_head[0],
@@ -1316,6 +1139,7 @@ class LongLiveFastDenoiserEngine:
             frame_seq=frame_seq,
             eps=float(head.norm.eps),
             exact=exact,
+            enabled=True,
         )
         out = head.head(h_head)
         c_out = int(model.out_dim)

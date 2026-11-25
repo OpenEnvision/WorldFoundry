@@ -38,6 +38,7 @@ from .config import (
 from .ops import (
     apply_qk_norm,
     indexed_gate,
+    indexed_gate_rms_norm_indexed_scale_shift,
     make_rms_norm,
     qk_norm_rope,
     rms_norm_indexed_scale_shift,
@@ -410,6 +411,8 @@ def _cp_a2a_qkv_forward_impl(
     k: torch.Tensor,
     v: torch.Tensor,
     cp_ctx: _ResolvedContextParallel,
+    *,
+    ephemeral: bool = False,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """Exchange ``[T_local, H_all, D]`` -> ``[T_padded, H_local, D]`` with zero post-A2A copy."""
 
@@ -421,6 +424,24 @@ def _cp_a2a_qkv_forward_impl(
         return empty, empty.clone(), empty.clone()
 
     s_pad = sp_size * s_loc
+    if cp_ctx.all_to_all_fn is None and q.is_cuda and not torch.is_grad_enabled():
+        from worldfoundry.core.distributed.sequence_parallel.symm_mem_all_to_all import (
+            try_symm_mem_all_to_all_qkv,
+            ulysses_backend_mode,
+        )
+
+        if ulysses_backend_mode() != "torch":
+            symm_qkv = try_symm_mem_all_to_all_qkv(
+                q.unsqueeze(0),
+                k.unsqueeze(0),
+                v.unsqueeze(0),
+                cp_ctx.process_group,
+                ephemeral=ephemeral,
+            )
+            if symm_qkv is not None:
+                cp_ctx.all_to_all_calls += 3
+                return symm_qkv[0].squeeze(0), symm_qkv[1].squeeze(0), symm_qkv[2].squeeze(0)
+
     use_async = (
         cp_ctx.all_to_all_fn is None
         and not (q.is_cuda and torch.cuda.is_current_stream_capturing())
@@ -455,6 +476,8 @@ def _cp_a2a_qkv_forward_impl(
 def _cp_a2a_out_forward_impl(
     out_full: torch.Tensor,
     cp_ctx: _ResolvedContextParallel,
+    *,
+    ephemeral: bool = False,
 ) -> torch.Tensor:
     """Exchange ``[T_padded, H_local, D]`` -> ``[T_local, H_all, D]`` with zero pre-A2A copy."""
 
@@ -464,6 +487,28 @@ def _cp_a2a_out_forward_impl(
     if s_pad == 0:
         return torch.empty((0, h_all, head_dim), device=out_full.device, dtype=out_full.dtype)
     s_loc = s_pad // sp_size
+    if cp_ctx.all_to_all_fn is None and out_full.is_cuda and not torch.is_grad_enabled():
+        from worldfoundry.core.distributed.sequence_parallel.symm_mem_all_to_all import (
+            try_symm_mem_all_to_all_o,
+            ulysses_backend_mode,
+        )
+        from worldfoundry.core.distributed.sequence_parallel.triton_ulysses_ops import (
+            ulysses_unpack_o_gather_head,
+        )
+
+        if ulysses_backend_mode() != "torch":
+            symm_o = try_symm_mem_all_to_all_o(
+                out_full.unsqueeze(0),
+                cp_ctx.process_group,
+                ephemeral=ephemeral,
+            )
+            if symm_o is not None:
+                cp_ctx.all_to_all_calls += 1
+                return symm_o.squeeze(0)
+            send = out_full.contiguous().view(sp_size, 1, s_loc, h_loc, head_dim)
+            recv = torch.empty_like(send)
+            _cp_exec_all_to_all_single(recv, send, cp_ctx, async_op=False)
+            return ulysses_unpack_o_gather_head(recv, sp_size).squeeze(0)
     send = out_full.contiguous().view(sp_size, s_loc, h_loc, head_dim)
     recv = torch.empty_like(send)
     _cp_exec_all_to_all_single(recv, send, cp_ctx, async_op=False)
@@ -533,7 +578,7 @@ def _cp_all_to_all_qkv(
     if torch.is_grad_enabled() and (q.requires_grad or k.requires_grad or v.requires_grad):
         out: Any = _CPAllToAllQKV.apply(q, k, v, cp_ctx)
         return out
-    return _cp_a2a_qkv_forward_impl(q, k, v, cp_ctx)
+    return _cp_a2a_qkv_forward_impl(q, k, v, cp_ctx, ephemeral=not torch.is_grad_enabled())
 
 
 def _cp_all_to_all_out(
@@ -543,7 +588,7 @@ def _cp_all_to_all_out(
     if torch.is_grad_enabled() and out_full.requires_grad:
         out: Any = _CPAllToAllOut.apply(out_full, cp_ctx)
         return out
-    return _cp_a2a_out_forward_impl(out_full, cp_ctx)
+    return _cp_a2a_out_forward_impl(out_full, cp_ctx, ephemeral=not torch.is_grad_enabled())
 
 
 def _resolve_probe_bounds(
@@ -1776,13 +1821,19 @@ class MiniMaxH3DiTBlock(nn.Module):
         attention_groups: list[tuple[torch.Tensor, torch.Tensor]] | None = None,
         ffn_conditioner: Any = None,
         cp_seq_len: int | None = None,
-    ) -> torch.Tensor:
+        pre_normed_h: torch.Tensor | None = None,
+        next_norm_adaln: tuple[nn.RMSNorm, torch.Tensor, torch.Tensor] | None = None,
+    ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
         if adaln_params is None:
             adaln_params = self.adaln_proj(adaln_input)
         shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = adaln_params
 
         residual = x
-        h = rms_norm_indexed_scale_shift(x, self.norm1, shift_msa, scale_msa, combined_indices, dtype=x.dtype)
+        h = (
+            rms_norm_indexed_scale_shift(x, self.norm1, shift_msa, scale_msa, combined_indices, dtype=x.dtype)
+            if pre_normed_h is None
+            else pre_normed_h
+        )
         if attention_groups is None:
             h = self.attn(
                 h,
@@ -1808,13 +1859,35 @@ class MiniMaxH3DiTBlock(nn.Module):
                 attention_groups=attention_groups,
                 cp_seq_len=cp_seq_len,
             )
-        x = indexed_gate(residual, gate_msa, h, combined_indices, dtype=x.dtype)
-
-        residual = x
-        if ffn_conditioner is not None:
+        if ffn_conditioner is None:
+            residual, h = indexed_gate_rms_norm_indexed_scale_shift(
+                residual,
+                gate_msa,
+                h,
+                self.norm2,
+                shift_mlp,
+                scale_mlp,
+                combined_indices,
+                dtype=x.dtype,
+            )
+        else:
+            x = indexed_gate(residual, gate_msa, h, combined_indices, dtype=x.dtype)
+            residual = x
             x = ffn_conditioner(x)
-        h = rms_norm_indexed_scale_shift(x, self.norm2, shift_mlp, scale_mlp, combined_indices, dtype=x.dtype)
+            h = rms_norm_indexed_scale_shift(x, self.norm2, shift_mlp, scale_mlp, combined_indices, dtype=x.dtype)
         h = self.mlp(h)
+        if next_norm_adaln is not None:
+            next_norm1, next_shift_msa, next_scale_msa = next_norm_adaln
+            return indexed_gate_rms_norm_indexed_scale_shift(
+                residual,
+                gate_mlp,
+                h,
+                next_norm1,
+                next_shift_msa,
+                next_scale_msa,
+                combined_indices,
+                dtype=x.dtype,
+            )
         return indexed_gate(residual, gate_mlp, h, combined_indices, dtype=x.dtype)
 
 
@@ -2238,7 +2311,7 @@ class MiniMaxH3DiTModel(nn.Module):
             )
         text_rows = prompt_embeds[:text_len].to(device=device, dtype=self.condition_proj.weight.dtype)
         # Preserve caller-provided document boundaries (single document [0, text_len]
-        # or per-segment bounds such as H3-World's isolated action annotations).
+        # or caller-supplied per-segment bounds).
         refiner_cu = refiner_cu_seqlens.to(device=device, dtype=torch.int32)
         text_embed = self.condition_proj(text_rows)
         return self.token_refiner(text_embed, cu_seqlens=refiner_cu, cu_seqlens_host=tuple(bounds))
@@ -2486,8 +2559,40 @@ class MiniMaxH3DiTModel(nn.Module):
         capturing = hidden.is_cuda and torch.cuda.is_current_stream_capturing()
         before_snapshot = self._snapshot_slice_counters(start, stop) if capturing else None
         rope_cache = (cos_sin_cache, positions)
+        can_fuse_boundary = (
+            stop - start > 1
+            and not self.training
+            and not torch.is_grad_enabled()
+            and hidden.is_cuda
+            and hidden.dtype == _BF16
+        )
+        pre_normed_h: torch.Tensor | None = None
+        cached_adaln: tuple[torch.Tensor, ...] | None = None
         for index in range(start, stop):
-            hidden = self.blocks[index](
+            block = self.blocks[index]
+            cur_adaln = cached_adaln
+            cached_adaln = None
+            next_norm_adaln: tuple[nn.RMSNorm, torch.Tensor, torch.Tensor] | None = None
+            if (
+                can_fuse_boundary
+                and index + 1 < stop
+                and type(block) is MiniMaxH3DiTBlock
+                and isinstance(self.blocks[index + 1], MiniMaxH3DiTBlock)
+                and type(self.blocks[index + 1]) is MiniMaxH3DiTBlock
+            ):
+                next_block = self.blocks[index + 1]
+                assert isinstance(next_block, MiniMaxH3DiTBlock)
+                if (
+                    not block._forward_hooks
+                    and not block._forward_pre_hooks
+                    and not next_block._forward_hooks
+                    and not next_block._forward_pre_hooks
+                    and not next_block.norm1._forward_hooks
+                    and not next_block.norm1._forward_pre_hooks
+                ):
+                    cached_adaln = next_block.adaln_proj(adaln_input)
+                    next_norm_adaln = (next_block.norm1, cached_adaln[0], cached_adaln[1])
+            res = block(
                 hidden,
                 adaln_input=adaln_input,
                 combined_indices=combined_indices,
@@ -2498,8 +2603,16 @@ class MiniMaxH3DiTModel(nn.Module):
                 ignore_trailing_pad=ignore_trailing_pad,
                 prefix_sink_tokens=prefix_sink_tokens,
                 force_dense_attention=force_dense_attention,
+                adaln_params=cur_adaln,
                 cp_seq_len=cp_seq_len,
+                pre_normed_h=pre_normed_h,
+                next_norm_adaln=next_norm_adaln,
             )
+            if next_norm_adaln is not None:
+                hidden, pre_normed_h = res
+            else:
+                hidden = res
+                pre_normed_h = None
         if before_snapshot is not None:
             fp8_after, ffn_after, prov_after, cp_a2a_after = self._snapshot_slice_counters(start, stop)
             fp8_before, ffn_before, prov_before, cp_a2a_before = before_snapshot

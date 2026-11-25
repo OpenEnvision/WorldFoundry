@@ -29,6 +29,7 @@ Why this split exists — instead of "use Flash whenever it is installed":
 
 import math
 import os
+import sys
 import threading
 import warnings
 from collections import deque
@@ -108,6 +109,70 @@ def _gpu_supports_flash_attention():
 # Layout adapters — normalize any einops pattern, then restore the caller
 # ──────────────────────────────────────────────────────────────────────────
 
+_CANONICAL_GENERIC_BACKENDS = frozenset(
+    {
+        "auto",
+        "torch",
+        "flash_attention",
+        "flash_attention_2",
+        "flash_attention_3",
+        "flash_attention_4",
+        "sage_attention",
+        "sage_attention_3",
+        "xformers",
+        "cudnn_fp8",
+        "triton_tma",
+        "scaled_int8_fp8",
+        "sol_attn",
+    }
+)
+
+
+def _rearrange_tensor_fast(
+    tensor: torch.Tensor,
+    src_pattern: str,
+    dst_pattern: str,
+    dims: dict | None,
+) -> torch.Tensor:
+    """Bit- and stride-exact native PyTorch layout adapter for common attention patterns."""
+    if src_pattern == dst_pattern:
+        return tensor
+    ndim = tensor.ndim
+    if not dims:
+        if ndim == 4:
+            if (src_pattern == "b n s d" and dst_pattern == "b s n d") or (
+                src_pattern == "b s n d" and dst_pattern == "b n s d"
+            ):
+                return tensor.transpose(1, 2)
+            if src_pattern == "b s n d" and dst_pattern in ("b s (n d)", "b s (h d)"):
+                return tensor.flatten(2, 3)
+            if src_pattern == "b n s d" and dst_pattern in ("b s (n d)", "b s (h d)"):
+                return tensor.transpose(1, 2).flatten(2, 3)
+    elif len(dims) == 1:
+        if ndim == 3 and src_pattern in ("b s (n d)", "b s (h d)"):
+            head_key = "n" if src_pattern == "b s (n d)" else "h"
+            heads_raw = dims.get(head_key)
+            if heads_raw is not None:
+                heads = int(heads_raw)
+                last_dim = tensor.shape[2]
+                if heads > 0 and last_dim % heads == 0:
+                    if dst_pattern == "b s n d":
+                        return tensor.reshape(tensor.shape[0], tensor.shape[1], heads, last_dim // heads)
+                    if dst_pattern == "b n s d":
+                        return tensor.reshape(tensor.shape[0], tensor.shape[1], heads, last_dim // heads).transpose(
+                            1, 2
+                        )
+        elif ndim == 4 and dst_pattern in ("b s (n d)", "b s (h d)"):
+            head_key = "n" if dst_pattern == "b s (n d)" else "h"
+            heads_raw = dims.get(head_key)
+            if heads_raw is not None:
+                heads = int(heads_raw)
+                if src_pattern == "b s n d" and tensor.shape[2] == heads:
+                    return tensor.flatten(2, 3)
+                if src_pattern == "b n s d" and tensor.shape[1] == heads:
+                    return tensor.transpose(1, 2).flatten(2, 3)
+    return rearrange(tensor, f"{src_pattern} -> {dst_pattern}", **({} if dims is None else dims))
+
 
 def rearrange_qkv(
     q: torch.Tensor,
@@ -120,22 +185,43 @@ def rearrange_qkv(
     dims=None,
 ):
     """Rearrange Q/K/V from the caller layout into the backend ``required_in_pattern``."""
-    dims = {} if dims is None else dims
+    if q_pattern == required_in_pattern and k_pattern == required_in_pattern and v_pattern == required_in_pattern:
+        return q, k, v
+    if (
+        not dims
+        and q_pattern == k_pattern == v_pattern
+        and (
+            (q_pattern == "b n s d" and required_in_pattern == "b s n d")
+            or (q_pattern == "b s n d" and required_in_pattern == "b n s d")
+        )
+        and q.ndim == 4
+        and k.ndim == 4
+        and v.ndim == 4
+    ):
+        return q.transpose(1, 2), k.transpose(1, 2), v.transpose(1, 2)
     if q_pattern != required_in_pattern:
-        q = rearrange(q, f"{q_pattern} -> {required_in_pattern}", **dims)
+        q = _rearrange_tensor_fast(q, q_pattern, required_in_pattern, dims)
     if k_pattern != required_in_pattern:
-        k = rearrange(k, f"{k_pattern} -> {required_in_pattern}", **dims)
+        k = _rearrange_tensor_fast(k, k_pattern, required_in_pattern, dims)
     if v_pattern != required_in_pattern:
-        v = rearrange(v, f"{v_pattern} -> {required_in_pattern}", **dims)
+        v = _rearrange_tensor_fast(v, v_pattern, required_in_pattern, dims)
     return q, k, v
 
 
 def rearrange_out(out: torch.Tensor, out_pattern="b n s d", required_out_pattern="b n s d", dims=None):
     """Restore backend output from the internal layout to the caller ``out_pattern``."""
-    dims = {} if dims is None else dims
-    if out_pattern != required_out_pattern:
-        out = rearrange(out, f"{required_out_pattern} -> {out_pattern}", **dims)
-    return out
+    if out_pattern == required_out_pattern:
+        return out
+    if (
+        not dims
+        and out.ndim == 4
+        and (
+            (required_out_pattern == "b s n d" and out_pattern == "b n s d")
+            or (required_out_pattern == "b n s d" and out_pattern == "b s n d")
+        )
+    ):
+        return out.transpose(1, 2)
+    return _rearrange_tensor_fast(out, required_out_pattern, out_pattern, dims)
 
 
 def torch_sdpa(
@@ -186,7 +272,9 @@ def flash_attention_3(
     scale=None,
 ):
     """FlashAttention 3 entry (Hopper ``flash_attn_interface``); layout ``b s n d``."""
-    flash_attn_interface = __import__("flash_attn_interface")
+    flash_attn_interface = sys.modules.get("flash_attn_interface")
+    if flash_attn_interface is None:
+        flash_attn_interface = __import__("flash_attn_interface")
 
     required_in_pattern, required_out_pattern = "b s n d", "b s n d"
     q, k, v = rearrange_qkv(q, k, v, q_pattern, k_pattern, v_pattern, required_in_pattern, dims)
@@ -205,10 +293,18 @@ def _flash_attention_4_impl(
 ) -> torch.Tensor:
     """Call either the public or pinned private CuTeDSL FA4 interface."""
 
+    cute_mod = sys.modules.get("flash_attn.cute")
+    flash_attn_func = getattr(cute_mod, "flash_attn_func", None) if cute_mod is not None else None
+    if flash_attn_func is not None:
+        result = flash_attn_func(q, k, v, softmax_scale=softmax_scale)
+        return result[0] if isinstance(result, tuple) else result
     try:
-        from flash_attn.cute import flash_attn_func
+        from flash_attn.cute import flash_attn_func as imported_fa4
     except ImportError:
-        from flash_attn.cute.interface import _flash_attn_fwd
+        iface_mod = sys.modules.get("flash_attn.cute.interface")
+        _flash_attn_fwd = getattr(iface_mod, "_flash_attn_fwd", None) if iface_mod is not None else None
+        if _flash_attn_fwd is None:
+            from flash_attn.cute.interface import _flash_attn_fwd
 
         result = _flash_attn_fwd(
             q,
@@ -223,7 +319,7 @@ def _flash_attention_4_impl(
             pack_gqa=None,
         )
     else:
-        result = flash_attn_func(q, k, v, softmax_scale=softmax_scale)
+        result = imported_fa4(q, k, v, softmax_scale=softmax_scale)
     return result[0] if isinstance(result, tuple) else result
 
 
@@ -302,7 +398,9 @@ def flash_attention_2(
     scale=None,
 ):
     """FlashAttention 2 entry (``flash_attn``); layout ``b s n d``."""
-    import flash_attn
+    flash_attn = sys.modules.get("flash_attn")
+    if flash_attn is None:
+        flash_attn = __import__("flash_attn")
 
     required_in_pattern, required_out_pattern = "b s n d", "b s n d"
     q, k, v = rearrange_qkv(q, k, v, q_pattern, k_pattern, v_pattern, required_in_pattern, dims)
@@ -323,7 +421,10 @@ def sage_attention(
     scale=None,
 ):
     """SageAttention entry (approximate; explicit opt-in); layout ``b n s d``."""
-    sageattn = __import__("sageattention", fromlist=["sageattn"]).sageattn
+    sage_mod = sys.modules.get("sageattention")
+    if sage_mod is None:
+        sage_mod = __import__("sageattention", fromlist=["sageattn"])
+    sageattn = sage_mod.sageattn
 
     required_in_pattern, required_out_pattern = "b n s d", "b n s d"
     q, k, v = rearrange_qkv(q, k, v, q_pattern, k_pattern, v_pattern, required_in_pattern, dims)
@@ -345,7 +446,10 @@ def sage_attention_3(
 ):
     """SageAttention 3 (Blackwell FP4). Does not support GQA/MQA or a custom softmax scale."""
 
-    sageattn3_blackwell = __import__("sageattn3", fromlist=["sageattn3_blackwell"]).sageattn3_blackwell
+    sage3_mod = sys.modules.get("sageattn3")
+    if sage3_mod is None:
+        sage3_mod = __import__("sageattn3", fromlist=["sageattn3_blackwell"])
+    sageattn3_blackwell = sage3_mod.sageattn3_blackwell
 
     required_in_pattern, required_out_pattern = "b n s d", "b n s d"
     q, k, v = rearrange_qkv(q, k, v, q_pattern, k_pattern, v_pattern, required_in_pattern, dims)
@@ -370,7 +474,9 @@ def xformers_attention(
     scale=None,
 ):
     """xFormers memory-efficient attention. GQA is rejected until a 5D layout exists."""
-    xops = __import__("xformers.ops", fromlist=["memory_efficient_attention"])
+    xops = sys.modules.get("xformers.ops")
+    if xops is None:
+        xops = __import__("xformers.ops", fromlist=["memory_efficient_attention"])
 
     required_in_pattern, required_out_pattern = "b s n d", "b s n d"
     q, k, v = rearrange_qkv(q, k, v, q_pattern, k_pattern, v_pattern, required_in_pattern, dims)
@@ -391,6 +497,7 @@ _PROVIDER_RUNTIME_EVENT_NAMES = (
     "quarantined_skips",
     "compiled_graph_traces",
 )
+_PROVIDER_RUNTIME_EVENT_NAME_SET = frozenset(_PROVIDER_RUNTIME_EVENT_NAMES)
 _PROVIDER_RUNTIME: dict[str, dict[str, int]] = {}
 _PROVIDER_RUNTIME_LOCK = threading.Lock()
 _PROVIDER_COMPILE_RECEIPT_SINK: ContextVar[MutableMapping[str, int] | None] = ContextVar(
@@ -418,6 +525,17 @@ def attention_compile_receipt_scope(
         _PROVIDER_COMPILE_RECEIPT_SINK.reset(token)
 
 
+def _record_provider_success(selected: str) -> None:
+    """Fast eager-path counter increment (caller already checked not compiling)."""
+    with _PROVIDER_RUNTIME_LOCK:
+        counters = _PROVIDER_RUNTIME.get(selected)
+        if counters is None:
+            counters = dict.fromkeys(_PROVIDER_RUNTIME_EVENT_NAMES, 0)
+            _PROVIDER_RUNTIME[selected] = counters
+        counters["attempts"] += 1
+        counters["successes"] += 1
+
+
 def _record_provider_runtime(selected: str, **increments: int) -> None:
     """Record provider events without putting locks around kernel execution.
 
@@ -429,14 +547,14 @@ def _record_provider_runtime(selected: str, **increments: int) -> None:
 
     if torch.compiler.is_compiling():
         return
-    unknown = set(increments) - set(_PROVIDER_RUNTIME_EVENT_NAMES)
-    if unknown:
+    if not _PROVIDER_RUNTIME_EVENT_NAME_SET.issuperset(increments):
+        unknown = set(increments) - _PROVIDER_RUNTIME_EVENT_NAME_SET
         raise ValueError(f"unknown attention provider runtime events {sorted(unknown)}")
     with _PROVIDER_RUNTIME_LOCK:
-        counters = _PROVIDER_RUNTIME.setdefault(
-            selected,
-            dict.fromkeys(_PROVIDER_RUNTIME_EVENT_NAMES, 0),
-        )
+        counters = _PROVIDER_RUNTIME.get(selected)
+        if counters is None:
+            counters = dict.fromkeys(_PROVIDER_RUNTIME_EVENT_NAMES, 0)
+            _PROVIDER_RUNTIME[selected] = counters
         for event, increment in increments.items():
             counters[event] += int(increment)
 
@@ -505,6 +623,18 @@ def _invoke_attention_provider(
 ) -> torch.Tensor:
     """Invoke one qualified non-Torch provider or fail for an unwired name."""
 
+    if selected == "flash_attention_3":
+        return flash_attention_3(q, k, v, q_pattern, k_pattern, v_pattern, out_pattern, dims, scale=scale)
+    if selected == "flash_attention_2":
+        return flash_attention_2(q, k, v, q_pattern, k_pattern, v_pattern, out_pattern, dims, scale=scale)
+    if selected == "flash_attention_4":
+        return flash_attention_4(q, k, v, q_pattern, k_pattern, v_pattern, out_pattern, dims, scale=scale)
+    if selected == "sage_attention":
+        return sage_attention(q, k, v, q_pattern, k_pattern, v_pattern, out_pattern, dims, scale=scale)
+    if selected == "sage_attention_3":
+        return sage_attention_3(q, k, v, q_pattern, k_pattern, v_pattern, out_pattern, dims, scale=scale)
+    if selected == "xformers":
+        return xformers_attention(q, k, v, q_pattern, k_pattern, v_pattern, out_pattern, dims, scale=scale)
     if selected == "cudnn_fp8":
         from worldfoundry.core.attention.backends.native_fp8 import native_cudnn_fp8_sdpa
 
@@ -523,35 +653,47 @@ def _invoke_attention_provider(
         q, k, v = rearrange_qkv(q, k, v, q_pattern, k_pattern, v_pattern, "b s n d", dims)
         output = triton_tma_sdpa(q, k, v, scale=scale)
         return rearrange_out(output, out_pattern, "b s n d", dims)
-    if selected == "flash_attention_4":
-        return flash_attention_4(q, k, v, q_pattern, k_pattern, v_pattern, out_pattern, dims, scale=scale)
-    if selected == "flash_attention_3":
-        return flash_attention_3(q, k, v, q_pattern, k_pattern, v_pattern, out_pattern, dims, scale=scale)
-    if selected == "flash_attention_2":
-        return flash_attention_2(q, k, v, q_pattern, k_pattern, v_pattern, out_pattern, dims, scale=scale)
-    if selected == "sage_attention":
-        return sage_attention(q, k, v, q_pattern, k_pattern, v_pattern, out_pattern, dims, scale=scale)
-    if selected == "sage_attention_3":
-        return sage_attention_3(q, k, v, q_pattern, k_pattern, v_pattern, out_pattern, dims, scale=scale)
-    if selected == "xformers":
-        return xformers_attention(q, k, v, q_pattern, k_pattern, v_pattern, out_pattern, dims, scale=scale)
     # Gives VSA/FlexBlock/V-MoBA/SLA/SageSLA an actionable model-contract
     # error. Any other resolved-but-unwired provider is an invariant breach.
     require_generic_attention_backend(selected)
     raise RuntimeError(f"Attention backend {selected!r} resolved as executable but has no generic provider callable")
 
 
-def _invoke_attention_provider_audited(selected: str, *args, **kwargs) -> torch.Tensor:
+def _invoke_attention_provider_audited(
+    selected: str,
+    q: torch.Tensor,
+    k: torch.Tensor,
+    v: torch.Tensor,
+    q_pattern: str,
+    k_pattern: str,
+    v_pattern: str,
+    out_pattern: str,
+    dims,
+    scale,
+    backend_options=None,
+) -> torch.Tensor:
     """Run one non-Torch provider and record attempt/success/error/trace."""
     try:
-        output = _invoke_attention_provider(selected, *args, **kwargs)
+        output = _invoke_attention_provider(
+            selected,
+            q,
+            k,
+            v,
+            q_pattern,
+            k_pattern,
+            v_pattern,
+            out_pattern,
+            dims,
+            scale,
+            backend_options,
+        )
     except Exception:
         _record_provider_runtime(selected, attempts=1, errors=1)
         raise
     if torch.compiler.is_compiling():
         _record_compiled_provider_graph_trace(selected)
     else:
-        _record_provider_runtime(selected, attempts=1, successes=1)
+        _record_provider_success(selected)
     return output
 
 
@@ -572,7 +714,7 @@ def _invoke_torch_sdpa_audited(*args, **kwargs) -> torch.Tensor:
     if torch.compiler.is_compiling():
         _record_compiled_provider_graph_trace("torch")
     else:
-        _record_provider_runtime("torch", attempts=1, successes=1)
+        _record_provider_success("torch")
     return output
 
 
@@ -630,16 +772,25 @@ def attention_forward(
         provider availability in a long-lived process, call
         ``clear_attention_dispatch_cache``.
     """
-    preferred = ATTENTION_IMPLEMENTATION if backend is None else normalize_attention_backend(backend)
+    if backend is None:
+        preferred = ATTENTION_IMPLEMENTATION
+    elif backend in _CANONICAL_GENERIC_BACKENDS:
+        preferred = backend
+    else:
+        preferred = normalize_attention_backend(backend)
     if backend_options and preferred not in {"sol_attn", "scaled_int8_fp8"}:
         raise ValueError("backend_options require explicit Sol-Attn or scaled_int8_fp8")
     # Validate before compatibility/mask short-circuiting. An explicit sparse
     # request must never look successful merely because it silently took SDPA.
-    require_generic_attention_backend(preferred)
+    if preferred not in _CANONICAL_GENERIC_BACKENDS:
+        require_generic_attention_backend(preferred)
     if preferred == "sol_attn":
         if compatibility_mode or attn_mask is not None:
             raise ValueError("Sol-Attn does not support masks or compatibility-mode fallback")
-        from worldfoundry.core.attention.backends.sol import sol_attention
+        sol_mod = sys.modules.get("worldfoundry.core.attention.backends.sol")
+        if sol_mod is None:
+            from worldfoundry.core.attention.backends import sol as sol_mod
+        sol_attention = sol_mod.sol_attention
 
         q, k, v = rearrange_qkv(q, k, v, q_pattern, k_pattern, v_pattern, "b s n d", dims)
         try:
@@ -650,7 +801,7 @@ def attention_forward(
         if torch.compiler.is_compiling():
             _record_compiled_provider_graph_trace("sol_attn")
         else:
-            _record_provider_runtime("sol_attn", attempts=1, successes=1)
+            _record_provider_success("sol_attn")
         return rearrange_out(output, out_pattern, "b s n d", dims)
     if preferred in {"cudnn_fp8", "triton_tma", "scaled_int8_fp8"}:
         if compatibility_mode or attn_mask is not None:
@@ -690,22 +841,88 @@ def attention_forward(
             attn_mask=attn_mask,
             scale=scale,
         )
-    signature = _attention_signature(q, k, v, q_pattern, k_pattern, v_pattern, dims)
+    if q.is_cuda:
+        q_dev_idx = q.get_device()
+        device_str = _CUDA_DEVICE_STRS[q_dev_idx] if q_dev_idx < 64 else f"cuda:{q_dev_idx}"
+    else:
+        q_dev_idx = -1
+        device_str = _device_str(q.device)
+    q_dtype = q.dtype
+    dtype_str = _DTYPE_STR_CACHE.get(q_dtype) or _dtype_str(q_dtype)
+    if (
+        q_pattern == "b n s d"
+        and k_pattern == "b n s d"
+        and v_pattern == "b n s d"
+        and q.ndim == 4
+        and k.ndim == 4
+        and v.ndim == 4
+    ):
+        qs, ks, vs = q.shape, k.shape, v.shape
+        k_dt = k.dtype
+        v_dt = v.dtype
+        signature: _AttentionSignature = (
+            "known",
+            qs[2],
+            ks[2],
+            vs[2],
+            qs[1],
+            ks[1],
+            vs[1],
+            qs[3],
+            ks[3],
+            vs[3],
+            dtype_str if k_dt is q_dtype else (_DTYPE_STR_CACHE.get(k_dt) or _dtype_str(k_dt)),
+            dtype_str if v_dt is q_dtype else (_DTYPE_STR_CACHE.get(v_dt) or _dtype_str(v_dt)),
+            device_str if (q_dev_idx >= 0 and k.is_cuda and k.get_device() == q_dev_idx) else _device_str(k.device),
+            device_str if (q_dev_idx >= 0 and v.is_cuda and v.get_device() == q_dev_idx) else _device_str(v.device),
+        )
+    elif (
+        q_pattern == "b s n d"
+        and k_pattern == "b s n d"
+        and v_pattern == "b s n d"
+        and q.ndim == 4
+        and k.ndim == 4
+        and v.ndim == 4
+    ):
+        qs, ks, vs = q.shape, k.shape, v.shape
+        k_dt = k.dtype
+        v_dt = v.dtype
+        signature = (
+            "known",
+            qs[1],
+            ks[1],
+            vs[1],
+            qs[2],
+            ks[2],
+            vs[2],
+            qs[3],
+            ks[3],
+            vs[3],
+            dtype_str if k_dt is q_dtype else (_DTYPE_STR_CACHE.get(k_dt) or _dtype_str(k_dt)),
+            dtype_str if v_dt is q_dtype else (_DTYPE_STR_CACHE.get(v_dt) or _dtype_str(v_dt)),
+            device_str if (q_dev_idx >= 0 and k.is_cuda and k.get_device() == q_dev_idx) else _device_str(k.device),
+            device_str if (q_dev_idx >= 0 and v.is_cuda and v.get_device() == q_dev_idx) else _device_str(v.device),
+        )
+    else:
+        signature = _attention_signature(q, k, v, q_pattern, k_pattern, v_pattern, dims)
+    short_threshold = _short_attention_threshold(q.device) if preferred == "auto" else 0
     candidates = _select_attention_backends_cached(
         preferred,
-        str(q.device),
-        str(q.dtype),
+        device_str,
+        dtype_str,
         signature,
-        _short_attention_threshold(q.device),
-        _unavailable_backends_snapshot(),
+        short_threshold,
+        _UNAVAILABLE_BACKENDS_TUPLE,
     )
+    has_failed = bool(_FAILED_ATTENTION_SIGNATURES)
     for selected in candidates:
         if selected == "torch":
             break
-        failure_key = (selected, str(q.device), str(q.dtype), signature)
-        if failure_key in _FAILED_ATTENTION_SIGNATURES:
-            _record_provider_runtime(selected, quarantined_skips=1)
-            continue
+        if has_failed:
+            failure_key = (selected, device_str, dtype_str, signature)
+            if failure_key in _FAILED_ATTENTION_SIGNATURES:
+                _record_provider_runtime(selected, quarantined_skips=1)
+                continue
         try:
             return _invoke_attention_provider_audited(
                 selected,
@@ -728,7 +945,8 @@ def attention_forward(
         except RuntimeError as exc:
             if not _is_unsupported_kernel_error(exc):
                 raise
-            _remember_failed_attention_signature(failure_key)
+            _remember_failed_attention_signature((selected, device_str, dtype_str, signature))
+            has_failed = True
             _record_provider_runtime(selected, fallbacks=1)
             _warn_backend_fallback(selected, exc)
     return _invoke_torch_sdpa_audited(
@@ -750,20 +968,53 @@ _FAILED_ATTENTION_SIGNATURE_ORDER: deque[tuple[object, ...]] = deque()
 _FAILED_ATTENTION_SIGNATURE_LOCK = threading.Lock()
 _UNAVAILABLE_ATTENTION_BACKENDS: set[str] = set()
 _UNAVAILABLE_ATTENTION_BACKENDS_LOCK = threading.Lock()
+_UNAVAILABLE_BACKENDS_TUPLE: tuple[str, ...] = ()
+
+_CUDA_DEVICE_STRS: tuple[str, ...] = tuple(f"cuda:{index}" for index in range(64))
+_DEVICE_CAPABILITY_CACHE: dict[tuple[str, int | None], tuple[int, int] | None] = {}
+_DEVICE_STR_CACHE: dict[tuple[str, int | None], str] = {}
+_DTYPE_STR_CACHE: dict[torch.dtype, str] = {
+    torch.bfloat16: "torch.bfloat16",
+    torch.float16: "torch.float16",
+    torch.float32: "torch.float32",
+    torch.float64: "torch.float64",
+}
+
+
+def _device_str(device: torch.device) -> str:
+    """Cached ``str(device)`` avoiding repeated C++ formatting on the hot path."""
+    key = (device.type, device.index)
+    cached = _DEVICE_STR_CACHE.get(key)
+    if cached is not None:
+        return cached
+    value = str(device)
+    _DEVICE_STR_CACHE[key] = value
+    return value
+
+
+def _dtype_str(dtype: torch.dtype) -> str:
+    """Cached ``str(dtype)`` avoiding repeated C++ formatting on the hot path."""
+    cached = _DTYPE_STR_CACHE.get(dtype)
+    if cached is not None:
+        return cached
+    value = str(dtype)
+    _DTYPE_STR_CACHE[dtype] = value
+    return value
 
 
 def _unavailable_backends_snapshot() -> tuple[str, ...]:
-    """Return a stable snapshot while other threads quarantine providers."""
+    """Return an immutable snapshot while other threads quarantine providers."""
 
-    with _UNAVAILABLE_ATTENTION_BACKENDS_LOCK:
-        return tuple(sorted(_UNAVAILABLE_ATTENTION_BACKENDS))
+    return _UNAVAILABLE_BACKENDS_TUPLE
 
 
 def _quarantine_unavailable_backend(selected: str) -> None:
     """Atomically mark an optional provider unavailable for this process."""
 
+    global _UNAVAILABLE_BACKENDS_TUPLE
     with _UNAVAILABLE_ATTENTION_BACKENDS_LOCK:
         _UNAVAILABLE_ATTENTION_BACKENDS.add(selected)
+        _UNAVAILABLE_BACKENDS_TUPLE = tuple(sorted(_UNAVAILABLE_ATTENTION_BACKENDS))
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -779,17 +1030,19 @@ def _short_attention_threshold(device: torch.device | str | None = None) -> int:
     ``WORLDFOUNDRY_ATTENTION_MIN_FUSED_SEQUENCE`` overrides; a non-integer
     value falls back to 128 rather than crashing dispatch.
     """
-    try:
-        configured = os.getenv("WORLDFOUNDRY_ATTENTION_MIN_FUSED_SEQUENCE")
-        if configured is not None:
+    configured = os.environ.get("WORLDFOUNDRY_ATTENTION_MIN_FUSED_SEQUENCE")
+    if configured is not None:
+        try:
             return max(int(configured or "0"), 0)
-    except ValueError:
-        return 128
+        except ValueError:
+            return 128
     capability = _device_compute_capability(device)
-    if capability is not None and capability[0] == 7:
-        return 256
-    if capability is not None and capability[0] == 9:
-        return 64
+    if capability is not None:
+        major = capability[0]
+        if major == 9:
+            return 64
+        if major == 7:
+            return 256
     return 128
 
 
@@ -802,14 +1055,35 @@ def _device_compute_capability(device: torch.device | str | None = None) -> tupl
     ``None`` and use the exact PyTorch SDPA path.
     """
 
+    if isinstance(device, torch.device):
+        if device.type != "cuda":
+            return None
+        cache_key = (device.type, device.index)
+        if cache_key in _DEVICE_CAPABILITY_CACHE:
+            return _DEVICE_CAPABILITY_CACHE[cache_key]
+        if getattr(torch.version, "hip", None) is not None or not torch.cuda.is_available():
+            return None
+        try:
+            major, minor = torch.cuda.get_device_capability(device)
+            cap = (int(major), int(minor))
+            _DEVICE_CAPABILITY_CACHE[cache_key] = cap
+            return cap
+        except (AssertionError, RuntimeError, TypeError, ValueError):
+            return None
+
     if getattr(torch.version, "hip", None) is not None or not torch.cuda.is_available():
         return None
     try:
         resolved = torch.device("cuda", torch.cuda.current_device()) if device is None else torch.device(device)
         if resolved.type != "cuda":
             return None
+        cache_key = (resolved.type, resolved.index)
+        if cache_key in _DEVICE_CAPABILITY_CACHE:
+            return _DEVICE_CAPABILITY_CACHE[cache_key]
         major, minor = torch.cuda.get_device_capability(resolved)
-        return int(major), int(minor)
+        cap = (int(major), int(minor))
+        _DEVICE_CAPABILITY_CACHE[cache_key] = cap
+        return cap
     except (AssertionError, RuntimeError, TypeError, ValueError):
         return None
 
@@ -835,16 +1109,30 @@ _AttentionSignature: TypeAlias = (
 def _tensor_layout_shape(tensor: torch.Tensor, pattern: str, dims: dict | None) -> tuple[int, int, int] | None:
     """Return ``(sequence, heads, head_dim)`` for common dispatcher layouts."""
 
-    normalized = " ".join(str(pattern).split())
-    if tensor.ndim == 4 and normalized == "b n s d":
-        return int(tensor.shape[2]), int(tensor.shape[1]), int(tensor.shape[3])
-    if tensor.ndim == 4 and normalized == "b s n d":
-        return int(tensor.shape[1]), int(tensor.shape[2]), int(tensor.shape[3])
-    if tensor.ndim == 3 and normalized in {"b s (n d)", "b s (h d)"}:
-        names = {} if dims is None else dims
-        heads = int(names.get("n") or names.get("h") or 0)
-        if heads > 0 and tensor.shape[-1] % heads == 0:
-            return int(tensor.shape[1]), heads, int(tensor.shape[-1] // heads)
+    ndim = tensor.ndim
+    if ndim == 4:
+        if pattern == "b n s d":
+            shape = tensor.shape
+            return shape[2], shape[1], shape[3]
+        if pattern == "b s n d":
+            shape = tensor.shape
+            return shape[1], shape[2], shape[3]
+        normalized = " ".join(str(pattern).split())
+        if normalized == "b n s d":
+            shape = tensor.shape
+            return shape[2], shape[1], shape[3]
+        if normalized == "b s n d":
+            shape = tensor.shape
+            return shape[1], shape[2], shape[3]
+        return None
+    if ndim == 3:
+        normalized = pattern if pattern in ("b s (n d)", "b s (h d)") else " ".join(str(pattern).split())
+        if normalized in ("b s (n d)", "b s (h d)") and dims is not None:
+            heads_raw = dims.get("n") or dims.get("h") or 0
+            heads = int(heads_raw)
+            last_dim = tensor.shape[2]
+            if heads > 0 and last_dim % heads == 0:
+                return tensor.shape[1], heads, last_dim // heads
     return None
 
 
@@ -881,10 +1169,10 @@ def _attention_signature(
         head_dim,
         k_dim,
         v_dim,
-        str(k.dtype),
-        str(v.dtype),
-        str(k.device),
-        str(v.device),
+        _dtype_str(k.dtype),
+        _dtype_str(v.dtype),
+        _device_str(k.device),
+        _device_str(v.device),
     )
 
 
@@ -1031,12 +1319,17 @@ def attention_dispatch_report() -> dict[str, object]:
 def clear_attention_dispatch_cache() -> None:
     """Clear workload decisions and runtime failure quarantine."""
 
-    _select_attention_backends_cached.cache_clear()
+    global _UNAVAILABLE_BACKENDS_TUPLE
+    cache_clear = getattr(_select_attention_backends_cached, "cache_clear", None)
+    if callable(cache_clear):
+        cache_clear()
+    _DEVICE_CAPABILITY_CACHE.clear()
     with _FAILED_ATTENTION_SIGNATURE_LOCK:
         _FAILED_ATTENTION_SIGNATURES.clear()
         _FAILED_ATTENTION_SIGNATURE_ORDER.clear()
     with _UNAVAILABLE_ATTENTION_BACKENDS_LOCK:
         _UNAVAILABLE_ATTENTION_BACKENDS.clear()
+        _UNAVAILABLE_BACKENDS_TUPLE = ()
 
 
 # ──────────────────────────────────────────────────────────────────────────

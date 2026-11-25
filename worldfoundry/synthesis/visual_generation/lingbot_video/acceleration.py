@@ -58,6 +58,43 @@ except ImportError:  # pragma: no cover - CPU-only environments
 
 
 if _TRITON_AVAILABLE:
+    from triton.language.extra.cuda import libdevice as _libdevice
+
+    @triton.jit
+    def _lb_round_f32_to_bf16(value, USE_BF16_PTX: tl.constexpr):
+        if USE_BF16_PTX:
+            return tl.inline_asm_elementwise(
+                "{ .reg .b16 rounded; cvt.rn.bf16.f32 rounded, $1; mov.b32 $0, {0, rounded}; }",
+                constraints="=f,f",
+                args=[value],
+                dtype=tl.float32,
+                is_pure=True,
+                pack=1,
+            )
+        bits = value.to(tl.uint32, bitcast=True)
+        rounding_bias = 0x7FFF + ((bits >> 16) & 1)
+        rounded = (bits + rounding_bias) & 0xFFFF0000
+        return rounded.to(tl.float32, bitcast=True)
+
+    @triton.jit
+    def _lb_round_f32_to_fp16(value):
+        return tl.inline_asm_elementwise(
+            "{ .reg .b16 rounded; cvt.rn.f16.f32 rounded, $1; cvt.f32.f16 $0, rounded; }",
+            constraints="=f,f",
+            args=[value],
+            dtype=tl.float32,
+            is_pure=True,
+            pack=1,
+        )
+
+    @triton.jit
+    def _lb_round_to_dtype(value, dtype: tl.constexpr, USE_BF16_PTX: tl.constexpr = True):
+        if dtype == tl.bfloat16:
+            return _lb_round_f32_to_bf16(value, USE_BF16_PTX)
+        elif dtype == tl.float16:
+            return _lb_round_f32_to_fp16(value)
+        else:
+            return value
 
     @triton.jit
     def _lingbot_qk_rmsnorm_rope_kernel(
@@ -87,25 +124,27 @@ if _TRITON_AVAILABLE:
         stride_sin_s,
         S,
         H: tl.constexpr,
+        HEAD_DIM: tl.constexpr,
         PAIRS: tl.constexpr,
+        BLOCK: tl.constexpr,
         BLOCK_PAIRS: tl.constexpr,
         eps,
     ):
-        """Fuse per-head FP32 RMSNorm + interleaved complex RoPE for [B, S, H, D]."""
+        """Coalesced 128-bit per-head FP32 RMSNorm + interleaved complex RoPE for [B, S, H, D]."""
         bs_idx = tl.program_id(0)
         head_idx = tl.program_id(1)
         b_idx = bs_idx // S
         s_idx = bs_idx % S
 
+        cols = tl.arange(0, BLOCK)
+        cmask = cols < HEAD_DIM
         pair_offs = tl.arange(0, BLOCK_PAIRS)
-        mask = pair_offs < PAIRS
-        even_offs = pair_offs * 2
-        odd_offs = even_offs + 1
+        pmask = pair_offs < PAIRS
 
-        cos = tl.load(COS_ptr + b_idx * stride_cos_b + s_idx * stride_cos_s + pair_offs, mask=mask, other=1.0).to(
+        cos = tl.load(COS_ptr + b_idx * stride_cos_b + s_idx * stride_cos_s + pair_offs, mask=pmask, other=1.0).to(
             tl.float32
         )
-        sin = tl.load(SIN_ptr + b_idx * stride_sin_b + s_idx * stride_sin_s + pair_offs, mask=mask, other=0.0).to(
+        sin = tl.load(SIN_ptr + b_idx * stride_sin_b + s_idx * stride_sin_s + pair_offs, mask=pmask, other=0.0).to(
             tl.float32
         )
 
@@ -114,29 +153,218 @@ if _TRITON_AVAILABLE:
             h = head_idx
             base_in = Q_ptr + b_idx * stride_q_b + s_idx * stride_q_s + h * stride_q_h
             base_out = Q_out_ptr + b_idx * stride_qo_b + s_idx * stride_qo_s + h * stride_qo_h
-            w_even = tl.load(QW_ptr + even_offs, mask=mask, other=0.0).to(tl.float32)
-            w_odd = tl.load(QW_ptr + odd_offs, mask=mask, other=0.0).to(tl.float32)
+            w_vec = tl.load(QW_ptr + cols, mask=cmask, other=0.0).to(tl.float32)
         else:
             h = head_idx - H
             base_in = K_ptr + b_idx * stride_k_b + s_idx * stride_k_s + h * stride_k_h
             base_out = K_out_ptr + b_idx * stride_ko_b + s_idx * stride_ko_s + h * stride_ko_h
-            w_even = tl.load(KW_ptr + even_offs, mask=mask, other=0.0).to(tl.float32)
-            w_odd = tl.load(KW_ptr + odd_offs, mask=mask, other=0.0).to(tl.float32)
+            w_vec = tl.load(KW_ptr + cols, mask=cmask, other=0.0).to(tl.float32)
 
-        x_even = tl.load(base_in + even_offs, mask=mask, other=0.0).to(tl.float32)
-        x_odd = tl.load(base_in + odd_offs, mask=mask, other=0.0).to(tl.float32)
+        x_in = tl.load(base_in + cols, mask=cmask, other=0.0)
+        x_f = x_in.to(tl.float32)
 
         # Match LingBotVideoRMSNorm: fp32 variance & weight multiply, then interleaved RoPE.
-        sq_sum = tl.sum(x_even * x_even + x_odd * x_odd, axis=0)
-        inv_rms = tl.rsqrt(sq_sum / (2.0 * PAIRS) + eps)
-        n_even = (x_even * inv_rms) * w_even
-        n_odd = (x_odd * inv_rms) * w_odd
+        sq_sum = tl.sum(x_f * x_f, axis=0)
+        inv_rms = _libdevice.rsqrt(sq_sum / HEAD_DIM + eps)
+        normed = (x_f * inv_rms) * w_vec
 
+        n_even, n_odd = tl.split(tl.reshape(normed, (BLOCK_PAIRS, 2)))
         r_even = n_even * cos - n_odd * sin
         r_odd = n_even * sin + n_odd * cos
+        r_vec = tl.reshape(tl.join(r_even, r_odd), (BLOCK,))
 
-        tl.store(base_out + even_offs, r_even, mask=mask)
-        tl.store(base_out + odd_offs, r_odd, mask=mask)
+        tl.store(base_out + cols, r_vec.to(x_in.dtype), mask=cmask)
+
+    @triton.jit
+    def _lingbot_rmsnorm_adaln_kernel(
+        x_ptr,
+        w_ptr,
+        scale_ptr,
+        shift_ptr,
+        out_ptr,
+        rows,
+        seq_len,
+        scale_sb,
+        scale_ss,
+        shift_sb,
+        shift_ss,
+        eps,
+        hidden_size: tl.constexpr,
+        block: tl.constexpr,
+        USE_BF16_PTX: tl.constexpr,
+    ):
+        """Single-pass ``(LingBotVideoRMSNorm(x, w) * scale + shift).to(out_dtype)``."""
+        row = tl.program_id(0)
+        b_idx = row // seq_len
+        s_idx = row % seq_len
+        cols = tl.arange(0, block)
+        mask = (row < rows) & (cols < hidden_size)
+
+        x_off = row.to(tl.int64) * hidden_size + cols
+        x_in = tl.load(x_ptr + x_off, mask=mask, other=0.0)
+        x_f = x_in.to(tl.float32)
+        w = tl.load(w_ptr + cols, mask=mask, other=0.0).to(tl.float32)
+        inv_rms = _libdevice.rsqrt(tl.sum(x_f * x_f, axis=0) / hidden_size + eps)
+        normed = _lb_round_to_dtype((x_f * inv_rms) * w, x_in.dtype, USE_BF16_PTX)
+
+        scale_off = b_idx.to(tl.int64) * scale_sb + s_idx.to(tl.int64) * scale_ss + cols
+        shift_off = b_idx.to(tl.int64) * shift_sb + s_idx.to(tl.int64) * shift_ss + cols
+        sc = tl.load(scale_ptr + scale_off, mask=mask, other=1.0).to(tl.float32)
+        sh = tl.load(shift_ptr + shift_off, mask=mask, other=0.0).to(tl.float32)
+        out = normed * sc + sh
+        tl.store(out_ptr + x_off, out, mask=mask)
+
+    @triton.jit
+    def _lingbot_post_norm_residual_gate_rmsnorm_adaln_kernel(
+        x_ptr,
+        attn_ptr,
+        post_w_ptr,
+        gate_ptr,
+        norm2_w_ptr,
+        scale_ptr,
+        shift_ptr,
+        x_out_ptr,
+        ffn_in_ptr,
+        rows,
+        seq_len,
+        gate_sb,
+        gate_ss,
+        scale_sb,
+        scale_ss,
+        shift_sb,
+        shift_ss,
+        eps_post,
+        eps_norm2,
+        hidden_size: tl.constexpr,
+        block: tl.constexpr,
+        USE_BF16_PTX: tl.constexpr,
+    ):
+        """2-stage super-fusion: post-attn RMSNorm + gated residual + norm2 RMSNorm + FFN AdaLN."""
+        row = tl.program_id(0)
+        b_idx = row // seq_len
+        s_idx = row % seq_len
+        cols = tl.arange(0, block)
+        mask = (row < rows) & (cols < hidden_size)
+
+        off = row.to(tl.int64) * hidden_size + cols
+        x_in = tl.load(x_ptr + off, mask=mask, other=0.0)
+        a_in = tl.load(attn_ptr + off, mask=mask, other=0.0)
+        post_w = tl.load(post_w_ptr + cols, mask=mask, other=0.0).to(tl.float32)
+        gate_off = b_idx.to(tl.int64) * gate_sb + s_idx.to(tl.int64) * gate_ss + cols
+        gate = tl.load(gate_ptr + gate_off, mask=mask, other=0.0).to(tl.float32)
+
+        # Stage 1: a_normed = (post_w * (a_f * rsqrt(mean(a_f^2) + eps_post))).to(a.dtype)
+        a_f = a_in.to(tl.float32)
+        a_inv = _libdevice.rsqrt(tl.sum(a_f * a_f, axis=0) / hidden_size + eps_post)
+        a_normed = _lb_round_to_dtype((a_f * a_inv) * post_w, a_in.dtype, USE_BF16_PTX)
+        # x_new = x + (gate * a_normed).to(x.dtype)
+        upd = _lb_round_to_dtype(gate * a_normed, x_in.dtype, USE_BF16_PTX)
+        x_new = _lb_round_to_dtype(x_in.to(tl.float32) + upd, x_in.dtype, USE_BF16_PTX)
+        tl.store(x_out_ptr + off, x_new, mask=mask)
+
+        # Stage 2: ffn_in = (LingBotVideoRMSNorm(x_new, norm2_w) * scale_mlp + shift_mlp).to(bulk_dtype)
+        norm2_w = tl.load(norm2_w_ptr + cols, mask=mask, other=0.0).to(tl.float32)
+        x_inv = _libdevice.rsqrt(tl.sum(x_new * x_new, axis=0) / hidden_size + eps_norm2)
+        x_normed = _lb_round_to_dtype((x_new * x_inv) * norm2_w, x_in.dtype, USE_BF16_PTX)
+
+        scale_off = b_idx.to(tl.int64) * scale_sb + s_idx.to(tl.int64) * scale_ss + cols
+        shift_off = b_idx.to(tl.int64) * shift_sb + s_idx.to(tl.int64) * shift_ss + cols
+        sc = tl.load(scale_ptr + scale_off, mask=mask, other=1.0).to(tl.float32)
+        sh = tl.load(shift_ptr + shift_off, mask=mask, other=0.0).to(tl.float32)
+        ffn_in = x_normed * sc + sh
+        tl.store(ffn_in_ptr + off, ffn_in, mask=mask)
+
+    @triton.jit
+    def _lingbot_post_norm_residual_gate_add_kernel(
+        x_ptr,
+        upd_ptr,
+        post_w_ptr,
+        gate_ptr,
+        x_out_ptr,
+        rows,
+        seq_len,
+        gate_sb,
+        gate_ss,
+        eps_post,
+        hidden_size: tl.constexpr,
+        block: tl.constexpr,
+        USE_BF16_PTX: tl.constexpr,
+    ):
+        """Fused ``x + (gate * LingBotVideoRMSNorm(upd, post_w)).to(x.dtype)``."""
+        row = tl.program_id(0)
+        b_idx = row // seq_len
+        s_idx = row % seq_len
+        cols = tl.arange(0, block)
+        mask = (row < rows) & (cols < hidden_size)
+
+        off = row.to(tl.int64) * hidden_size + cols
+        x_in = tl.load(x_ptr + off, mask=mask, other=0.0)
+        u_in = tl.load(upd_ptr + off, mask=mask, other=0.0)
+        post_w = tl.load(post_w_ptr + cols, mask=mask, other=0.0).to(tl.float32)
+        gate_off = b_idx.to(tl.int64) * gate_sb + s_idx.to(tl.int64) * gate_ss + cols
+        gate = tl.load(gate_ptr + gate_off, mask=mask, other=0.0).to(tl.float32)
+
+        u_f = u_in.to(tl.float32)
+        u_inv = _libdevice.rsqrt(tl.sum(u_f * u_f, axis=0) / hidden_size + eps_post)
+        u_normed = _lb_round_to_dtype((u_f * u_inv) * post_w, u_in.dtype, USE_BF16_PTX)
+        gated = _lb_round_to_dtype(gate * u_normed, x_in.dtype, USE_BF16_PTX)
+        x_new = x_in.to(tl.float32) + gated
+        tl.store(x_out_ptr + off, x_new, mask=mask)
+
+    @triton.jit
+    def _lingbot_layernorm_adaln_kernel(
+        x_ptr,
+        scale_ptr,
+        shift_ptr,
+        out_ptr,
+        rows,
+        seq_len,
+        scale_sb,
+        scale_ss,
+        shift_sb,
+        shift_ss,
+        eps,
+        hidden_size: tl.constexpr,
+        block: tl.constexpr,
+    ):
+        """Single-pass FP32 LayerNorm (no affine) + AdaLN ``*(1+scale)+shift`` directly to output dtype."""
+        row = tl.program_id(0)
+        b_idx = row // seq_len
+        s_idx = row % seq_len
+        cols = tl.arange(0, block)
+        mask = (row < rows) & (cols < hidden_size)
+
+        off = row.to(tl.int64) * hidden_size + cols
+        x_f = tl.load(x_ptr + off, mask=mask, other=0.0).to(tl.float32)
+        mean = tl.sum(x_f, axis=0) / hidden_size
+        diff = tl.where(mask, x_f - mean, 0.0)
+        inv_std = _libdevice.rsqrt(tl.sum(diff * diff, axis=0) / hidden_size + eps)
+        normed = diff * inv_std
+
+        scale_off = b_idx.to(tl.int64) * scale_sb + s_idx.to(tl.int64) * scale_ss + cols
+        shift_off = b_idx.to(tl.int64) * shift_sb + s_idx.to(tl.int64) * shift_ss + cols
+        sc = tl.load(scale_ptr + scale_off, mask=mask, other=0.0).to(tl.float32)
+        sh = tl.load(shift_ptr + shift_off, mask=mask, other=0.0).to(tl.float32)
+        out = normed * (1.0 + sc) + sh
+        tl.store(out_ptr + off, out, mask=mask)
+
+
+def _lb_use_bf16_ptx(device: torch.device) -> bool:
+    return device.type == "cuda" and torch.cuda.get_device_capability(device)[0] >= 8
+
+
+def _lb_mod_strides(t: torch.Tensor, batch: int, seq_len: int) -> tuple[int, int]:
+    sb = 0 if int(t.shape[0]) == 1 and batch > 1 else int(t.stride(0))
+    ss = 0 if int(t.shape[1]) == 1 and seq_len > 1 else int(t.stride(1))
+    return sb, ss
+
+
+def _lb_optimal_warps(block: int) -> int:
+    if block <= 2048:
+        return 2
+    if block <= 4096:
+        return 4
+    return 8
 
 
 @torch.library.custom_op("worldfoundry::lingbot_qk_rmsnorm_rope", mutates_args=(), device_types="cuda")
@@ -152,7 +380,8 @@ def _lingbot_qk_rmsnorm_rope_op(
 ) -> tuple[torch.Tensor, torch.Tensor]:
     b, s, h, d = q.shape
     pairs = d // 2
-    block_pairs = triton.next_power_of_2(pairs)
+    block = max(32, int(triton.next_power_of_2(d)))
+    block_pairs = block // 2
     if output_bhsd:
         q_out = torch.empty((b, h, s, d), device=q.device, dtype=q.dtype)
         k_out = torch.empty((b, h, s, d), device=k.device, dtype=k.dtype)
@@ -191,10 +420,12 @@ def _lingbot_qk_rmsnorm_rope_op(
         sin.stride(1),
         s,
         H=h,
+        HEAD_DIM=d,
         PAIRS=pairs,
+        BLOCK=block,
         BLOCK_PAIRS=block_pairs,
         eps=float(eps),
-        num_warps=2 if block_pairs <= 64 else 4,
+        num_warps=2 if block <= 128 else 4,
     )
     return q_out, k_out
 
@@ -217,6 +448,12 @@ def _lingbot_qk_rmsnorm_rope_fake(
     return torch.empty_like(q), torch.empty_like(k)
 
 
+def _ensure_fp32_contig(t: torch.Tensor) -> torch.Tensor:
+    if t.dtype == torch.float32 and t.is_contiguous():
+        return t
+    return t.float().contiguous()
+
+
 def fused_lingbot_qk_rmsnorm_rope(
     q: torch.Tensor,
     k: torch.Tensor,
@@ -227,7 +464,7 @@ def fused_lingbot_qk_rmsnorm_rope(
     *,
     output_bhsd: bool = False,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    """Fuse per-head FP32 QK-RMSNorm + interleaved 3D RoPE for ``[B, S, H, D]``."""
+    """Coalesced 128-bit per-head FP32 QK-RMSNorm + interleaved 3D RoPE for ``[B, S, H, D]``."""
     if isinstance(rotary_emb, tuple):
         cos, sin = rotary_emb
     else:
@@ -252,10 +489,10 @@ def fused_lingbot_qk_rmsnorm_rope(
         return _lingbot_qk_rmsnorm_rope_op(
             q,
             k,
-            q_weight.float().contiguous(),
-            k_weight.float().contiguous(),
-            cos_2d.float().contiguous(),
-            sin_2d.float().contiguous(),
+            _ensure_fp32_contig(q_weight),
+            _ensure_fp32_contig(k_weight),
+            _ensure_fp32_contig(cos_2d),
+            _ensure_fp32_contig(sin_2d),
             float(eps),
             bool(output_bhsd),
         )
@@ -280,6 +517,402 @@ def fused_lingbot_qk_rmsnorm_rope(
     if output_bhsd:
         return q_res.transpose(1, 2).contiguous(), k_res.transpose(1, 2).contiguous()
     return q_res, k_res
+
+
+@torch.library.custom_op("worldfoundry::lingbot_rmsnorm_adaln", mutates_args=(), device_types="cuda")
+def _lingbot_rmsnorm_adaln_op(
+    x: torch.Tensor,
+    weight: torch.Tensor,
+    scale: torch.Tensor,
+    shift: torch.Tensor,
+    eps: float,
+    out_dtype: torch.dtype,
+) -> torch.Tensor:
+    b, s, h = int(x.shape[0]), int(x.shape[1]), int(x.shape[2])
+    rows = b * s
+    out = torch.empty((b, s, h), device=x.device, dtype=out_dtype)
+    scale_sb, scale_ss = _lb_mod_strides(scale, b, s)
+    shift_sb, shift_ss = _lb_mod_strides(shift, b, s)
+    block = max(32, int(triton.next_power_of_2(h)))
+    _lingbot_rmsnorm_adaln_kernel[(rows,)](
+        x,
+        weight,
+        scale,
+        shift,
+        out,
+        rows,
+        s,
+        scale_sb,
+        scale_ss,
+        shift_sb,
+        shift_ss,
+        float(eps),
+        hidden_size=h,
+        block=block,
+        USE_BF16_PTX=_lb_use_bf16_ptx(x.device),
+        num_warps=_lb_optimal_warps(block),
+        enable_fp_fusion=False,
+    )
+    return out
+
+
+@_lingbot_rmsnorm_adaln_op.register_fake
+def _lingbot_rmsnorm_adaln_fake(
+    x: torch.Tensor,
+    weight: torch.Tensor,
+    scale: torch.Tensor,
+    shift: torch.Tensor,
+    eps: float,
+    out_dtype: torch.dtype,
+) -> torch.Tensor:
+    del weight, scale, shift, eps
+    return torch.empty_like(x, dtype=out_dtype)
+
+
+def fused_lingbot_rmsnorm_adaln(
+    x: torch.Tensor,
+    weight: torch.Tensor,
+    scale: torch.Tensor,
+    shift: torch.Tensor,
+    *,
+    eps: float = 1e-6,
+    out_dtype: torch.dtype | None = None,
+) -> torch.Tensor:
+    """Fused ``(LingBotVideoRMSNorm(x, weight) * scale + shift).to(out_dtype)``."""
+    target_dtype = x.dtype if out_dtype is None else out_dtype
+    if (
+        _TRITON_AVAILABLE
+        and not torch.is_grad_enabled()
+        and x.is_cuda
+        and weight.is_cuda
+        and scale.is_cuda
+        and shift.is_cuda
+        and x.ndim == 3
+        and x.is_contiguous()
+        and x.numel() > 0
+        and 0 < int(x.shape[-1]) <= 8192
+        and weight.shape == (x.shape[-1],)
+        and weight.is_contiguous()
+        and scale.ndim == 3
+        and shift.ndim == 3
+        and scale.stride(-1) == 1
+        and shift.stride(-1) == 1
+        and scale.shape[0] in (1, x.shape[0])
+        and scale.shape[1] in (1, x.shape[1])
+        and shift.shape[0] in (1, x.shape[0])
+        and shift.shape[1] in (1, x.shape[1])
+        and x.dtype in {torch.bfloat16, torch.float16, torch.float32}
+        and target_dtype in {torch.bfloat16, torch.float16, torch.float32}
+    ):
+        return _lingbot_rmsnorm_adaln_op(x, weight, scale, shift, float(eps), target_dtype)
+    xf = x.float()
+    normed = (weight * (xf * torch.rsqrt(xf.pow(2).mean(-1, keepdim=True) + float(eps)))).to(x.dtype)
+    return (normed * scale + shift).to(target_dtype)
+
+
+@torch.library.custom_op(
+    "worldfoundry::lingbot_post_norm_residual_gate_rmsnorm_adaln", mutates_args=(), device_types="cuda"
+)
+def _lingbot_post_norm_residual_gate_rmsnorm_adaln_op(
+    x: torch.Tensor,
+    attn_out: torch.Tensor,
+    post_weight: torch.Tensor,
+    gate_msa: torch.Tensor,
+    norm2_weight: torch.Tensor,
+    scale_mlp: torch.Tensor,
+    shift_mlp: torch.Tensor,
+    eps_post: float,
+    eps_norm2: float,
+    out_dtype: torch.dtype,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    b, s, h = int(x.shape[0]), int(x.shape[1]), int(x.shape[2])
+    rows = b * s
+    x_out = torch.empty_like(x)
+    ffn_in = torch.empty((b, s, h), device=x.device, dtype=out_dtype)
+    gate_sb, gate_ss = _lb_mod_strides(gate_msa, b, s)
+    scale_sb, scale_ss = _lb_mod_strides(scale_mlp, b, s)
+    shift_sb, shift_ss = _lb_mod_strides(shift_mlp, b, s)
+    block = max(32, int(triton.next_power_of_2(h)))
+    _lingbot_post_norm_residual_gate_rmsnorm_adaln_kernel[(rows,)](
+        x,
+        attn_out,
+        post_weight,
+        gate_msa,
+        norm2_weight,
+        scale_mlp,
+        shift_mlp,
+        x_out,
+        ffn_in,
+        rows,
+        s,
+        gate_sb,
+        gate_ss,
+        scale_sb,
+        scale_ss,
+        shift_sb,
+        shift_ss,
+        float(eps_post),
+        float(eps_norm2),
+        hidden_size=h,
+        block=block,
+        USE_BF16_PTX=_lb_use_bf16_ptx(x.device),
+        num_warps=_lb_optimal_warps(block),
+        enable_fp_fusion=False,
+    )
+    return x_out, ffn_in
+
+
+@_lingbot_post_norm_residual_gate_rmsnorm_adaln_op.register_fake
+def _lingbot_post_norm_residual_gate_rmsnorm_adaln_fake(
+    x: torch.Tensor,
+    attn_out: torch.Tensor,
+    post_weight: torch.Tensor,
+    gate_msa: torch.Tensor,
+    norm2_weight: torch.Tensor,
+    scale_mlp: torch.Tensor,
+    shift_mlp: torch.Tensor,
+    eps_post: float,
+    eps_norm2: float,
+    out_dtype: torch.dtype,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    del attn_out, post_weight, gate_msa, norm2_weight, scale_mlp, shift_mlp, eps_post, eps_norm2
+    return torch.empty_like(x), torch.empty_like(x, dtype=out_dtype)
+
+
+def fused_lingbot_post_norm_residual_gate_rmsnorm_adaln(
+    x: torch.Tensor,
+    attn_out: torch.Tensor,
+    post_weight: torch.Tensor,
+    gate_msa: torch.Tensor,
+    norm2_weight: torch.Tensor,
+    scale_mlp: torch.Tensor,
+    shift_mlp: torch.Tensor,
+    *,
+    eps_post: float = 1e-6,
+    eps_norm2: float = 1e-6,
+    out_dtype: torch.dtype | None = None,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """2-stage super-fusion: ``x_new = x + (gate_msa * RMSNorm(attn_out)).to(x.dtype)`` and ``ffn_in``."""
+    target_dtype = x.dtype if out_dtype is None else out_dtype
+    if (
+        _TRITON_AVAILABLE
+        and not torch.is_grad_enabled()
+        and x.is_cuda
+        and attn_out.is_cuda
+        and post_weight.is_cuda
+        and gate_msa.is_cuda
+        and norm2_weight.is_cuda
+        and scale_mlp.is_cuda
+        and shift_mlp.is_cuda
+        and x.ndim == 3
+        and attn_out.shape == x.shape
+        and x.is_contiguous()
+        and attn_out.is_contiguous()
+        and x.numel() > 0
+        and 0 < int(x.shape[-1]) <= 8192
+        and post_weight.shape == (x.shape[-1],)
+        and post_weight.is_contiguous()
+        and norm2_weight.shape == (x.shape[-1],)
+        and norm2_weight.is_contiguous()
+        and gate_msa.ndim == 3
+        and scale_mlp.ndim == 3
+        and shift_mlp.ndim == 3
+        and gate_msa.stride(-1) == 1
+        and scale_mlp.stride(-1) == 1
+        and shift_mlp.stride(-1) == 1
+        and gate_msa.shape[0] in (1, x.shape[0])
+        and gate_msa.shape[1] in (1, x.shape[1])
+        and scale_mlp.shape[0] in (1, x.shape[0])
+        and scale_mlp.shape[1] in (1, x.shape[1])
+        and shift_mlp.shape[0] in (1, x.shape[0])
+        and shift_mlp.shape[1] in (1, x.shape[1])
+        and x.dtype in {torch.bfloat16, torch.float16, torch.float32}
+        and attn_out.dtype in {torch.bfloat16, torch.float16, torch.float32}
+        and target_dtype in {torch.bfloat16, torch.float16, torch.float32}
+    ):
+        return _lingbot_post_norm_residual_gate_rmsnorm_adaln_op(
+            x,
+            attn_out,
+            post_weight,
+            gate_msa,
+            norm2_weight,
+            scale_mlp,
+            shift_mlp,
+            float(eps_post),
+            float(eps_norm2),
+            target_dtype,
+        )
+    af = attn_out.float()
+    a_normed = (post_weight * (af * torch.rsqrt(af.pow(2).mean(-1, keepdim=True) + float(eps_post)))).to(attn_out.dtype)
+    x_new = x + (gate_msa * a_normed).to(x.dtype)
+    xf = x_new.float()
+    x_normed = (norm2_weight * (xf * torch.rsqrt(xf.pow(2).mean(-1, keepdim=True) + float(eps_norm2)))).to(x_new.dtype)
+    ffn_in = (x_normed * scale_mlp + shift_mlp).to(target_dtype)
+    return x_new, ffn_in
+
+
+@torch.library.custom_op("worldfoundry::lingbot_post_norm_residual_gate_add", mutates_args=(), device_types="cuda")
+def _lingbot_post_norm_residual_gate_add_op(
+    x: torch.Tensor,
+    upd: torch.Tensor,
+    post_weight: torch.Tensor,
+    gate: torch.Tensor,
+    eps_post: float,
+) -> torch.Tensor:
+    b, s, h = int(x.shape[0]), int(x.shape[1]), int(x.shape[2])
+    rows = b * s
+    x_out = torch.empty_like(x)
+    gate_sb, gate_ss = _lb_mod_strides(gate, b, s)
+    block = max(32, int(triton.next_power_of_2(h)))
+    _lingbot_post_norm_residual_gate_add_kernel[(rows,)](
+        x,
+        upd,
+        post_weight,
+        gate,
+        x_out,
+        rows,
+        s,
+        gate_sb,
+        gate_ss,
+        float(eps_post),
+        hidden_size=h,
+        block=block,
+        USE_BF16_PTX=_lb_use_bf16_ptx(x.device),
+        num_warps=_lb_optimal_warps(block),
+        enable_fp_fusion=False,
+    )
+    return x_out
+
+
+@_lingbot_post_norm_residual_gate_add_op.register_fake
+def _lingbot_post_norm_residual_gate_add_fake(
+    x: torch.Tensor,
+    upd: torch.Tensor,
+    post_weight: torch.Tensor,
+    gate: torch.Tensor,
+    eps_post: float,
+) -> torch.Tensor:
+    del upd, post_weight, gate, eps_post
+    return torch.empty_like(x)
+
+
+def fused_lingbot_post_norm_residual_gate_add(
+    x: torch.Tensor,
+    upd: torch.Tensor,
+    post_weight: torch.Tensor,
+    gate: torch.Tensor,
+    *,
+    eps_post: float = 1e-6,
+) -> torch.Tensor:
+    """Fused ``x + (gate * LingBotVideoRMSNorm(upd, post_weight)).to(x.dtype)``."""
+    if (
+        _TRITON_AVAILABLE
+        and not torch.is_grad_enabled()
+        and x.is_cuda
+        and upd.is_cuda
+        and post_weight.is_cuda
+        and gate.is_cuda
+        and x.ndim == 3
+        and upd.shape == x.shape
+        and x.is_contiguous()
+        and upd.is_contiguous()
+        and x.numel() > 0
+        and 0 < int(x.shape[-1]) <= 8192
+        and post_weight.shape == (x.shape[-1],)
+        and post_weight.is_contiguous()
+        and gate.ndim == 3
+        and gate.stride(-1) == 1
+        and gate.shape[0] in (1, x.shape[0])
+        and gate.shape[1] in (1, x.shape[1])
+        and x.dtype in {torch.bfloat16, torch.float16, torch.float32}
+        and upd.dtype in {torch.bfloat16, torch.float16, torch.float32}
+    ):
+        return _lingbot_post_norm_residual_gate_add_op(x, upd, post_weight, gate, float(eps_post))
+    uf = upd.float()
+    u_normed = (post_weight * (uf * torch.rsqrt(uf.pow(2).mean(-1, keepdim=True) + float(eps_post)))).to(upd.dtype)
+    return x + (gate * u_normed).to(x.dtype)
+
+
+@torch.library.custom_op("worldfoundry::lingbot_layernorm_adaln", mutates_args=(), device_types="cuda")
+def _lingbot_layernorm_adaln_op(
+    x: torch.Tensor,
+    scale: torch.Tensor,
+    shift: torch.Tensor,
+    eps: float,
+    out_dtype: torch.dtype,
+) -> torch.Tensor:
+    b, s, h = int(x.shape[0]), int(x.shape[1]), int(x.shape[2])
+    rows = b * s
+    out = torch.empty((b, s, h), device=x.device, dtype=out_dtype)
+    scale_sb, scale_ss = _lb_mod_strides(scale, b, s)
+    shift_sb, shift_ss = _lb_mod_strides(shift, b, s)
+    block = max(32, int(triton.next_power_of_2(h)))
+    _lingbot_layernorm_adaln_kernel[(rows,)](
+        x,
+        scale,
+        shift,
+        out,
+        rows,
+        s,
+        scale_sb,
+        scale_ss,
+        shift_sb,
+        shift_ss,
+        float(eps),
+        hidden_size=h,
+        block=block,
+        num_warps=_lb_optimal_warps(block),
+        enable_fp_fusion=False,
+    )
+    return out
+
+
+@_lingbot_layernorm_adaln_op.register_fake
+def _lingbot_layernorm_adaln_fake(
+    x: torch.Tensor,
+    scale: torch.Tensor,
+    shift: torch.Tensor,
+    eps: float,
+    out_dtype: torch.dtype,
+) -> torch.Tensor:
+    del scale, shift, eps
+    return torch.empty_like(x, dtype=out_dtype)
+
+
+def fused_lingbot_layernorm_adaln(
+    x: torch.Tensor,
+    scale: torch.Tensor,
+    shift: torch.Tensor,
+    *,
+    eps: float = 1e-6,
+    out_dtype: torch.dtype | None = None,
+) -> torch.Tensor:
+    """Single-pass FP32 LayerNorm (no affine) + AdaLN ``*(1 + scale) + shift`` directly to ``out_dtype``."""
+    target_dtype = scale.dtype if out_dtype is None else out_dtype
+    if (
+        _TRITON_AVAILABLE
+        and not torch.is_grad_enabled()
+        and x.is_cuda
+        and scale.is_cuda
+        and shift.is_cuda
+        and x.ndim == 3
+        and x.is_contiguous()
+        and x.numel() > 0
+        and 0 < int(x.shape[-1]) <= 8192
+        and scale.ndim == 3
+        and shift.ndim == 3
+        and scale.stride(-1) == 1
+        and shift.stride(-1) == 1
+        and scale.shape[0] in (1, x.shape[0])
+        and scale.shape[1] in (1, x.shape[1])
+        and shift.shape[0] in (1, x.shape[0])
+        and shift.shape[1] in (1, x.shape[1])
+        and x.dtype in {torch.bfloat16, torch.float16, torch.float32}
+        and target_dtype in {torch.bfloat16, torch.float16, torch.float32}
+    ):
+        return _lingbot_layernorm_adaln_op(x, scale, shift, float(eps), target_dtype)
+    normed = torch.nn.functional.layer_norm(x.float(), (x.shape[-1],), weight=None, bias=None, eps=float(eps))
+    return (normed * (1.0 + scale) + shift).to(target_dtype)
 
 
 @torch.library.custom_op("worldfoundry::lingbot_fa3_attn", mutates_args=(), device_types="cuda")

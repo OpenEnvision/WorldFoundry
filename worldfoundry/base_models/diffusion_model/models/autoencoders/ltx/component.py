@@ -278,9 +278,13 @@ class LTXMediaDecoder(MultiModalLatentDecoder):
         self._audio_streams: dict[int, torch.cuda.Stream] = {}
         self._compiled_vocoder: Callable[[torch.Tensor], torch.Tensor] | None = None
         if compile_vocoder and torch.cuda.is_available():
-            from worldfoundry.core.platform.compile_cache import configure_persistent_compile_cache
+            from worldfoundry.core.platform.compile_cache import (
+                configure_persistent_compile_cache,
+                register_worldfoundry_inductor_fallbacks,
+            )
 
             configure_persistent_compile_cache(namespace="ltx-vocoder")
+            register_worldfoundry_inductor_fallbacks()
             self._compiled_vocoder = torch.compile(self.vocoder.vocoder, mode="default")
         self._audio_graph_runner = None
         if audio_cuda_graph:

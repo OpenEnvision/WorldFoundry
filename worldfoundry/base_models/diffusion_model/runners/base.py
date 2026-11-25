@@ -286,8 +286,15 @@ class NativeDiffusionRunner:
             branch=branch,
             conditioning=conditioning,
         )
-        samples = [torch.empty_like(local.sample) for _ in range(2)]
-        dist.all_gather(samples, local.sample.contiguous(), group=group)
+        local_sample = local.sample.contiguous()
+        gather_into = getattr(dist, "all_gather_into_tensor", None)
+        if callable(gather_into) and local_sample.is_cuda:
+            flat_samples = local_sample.new_empty((2 * local_sample.shape[0], *local_sample.shape[1:]))
+            gather_into(flat_samples, local_sample, group=group)
+            samples = flat_samples.reshape(2, *local_sample.shape).unbind(dim=0)
+        else:
+            samples = [torch.empty_like(local_sample) for _ in range(2)]
+            dist.all_gather(samples, local_sample, group=group)
         self._cfg_parallel_collective_calls += 1
         return (
             DenoiserOutput(

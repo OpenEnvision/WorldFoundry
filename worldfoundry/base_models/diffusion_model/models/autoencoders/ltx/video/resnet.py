@@ -15,13 +15,61 @@ from torch import nn
 
 from worldfoundry.base_models.diffusion_model.models.autoencoders.ltx.common.normalization import PixelNorm
 from worldfoundry.base_models.diffusion_model.models.autoencoders.ltx.video.convolution import (
+    CausalConv3d,
     make_conv_nd,
     make_linear_nd,
 )
 from worldfoundry.base_models.diffusion_model.models.autoencoders.ltx.video.enums import NormLayerType, PaddingModeType
+from worldfoundry.base_models.diffusion_model.models.autoencoders.ltx.video.triton_vae_ops import (
+    can_use_triton_ltx_residual_bias_add,
+    can_use_triton_pixel_norm_adaln_silu_pad_3d,
+    triton_ltx_residual_bias_add,
+    triton_pixel_norm_adaln_silu,
+    triton_pixel_norm_adaln_silu_pad_3d,
+)
 from worldfoundry.core.nn.diffusion.timestep import (
     PixArtAlphaCombinedTimestepSizeEmbeddings,
 )
+
+
+def _has_hooks(module: nn.Module) -> bool:
+    return bool(module._forward_hooks or module._forward_pre_hooks)
+
+
+def _can_fuse_pixel_norm_silu(norm: nn.Module, act: nn.Module, x: torch.Tensor) -> bool:
+    return (
+        type(norm) is PixelNorm
+        and norm.dim in (1, 1 - x.ndim)
+        and type(act) is nn.SiLU
+        and not _has_hooks(norm)
+        and not _has_hooks(act)
+    )
+
+
+def _can_fuse_pixel_norm_silu_conv(
+    norm: nn.Module,
+    act: nn.Module,
+    conv: nn.Module,
+    x: torch.Tensor,
+    causal: bool,
+    scale: torch.Tensor | None,
+    shift: torch.Tensor | None,
+    pre_bias: torch.Tensor | None = None,
+) -> bool:
+    if not _can_fuse_pixel_norm_silu(norm, act, x) or type(conv) is not CausalConv3d:
+        return False
+    if not conv._can_use_fast_conv_path(x):
+        return False
+    pad, s_mode, _ = conv._fused_pad_spec(causal)
+    return can_use_triton_pixel_norm_adaln_silu_pad_3d(
+        x,
+        pad,
+        spatial_mode=s_mode,
+        temporal_mode="replicate",
+        scale=scale,
+        shift=shift,
+        pre_bias=pre_bias,
+    )
 
 
 class ResnetBlock3D(nn.Module):
@@ -143,7 +191,7 @@ class ResnetBlock3D(nn.Module):
         hidden_states = input_tensor
         batch_size = hidden_states.shape[0]
 
-        hidden_states = self.norm1(hidden_states)
+        shift1 = scale1 = shift2 = scale2 = None
         if self.timestep_conditioning:
             if timestep is None:
                 raise ValueError("'timestep' parameter must be provided when 'timestep_conditioning' is True")
@@ -159,31 +207,112 @@ class ResnetBlock3D(nn.Module):
             )
             shift1, scale1, shift2, scale2 = ada_values.unbind(dim=1)
 
-            hidden_states = hidden_states * (1 + scale1) + shift1
+        dropout_is_noop = (
+            type(self.dropout) is nn.Dropout
+            and not _has_hooks(self.dropout)
+            and (not self.training or self.dropout.p == 0.0)
+        )
+        can_fuse_stage2_base = (
+            not self.inject_noise
+            and dropout_is_noop
+            and type(self.conv2) is CausalConv3d
+            and _can_fuse_pixel_norm_silu(self.norm2, self.non_linearity, hidden_states)
+        )
 
-        hidden_states = self.non_linearity(hidden_states)
-
-        hidden_states = self.conv1(hidden_states, causal=causal)
+        bias1: torch.Tensor | None = None
+        if isinstance(self.conv1, CausalConv3d) and _can_fuse_pixel_norm_silu_conv(
+            self.norm1, self.non_linearity, self.conv1, hidden_states, causal, scale1, shift1
+        ):
+            pad1, s_mode1, conv_pad1 = self.conv1._fused_pad_spec(causal)
+            x_pad1 = triton_pixel_norm_adaln_silu_pad_3d(
+                hidden_states,
+                scale1,
+                shift1,
+                self.norm1.eps,
+                pad1,
+                spatial_mode=s_mode1,
+                temporal_mode="replicate",
+                apply_silu=True,
+            )
+            hidden_states, bias1 = self.conv1._forward_conv_only(x_pad1, conv_pad1, defer_bias=can_fuse_stage2_base)
+        else:
+            if _can_fuse_pixel_norm_silu(self.norm1, self.non_linearity, hidden_states):
+                hidden_states = triton_pixel_norm_adaln_silu(
+                    hidden_states,
+                    scale1,
+                    shift1,
+                    self.norm1.eps,
+                    apply_silu=True,
+                )
+            else:
+                hidden_states = self.norm1(hidden_states)
+                if self.timestep_conditioning and scale1 is not None and shift1 is not None:
+                    hidden_states = hidden_states * (1 + scale1) + shift1
+                hidden_states = self.non_linearity(hidden_states)
+            hidden_states = self.conv1(hidden_states, causal=causal)
 
         if self.inject_noise:
+            if bias1 is not None:
+                hidden_states = triton_ltx_residual_bias_add(None, hidden_states, bias1)
+                bias1 = None
             hidden_states = self._feed_spatial_noise(
                 hidden_states,
                 self.per_channel_scale1.to(device=hidden_states.device, dtype=hidden_states.dtype),
                 generator=generator,
             )
 
-        hidden_states = self.norm2(hidden_states)
+        bias2: torch.Tensor | None = None
+        if (
+            dropout_is_noop
+            and isinstance(self.conv2, CausalConv3d)
+            and _can_fuse_pixel_norm_silu_conv(
+                self.norm2,
+                self.non_linearity,
+                self.conv2,
+                hidden_states,
+                causal,
+                scale2,
+                shift2,
+                pre_bias=bias1,
+            )
+        ):
+            pad2, s_mode2, conv_pad2 = self.conv2._fused_pad_spec(causal)
+            x_pad2 = triton_pixel_norm_adaln_silu_pad_3d(
+                hidden_states,
+                scale2,
+                shift2,
+                self.norm2.eps,
+                pad2,
+                spatial_mode=s_mode2,
+                temporal_mode="replicate",
+                apply_silu=True,
+                pre_bias=bias1,
+            )
+            hidden_states, bias2 = self.conv2._forward_conv_only(x_pad2, conv_pad2, defer_bias=not self.inject_noise)
+        else:
+            if bias1 is not None:
+                hidden_states = triton_ltx_residual_bias_add(None, hidden_states, bias1)
+            if _can_fuse_pixel_norm_silu(self.norm2, self.non_linearity, hidden_states):
+                hidden_states = triton_pixel_norm_adaln_silu(
+                    hidden_states,
+                    scale2,
+                    shift2,
+                    self.norm2.eps,
+                    apply_silu=True,
+                )
+            else:
+                hidden_states = self.norm2(hidden_states)
+                if self.timestep_conditioning and scale2 is not None and shift2 is not None:
+                    hidden_states = hidden_states * (1 + scale2) + shift2
+                hidden_states = self.non_linearity(hidden_states)
 
-        if self.timestep_conditioning:
-            hidden_states = hidden_states * (1 + scale2) + shift2
-
-        hidden_states = self.non_linearity(hidden_states)
-
-        hidden_states = self.dropout(hidden_states)
-
-        hidden_states = self.conv2(hidden_states, causal=causal)
+            hidden_states = self.dropout(hidden_states)
+            hidden_states = self.conv2(hidden_states, causal=causal)
 
         if self.inject_noise:
+            if bias2 is not None:
+                hidden_states = triton_ltx_residual_bias_add(None, hidden_states, bias2)
+                bias2 = None
             hidden_states = self._feed_spatial_noise(
                 hidden_states,
                 self.per_channel_scale2.to(device=hidden_states.device, dtype=hidden_states.dtype),
@@ -191,11 +320,12 @@ class ResnetBlock3D(nn.Module):
             )
 
         input_tensor = self.norm3(input_tensor)
-
-        batch_size = input_tensor.shape[0]
-
         input_tensor = self.conv_shortcut(input_tensor)
 
+        if can_use_triton_ltx_residual_bias_add(input_tensor, hidden_states, bias2):
+            return triton_ltx_residual_bias_add(input_tensor, hidden_states, bias2)
+        if bias2 is not None:
+            hidden_states = hidden_states + bias2.view(1, -1, 1, 1, 1).to(hidden_states)
         output_tensor = input_tensor + hidden_states
 
         return output_tensor

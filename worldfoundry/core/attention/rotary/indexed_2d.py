@@ -14,6 +14,7 @@ from torch import nn
 from torch.nn import functional as F
 
 from .rope_2d import PositionGetter, RotaryPositionEmbedding2D
+from .triton_rotary_ops import triton_rope_2d_indexed
 
 
 class ShapeCachedPositionGetter(PositionGetter):
@@ -151,8 +152,19 @@ class IndexedRotaryPositionEmbedding2D(RotaryPositionEmbedding2D):
         feature_dim = tokens.size(-1) // 2
 
         # Get frequency components
-        max_position = int(positions.max()) + 1
+        if tokens.device.type == "cuda" and positions.numel() > 0:
+            min_pos_t, max_pos_t = torch.aminmax(positions)
+            max_position = int(max_pos_t) + 1
+            if int(min_pos_t) < 0:
+                raise IndexError("Negative position indices are not supported by IndexedRotaryPositionEmbedding2D.")
+        else:
+            max_position = int(positions.max()) + 1
         cos_comp, sin_comp = self._compute_frequency_components(feature_dim, max_position, tokens.device, tokens.dtype)
+
+        if tokens.device.type == "cuda":
+            triton_out = triton_rope_2d_indexed(tokens, positions, cos_comp, sin_comp, signed_positions=False)
+            if triton_out is not None:
+                return triton_out
 
         # Split features for vertical and horizontal processing
         vertical_features, horizontal_features = tokens.chunk(2, dim=-1)

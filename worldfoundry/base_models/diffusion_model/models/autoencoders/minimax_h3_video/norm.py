@@ -20,6 +20,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from .conv import BaseConv3d
+from .triton_norm import triton_temporal_isolated_group_norm_act
 
 
 def _validate_activation(activation):
@@ -50,6 +51,19 @@ def _split_time_from_batch(x, batch):
 
 def fused_group_norm(x, num_groups, weight, bias, eps=1e-5, activation="silu"):
     """Group-norm helper retained from the SGLang fused-kernel API."""
+    _validate_activation(activation)
+    if x.ndim == 5 and x.is_cuda:
+        return triton_temporal_isolated_group_norm_act(
+            x,
+            num_groups,
+            weight,
+            bias,
+            None,
+            None,
+            eps,
+            activation,
+            temporal_isolated=False,
+        )
     out = F.group_norm(x, num_groups, weight=weight, bias=bias, eps=eps)
     return _apply_activation(out, activation)
 
@@ -65,6 +79,19 @@ def fused_spatial_norm(
     activation="silu",
 ):
     """Spatial-norm helper retained from the SGLang fused-kernel API."""
+    _validate_activation(activation)
+    if f.ndim == 5 and f.is_cuda:
+        return triton_temporal_isolated_group_norm_act(
+            f,
+            num_groups,
+            norm_weight,
+            norm_bias,
+            dynamic_scale,
+            dynamic_bias,
+            eps,
+            activation,
+            temporal_isolated=False,
+        )
     norm_f = F.group_norm(
         f,
         num_groups,
@@ -149,6 +176,37 @@ class FusedGroupNorm3D(torch.nn.Module):
                 self.register_parameter("bias", None)
 
     def forward(self, f, cond=None):
+        if f.dim() == 5 and f.is_cuda:
+            if self.use_spatial_affine:
+                scale = self.conv_y(cond)
+                bias = self.conv_b(cond)
+                return triton_temporal_isolated_group_norm_act(
+                    f,
+                    self.num_groups,
+                    self.norm_layer.weight,
+                    self.norm_layer.bias,
+                    scale,
+                    bias,
+                    self.eps,
+                    self.activation,
+                    temporal_isolated=self.use_t_isolated_gn,
+                )
+            if cond is not None:
+                raise NotImplementedError("Dynamic affine is not defined")
+            weight = self.weight if self.affine else None
+            bias = self.bias if self.affine else None
+            return triton_temporal_isolated_group_norm_act(
+                f,
+                self.num_groups,
+                weight,
+                bias,
+                None,
+                None,
+                self.eps,
+                self.activation,
+                temporal_isolated=self.use_t_isolated_gn,
+            )
+
         need_reshape = self.use_t_isolated_gn and f.dim() == 5
         batch = f.shape[0] if need_reshape else None
         f_size = f.shape[-3:]
@@ -191,6 +249,18 @@ class TemporalIsolatedGroupNorm(nn.GroupNorm):
 
     def forward(self, input):
         if input.dim() == 5:
+            if input.is_cuda:
+                return triton_temporal_isolated_group_norm_act(
+                    input,
+                    self.num_groups,
+                    self.weight,
+                    self.bias,
+                    None,
+                    None,
+                    self.eps,
+                    "identity",
+                    temporal_isolated=True,
+                )
             batch = input.shape[0]
             input = _merge_time_to_batch(input)
             output = super().forward(input)
@@ -232,6 +302,27 @@ class SpatialNorm3D(nn.Module):
         )
 
     def forward(self, f, zq):
+        if (
+            f.dim() == 5
+            and f.is_cuda
+            and type(self.norm_layer) in (TemporalIsolatedGroupNorm, nn.GroupNorm)
+            and not self.norm_layer._forward_hooks
+            and not self.norm_layer._forward_pre_hooks
+        ):
+            scale = self.conv_y(zq)
+            bias = self.conv_b(zq)
+            return triton_temporal_isolated_group_norm_act(
+                f,
+                self.norm_layer.num_groups,
+                self.norm_layer.weight,
+                self.norm_layer.bias,
+                scale,
+                bias,
+                self.norm_layer.eps,
+                "identity",
+                temporal_isolated=isinstance(self.norm_layer, TemporalIsolatedGroupNorm),
+            )
+
         f_size = f.shape[-3:]
         norm_f = self.norm_layer(f)
         scale = self.conv_y(zq)

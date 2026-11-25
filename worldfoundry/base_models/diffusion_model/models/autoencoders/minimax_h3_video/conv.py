@@ -14,6 +14,8 @@ This is H3 video encoder graph math only.
 import torch.nn as nn
 import torch.nn.functional as F
 
+from worldfoundry.core.kernels.triton_pad_3d import triton_pad_3d
+
 
 class BaseConv3d(nn.Conv3d):
     """Padded 3-D convolution primitive for the causal H3 video encoder."""
@@ -72,14 +74,24 @@ class BaseConv3d(nn.Conv3d):
         if sum(self.padding) == 0:
             return x
 
-        x = F.pad(
+        _, _, d, _, _ = x.shape
+        if d > 1:
+            pt_l = self.padding[0] * 2 if self.causal else self.padding[0]
+            pt_r = 0 if self.causal else self.padding[0]
+            pad = (self.padding[2], self.padding[2], self.padding[1], self.padding[1], pt_l, pt_r)
+            return triton_pad_3d(x, pad, spatial_mode=self.pad_mode, temporal_mode=self.pad_mode_t)
+
+        if self.pad_mode_t == "constant":
+            assert self.causal, "Zeros padding is only supported for causal mode"
+            pad = (self.padding[2], self.padding[2], self.padding[1], self.padding[1], self.kernel_size[0] - 1, 0)
+            return triton_pad_3d(x, pad, spatial_mode=self.pad_mode, temporal_mode="constant")
+
+        x = triton_pad_3d(
             x,
             (self.padding[2], self.padding[2], self.padding[1], self.padding[1], 0, 0),
-            mode=self.pad_mode,
+            spatial_mode=self.pad_mode,
         )
-
-        x = self._apply_temporal_padding(x)
-        return x
+        return x.expand(-1, -1, self.kernel_size[0], -1, -1)
 
     def forward(self, x):
         if sum(self.padding) == 0:

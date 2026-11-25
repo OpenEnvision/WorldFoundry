@@ -229,7 +229,9 @@ class BasicAVTransformerBlock(torch.nn.Module):
         ca_shift_q: torch.Tensor,
         ca_scale_q: torch.Tensor,
         ca_gate: torch.Tensor,
-    ) -> torch.Tensor:
+        *,
+        defer_residual: bool = False,
+    ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
         """Fused post-SA residual+RMSNorm+CA-AdaLN, fused context AdaLN, and fused CA residual gate."""
         from .fused_ops import fused_ltx_post_sa_residual_rmsnorm_adaln, fused_ltx_scale_shift
 
@@ -248,7 +250,19 @@ class BasicAVTransformerBlock(torch.nn.Module):
         shift_kv, scale_kv = kv_modulation.unbind(dim=2)
         encoder_hidden_states = fused_ltx_scale_shift(context, scale_kv, shift_kv)
         ca_out = attn(attn_input, context=encoder_hidden_states, mask=context_mask)
+        if defer_residual:
+            return x, ca_out
         return self._add_gated_residual(x, ca_out, ca_gate)
+
+    @staticmethod
+    def _ff_uses_fp8_up_proj(ff: torch.nn.Module) -> bool:
+        if not isinstance(ff, FeedForward):
+            return False
+        from worldfoundry.core.acceleration.quantization.linear import Float8Linear
+
+        up = ff.net[0]
+        proj = getattr(up, "proj", None)
+        return isinstance(proj, Float8Linear) and bool(proj.low_precision_enabled) and proj.scaling == "rowwise"
 
     def _apply_text_cross_attention(
         self,
@@ -288,6 +302,22 @@ class BasicAVTransformerBlock(torch.nn.Module):
         audio: TransformerArgs | None,
     ) -> tuple[TransformerArgs | None, TransformerArgs | None]:
         """Update ``TransformerArgs.x`` for each enabled stream; empty tensors are skipped."""
+        v_out, a_out, _, _ = self._forward_impl(video, audio)
+        return v_out, a_out
+
+    def _forward_impl(
+        self,
+        video: TransformerArgs | None,
+        audio: TransformerArgs | None,
+        *,
+        pre_norm_vx: torch.Tensor | None = None,
+        pre_norm_ax: torch.Tensor | None = None,
+        v_ada_precomputed: tuple[torch.Tensor, ...] | None = None,
+        a_ada_precomputed: tuple[torch.Tensor, ...] | None = None,
+        next_v_msa_adaln: tuple[torch.Tensor, torch.Tensor] | None = None,
+        next_a_msa_adaln: tuple[torch.Tensor, torch.Tensor] | None = None,
+    ) -> tuple[TransformerArgs | None, TransformerArgs | None, torch.Tensor | None, torch.Tensor | None]:
+        """Execute block with optional pre-normalized inputs and fused inter-block boundary."""
         if video is None and audio is None:
             raise ValueError("At least one of video or audio must be provided")
 
@@ -315,11 +345,32 @@ class BasicAVTransformerBlock(torch.nn.Module):
                 type(self.ada_zero_function) is PytorchAdaZeroFunction and self.ada_zero_function.backend != "torch"
             )
 
+        do_av_dual_fused = (
+            (run_a2v or run_v2a)
+            and video is not None
+            and audio is not None
+            and run_a2v
+            and not video.cross_attn_skip_all
+            and run_v2a
+            and not audio.cross_attn_skip_all
+            and use_fused_adaln
+        )
+        vx_ca_deferred: tuple[torch.Tensor, torch.Tensor] | None = None
+        ax_ca_deferred: tuple[torch.Tensor, torch.Tensor] | None = None
+
         if run_vx:
             assert video is not None and vx is not None
-            v_ada = self._all_ada_values(self.scale_shift_table, vx.shape[0], video.timesteps)
+            v_ada = (
+                v_ada_precomputed
+                if v_ada_precomputed is not None
+                else self._all_ada_values(self.scale_shift_table, vx.shape[0], video.timesteps)
+            )
             vshift_msa, vscale_msa, vgate_msa = v_ada[0], v_ada[1], v_ada[2]
-            norm_vx = self.ada_zero_function(vx, self.norm_eps, vscale_msa, vshift_msa)
+            norm_vx = (
+                pre_norm_vx
+                if pre_norm_vx is not None
+                else self.ada_zero_function(vx, self.norm_eps, vscale_msa, vshift_msa)
+            )
             del vshift_msa, vscale_msa
 
             vx_msa_out = self.attn1(
@@ -333,7 +384,7 @@ class BasicAVTransformerBlock(torch.nn.Module):
             )
             prompt_sst = getattr(self, "prompt_scale_shift_table", None)
             if use_fused_ca and prompt_sst is not None:
-                vx = self._apply_fused_post_sa_and_text_ca(
+                res_v = self._apply_fused_post_sa_and_text_ca(
                     vx,
                     vx_msa_out,
                     vgate_msa,
@@ -345,7 +396,13 @@ class BasicAVTransformerBlock(torch.nn.Module):
                     v_ada[6],
                     v_ada[7],
                     v_ada[8],
+                    defer_residual=do_av_dual_fused,
                 )
+                if do_av_dual_fused:
+                    vx, vx_ca_out = res_v  # type: ignore[misc]
+                    vx_ca_deferred = (vx_ca_out, v_ada[8])
+                else:
+                    vx = res_v  # type: ignore[assignment]
                 del vgate_msa, norm_vx, vx_msa_out
             else:
                 vx, vx_normed = self.post_sa_function(vx, vx_msa_out, None, self.norm_eps, vgate_msa)
@@ -366,10 +423,18 @@ class BasicAVTransformerBlock(torch.nn.Module):
 
         if run_ax:
             assert audio is not None and ax is not None
-            a_ada = self._all_ada_values(self.audio_scale_shift_table, ax.shape[0], audio.timesteps)
+            a_ada = (
+                a_ada_precomputed
+                if a_ada_precomputed is not None
+                else self._all_ada_values(self.audio_scale_shift_table, ax.shape[0], audio.timesteps)
+            )
             ashift_msa, ascale_msa, agate_msa = a_ada[0], a_ada[1], a_ada[2]
 
-            norm_ax = self.ada_zero_function(ax, self.norm_eps, ascale_msa, ashift_msa)
+            norm_ax = (
+                pre_norm_ax
+                if pre_norm_ax is not None
+                else self.ada_zero_function(ax, self.norm_eps, ascale_msa, ashift_msa)
+            )
             del ashift_msa, ascale_msa
             ax_msa_out = self.audio_attn1(
                 norm_ax,
@@ -381,7 +446,7 @@ class BasicAVTransformerBlock(torch.nn.Module):
             )
             audio_prompt_sst = getattr(self, "audio_prompt_scale_shift_table", None)
             if use_fused_ca and audio_prompt_sst is not None:
-                ax = self._apply_fused_post_sa_and_text_ca(
+                res_a = self._apply_fused_post_sa_and_text_ca(
                     ax,
                     ax_msa_out,
                     agate_msa,
@@ -393,7 +458,13 @@ class BasicAVTransformerBlock(torch.nn.Module):
                     a_ada[6],
                     a_ada[7],
                     a_ada[8],
+                    defer_residual=do_av_dual_fused,
                 )
+                if do_av_dual_fused:
+                    ax, ax_ca_out = res_a  # type: ignore[misc]
+                    ax_ca_deferred = (ax_ca_out, a_ada[8])
+                else:
+                    ax = res_a  # type: ignore[assignment]
                 del agate_msa, norm_ax, ax_msa_out
             else:
                 ax, ax_normed = self.post_sa_function(ax, ax_msa_out, None, self.norm_eps, agate_msa)
@@ -412,18 +483,21 @@ class BasicAVTransformerBlock(torch.nn.Module):
                 )
                 del ax_normed
 
+        vx_ff_in_precomputed: torch.Tensor | None = None
+        ax_ff_in_precomputed: torch.Tensor | None = None
+
         # Audio - Video cross attention.
         if run_a2v or run_v2a:
             assert video is not None and audio is not None and vx is not None and ax is not None
             do_a2v = run_a2v and not video.cross_attn_skip_all
             do_v2a = run_v2a and not audio.cross_attn_skip_all
             if do_a2v or do_v2a:
-                # Snapshot vx/ax before A2V mutates vx; V2A's video keys/values must
-                # use the pre-A2V state so direction order doesn't bias the result.
-                vx_pre_av = vx
-                ax_pre_av = ax
                 if do_a2v and do_v2a and use_fused_adaln:
-                    from .fused_ops import fused_ltx_dual_rmsnorm_scale_shift
+                    from .fused_ops import (
+                        fused_ltx_dual_rmsnorm_scale_shift,
+                        fused_ltx_post_sa_residual_rmsnorm_adaln,
+                        fused_ltx_residual_gate_dual_rmsnorm_scale_shift,
+                    )
 
                     v_s_a2v, v_sh_a2v, v_s_v2a, v_sh_v2a, gate_out_a2v = self._all_av_ca_ada_values(
                         self.scale_shift_table_a2v_ca_video,
@@ -437,22 +511,48 @@ class BasicAVTransformerBlock(torch.nn.Module):
                         audio.cross_scale_shift_timestep,
                         audio.cross_gate_timestep,
                     )
-                    a2v_vx_scaled, v2a_vx_scaled = fused_ltx_dual_rmsnorm_scale_shift(
-                        vx_pre_av,
-                        v_s_a2v,
-                        v_sh_a2v,
-                        v_s_v2a,
-                        v_sh_v2a,
-                        eps=self.norm_eps,
-                    )
-                    a2v_ax_scaled, v2a_ax_scaled = fused_ltx_dual_rmsnorm_scale_shift(
-                        ax_pre_av,
-                        a_s_a2v,
-                        a_sh_a2v,
-                        a_s_v2a,
-                        a_sh_v2a,
-                        eps=self.norm_eps,
-                    )
+                    if vx_ca_deferred is not None:
+                        vx, a2v_vx_scaled, v2a_vx_scaled = fused_ltx_residual_gate_dual_rmsnorm_scale_shift(
+                            vx,
+                            vx_ca_deferred[0],
+                            vx_ca_deferred[1],
+                            v_s_a2v,
+                            v_sh_a2v,
+                            v_s_v2a,
+                            v_sh_v2a,
+                            eps=self.norm_eps,
+                        )
+                        vx_ca_deferred = None
+                    else:
+                        a2v_vx_scaled, v2a_vx_scaled = fused_ltx_dual_rmsnorm_scale_shift(
+                            vx,
+                            v_s_a2v,
+                            v_sh_a2v,
+                            v_s_v2a,
+                            v_sh_v2a,
+                            eps=self.norm_eps,
+                        )
+                    if ax_ca_deferred is not None:
+                        ax, a2v_ax_scaled, v2a_ax_scaled = fused_ltx_residual_gate_dual_rmsnorm_scale_shift(
+                            ax,
+                            ax_ca_deferred[0],
+                            ax_ca_deferred[1],
+                            a_s_a2v,
+                            a_sh_a2v,
+                            a_s_v2a,
+                            a_sh_v2a,
+                            eps=self.norm_eps,
+                        )
+                        ax_ca_deferred = None
+                    else:
+                        a2v_ax_scaled, v2a_ax_scaled = fused_ltx_dual_rmsnorm_scale_shift(
+                            ax,
+                            a_s_a2v,
+                            a_sh_a2v,
+                            a_s_v2a,
+                            a_sh_v2a,
+                            eps=self.norm_eps,
+                        )
                     del v_s_a2v, v_sh_a2v, v_s_v2a, v_sh_v2a, a_s_a2v, a_sh_a2v, a_s_v2a, a_sh_v2a
 
                     a2v_attn_out = self.audio_to_video_attn(
@@ -464,6 +564,15 @@ class BasicAVTransformerBlock(torch.nn.Module):
                     )
                     if video.cross_attn_perturbation_mask is not None:
                         vx = vx + a2v_attn_out * gate_out_a2v * video.cross_attn_perturbation_mask
+                    elif v_ada is not None and not self._ff_uses_fp8_up_proj(self.ff):
+                        vx, vx_ff_in_precomputed = fused_ltx_post_sa_residual_rmsnorm_adaln(
+                            vx,
+                            a2v_attn_out,
+                            gate_out_a2v,
+                            v_ada[4],
+                            v_ada[3],
+                            self.norm_eps,
+                        )
                     else:
                         vx = self._add_gated_residual(vx, a2v_attn_out, gate_out_a2v)
                     del gate_out_a2v, a2v_vx_scaled, a2v_ax_scaled, a2v_attn_out
@@ -477,10 +586,23 @@ class BasicAVTransformerBlock(torch.nn.Module):
                     )
                     if audio.cross_attn_perturbation_mask is not None:
                         ax = ax + v2a_attn_out * gate_out_v2a * audio.cross_attn_perturbation_mask
+                    elif a_ada is not None and not self._ff_uses_fp8_up_proj(self.audio_ff):
+                        ax, ax_ff_in_precomputed = fused_ltx_post_sa_residual_rmsnorm_adaln(
+                            ax,
+                            v2a_attn_out,
+                            gate_out_v2a,
+                            a_ada[4],
+                            a_ada[3],
+                            self.norm_eps,
+                        )
                     else:
                         ax = self._add_gated_residual(ax, v2a_attn_out, gate_out_v2a)
                     del gate_out_v2a, v2a_vx_scaled, v2a_ax_scaled, v2a_attn_out
                 else:
+                    # Snapshot vx/ax before A2V mutates vx; V2A's video keys/values must
+                    # use the pre-A2V state so direction order doesn't bias the result.
+                    vx_pre_av = vx
+                    ax_pre_av = ax
                     if do_a2v:
                         scale_ca_video_a2v, shift_ca_video_a2v, gate_out_a2v = self.get_av_ca_ada_values(
                             self.scale_shift_table_a2v_ca_video,
@@ -553,29 +675,65 @@ class BasicAVTransformerBlock(torch.nn.Module):
                         else:
                             ax = self._add_gated_residual(ax, v2a_attn_out, gate_out_v2a)
                         del gate_out_v2a, v2a_vx_scaled, v2a_ax_scaled, v2a_attn_out
-                del vx_pre_av, ax_pre_av
+                    del vx_pre_av, ax_pre_av
+
+        next_pre_norm_vx: torch.Tensor | None = None
+        next_pre_norm_ax: torch.Tensor | None = None
 
         if run_vx:
             assert v_ada is not None and vx is not None
             vshift_mlp, vscale_mlp, vgate_mlp = v_ada[3], v_ada[4], v_ada[5]
-            if use_fused_adaln and isinstance(self.ff, FeedForward):
+            if vx_ff_in_precomputed is not None:
+                vx_ff_out = self.ff(vx_ff_in_precomputed)
+            elif use_fused_adaln and isinstance(self.ff, FeedForward):
                 vx_ff_out = self.ff.forward_from_adaln(vx, self.norm_eps, vscale_mlp, vshift_mlp)
             else:
                 vx_ff_out = self.ff(self.ada_zero_function(vx, self.norm_eps, vscale_mlp, vshift_mlp))
-            vx = self._add_gated_residual(vx, vx_ff_out, vgate_mlp)
+            if next_v_msa_adaln is not None and use_fused_adaln:
+                from .fused_ops import fused_ltx_post_sa_residual_rmsnorm_adaln
+
+                vx, next_pre_norm_vx = fused_ltx_post_sa_residual_rmsnorm_adaln(
+                    vx,
+                    vx_ff_out,
+                    vgate_mlp,
+                    next_v_msa_adaln[1],
+                    next_v_msa_adaln[0],
+                    self.norm_eps,
+                )
+            else:
+                vx = self._add_gated_residual(vx, vx_ff_out, vgate_mlp)
             del vshift_mlp, vscale_mlp, vgate_mlp, vx_ff_out
 
         if run_ax:
             assert a_ada is not None and ax is not None
             ashift_mlp, ascale_mlp, agate_mlp = a_ada[3], a_ada[4], a_ada[5]
-            if use_fused_adaln and isinstance(self.audio_ff, FeedForward):
+            if ax_ff_in_precomputed is not None:
+                ax_ff_out = self.audio_ff(ax_ff_in_precomputed)
+            elif use_fused_adaln and isinstance(self.audio_ff, FeedForward):
                 ax_ff_out = self.audio_ff.forward_from_adaln(ax, self.norm_eps, ascale_mlp, ashift_mlp)
             else:
                 ax_ff_out = self.audio_ff(self.ada_zero_function(ax, self.norm_eps, ascale_mlp, ashift_mlp))
-            ax = self._add_gated_residual(ax, ax_ff_out, agate_mlp)
+            if next_a_msa_adaln is not None and use_fused_adaln:
+                from .fused_ops import fused_ltx_post_sa_residual_rmsnorm_adaln
+
+                ax, next_pre_norm_ax = fused_ltx_post_sa_residual_rmsnorm_adaln(
+                    ax,
+                    ax_ff_out,
+                    agate_mlp,
+                    next_a_msa_adaln[1],
+                    next_a_msa_adaln[0],
+                    self.norm_eps,
+                )
+            else:
+                ax = self._add_gated_residual(ax, ax_ff_out, agate_mlp)
             del ashift_mlp, ascale_mlp, agate_mlp, ax_ff_out
 
-        return replace(video, x=vx) if video is not None else None, replace(audio, x=ax) if audio is not None else None
+        return (
+            replace(video, x=vx) if video is not None else None,
+            replace(audio, x=ax) if audio is not None else None,
+            next_pre_norm_vx,
+            next_pre_norm_ax,
+        )
 
 
 def apply_cross_attention_adaln(

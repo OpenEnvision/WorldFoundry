@@ -161,3 +161,74 @@ def test_capture_oom_propagates_without_eager_retry(monkeypatch) -> None:
     with pytest.raises(torch.OutOfMemoryError):
         runner._capture(_signature_key((torch.ones(1),), {}, None), (torch.ones(1),), {})
     assert runner.report()["eager"] == runner.report()["capture_failed"] == 0
+
+
+def test_scalar_leaf_key_prevents_bool_int_float_and_signed_zero_collisions() -> None:
+    from worldfoundry.core.execution.graphs.inference_graph import _scalar_leaf_key
+
+    # Python considers 1 == 1.0 == True and 0 == 0.0 == -0.0 == False, while
+    # float("nan") != float("nan"). Keys must keep distinct types/signs apart
+    # and hash/compare equal across repeated NaNs.
+    distinct_values = [1, 1.0, True, 0, 0.0, -0.0, False, "0.0", "1", None, torch.float16, torch.bfloat16]
+    keys = [_scalar_leaf_key(v) for v in distinct_values]
+    assert len(set(keys)) == len(distinct_values)
+
+    nan_key_a = _scalar_leaf_key(float("nan"))
+    nan_key_b = _scalar_leaf_key(float("nan"))
+    assert nan_key_a == nan_key_b
+    assert hash(nan_key_a) == hash(nan_key_b)
+
+
+def test_materialize_fast_paths_preserve_tensor_tuple_and_namedtuple_types() -> None:
+    Pair = namedtuple("Pair", ("first", "second"))
+    runner = InferenceCUDAGraphRunner(lambda x: x)
+
+    # Single tensor fast path
+    t = torch.tensor([1.0, 2.0])
+    t_out = runner._materialize(t)
+    t.add_(5.0)
+    assert type(t_out) is torch.Tensor
+    assert t_out.data_ptr() != t.data_ptr()
+    torch.testing.assert_close(t_out, torch.tensor([1.0, 2.0]), rtol=0, atol=0)
+
+    # Plain tuple of tensors fast path
+    a = torch.tensor([3.0])
+    b = torch.tensor([4.0])
+    tup_out = runner._materialize((a, b))
+    a.zero_()
+    b.zero_()
+    assert type(tup_out) is tuple
+    assert tup_out[0].data_ptr() != a.data_ptr()
+    assert tup_out[1].data_ptr() != b.data_ptr()
+    torch.testing.assert_close(tup_out[0], torch.tensor([3.0]), rtol=0, atol=0)
+    torch.testing.assert_close(tup_out[1], torch.tensor([4.0]), rtol=0, atol=0)
+
+    # Namedtuple of tensors must NOT be demoted to plain tuple
+    c = torch.tensor([7.0])
+    d = torch.tensor([8.0])
+    nt_out = runner._materialize(Pair(c, d))
+    c.zero_()
+    d.zero_()
+    assert isinstance(nt_out, Pair)
+    assert nt_out.first.data_ptr() != c.data_ptr()
+    assert nt_out.second.data_ptr() != d.data_ptr()
+    torch.testing.assert_close(nt_out.first, torch.tensor([7.0]), rtol=0, atol=0)
+    torch.testing.assert_close(nt_out.second, torch.tensor([8.0]), rtol=0, atol=0)
+
+
+def test_pool_property_and_external_pool_preservation_on_invalidate() -> None:
+    sentinel_pool = (0, 999)
+    shared = InferenceCUDAGraphRunner(lambda x: x, pool=sentinel_pool)
+    owned = InferenceCUDAGraphRunner(lambda x: x)
+
+    assert shared.pool == sentinel_pool
+    assert owned.pool is None
+
+    # Invalidating a runner sharing an external pool must not clear the handle.
+    shared.invalidate()
+    assert shared.pool == sentinel_pool
+
+    # Invalidating a runner that owns its pool releases it.
+    owned._pool = (0, 1000)
+    owned.invalidate()
+    assert owned.pool is None

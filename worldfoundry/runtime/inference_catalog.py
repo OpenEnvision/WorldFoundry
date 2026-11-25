@@ -59,7 +59,6 @@ from worldfoundry.runtime.inference_specs.gen3c import GEN3C_INFERENCE_SPEC
 from worldfoundry.runtime.inference_specs.genie_envisioner import GENIE_ENVISIONER_INFERENCE_SPEC
 from worldfoundry.runtime.inference_specs.giga_world_0 import GIGA_WORLD_0_INFERENCE_SPEC
 from worldfoundry.runtime.inference_specs.h3_tiny import H3_TINY_INFERENCE_SPEC
-from worldfoundry.runtime.inference_specs.h3_world import H3_WORLD_INFERENCE_SPEC
 from worldfoundry.runtime.inference_specs.helios import HELIOS_INFERENCE_SPEC
 from worldfoundry.runtime.inference_specs.hma import HMA_INFERENCE_SPEC
 from worldfoundry.runtime.inference_specs.hunyuan_gamecraft import HUNYUAN_GAMECRAFT_INFERENCE_SPEC
@@ -220,7 +219,6 @@ def _infer_field_kind(field_id: str, default: Any = _MISSING_DEFAULT) -> str:
 _MODEL_INFERENCE_SPECS: dict[str, ModelInferenceSpec] = {
     "hyperflow": HYPERFLOW_INFERENCE_SPEC,
     "h3-tiny": H3_TINY_INFERENCE_SPEC,
-    "h3-world": H3_WORLD_INFERENCE_SPEC,
     "pi-h3": PI_H3_INFERENCE_SPEC,
     "pika-h3-flex": PIKA_H3_FLEX_INFERENCE_SPEC,
     "fastframes": FASTFRAMES_INFERENCE_SPEC,

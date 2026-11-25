@@ -33,6 +33,12 @@ from ..attention import (
     natten_available,
 )
 from ..rope_math import h_positions, rot_abs_axis_impl, t_positions
+from ..triton_diffvae_ops import (
+    diffvae_cut_slab,
+    diffvae_rmsnorm_3d_abs_rope,
+    diffvae_rmsnorm_modulate,
+    diffvae_w_slice_add,
+)
 
 # Bound by ``chunked()`` for the duration of the opaque custom_op. Dynamo only sees
 # the op call site; the Python body reads these at runtime.
@@ -150,12 +156,33 @@ def _slab_qkv(
     batch, t, h, ext_w, _ = y.shape
     eps = 1e-6
     head_shape = (batch, t, h, ext_w, num_heads, head_dim)
+    rope_compute_bf16 = rope_dtype == torch.bfloat16
     q = F.linear(y, q_w, q_b).view(head_shape)
-    q = F.rms_norm(q, (head_dim,), q_norm_w, eps) * attn_scale
-    q = _apply_in_slab_abs_rope(q, rope_split, inv_freqs, w_pos, compute_dtype=rope_dtype, t_pos=t_pos)
+    q = diffvae_rmsnorm_3d_abs_rope(
+        q,
+        q_norm_w,
+        rope_split,
+        inv_freqs,
+        w_pos=w_pos,
+        t_pos=t_pos,
+        eps=eps,
+        attn_scale=attn_scale,
+        do_rmsnorm=True,
+        rope_compute_bf16=rope_compute_bf16,
+    )
     k = F.linear(y, k_w, k_b).view(head_shape)
-    k = F.rms_norm(k, (head_dim,), k_norm_w, eps)
-    k = _apply_in_slab_abs_rope(k, rope_split, inv_freqs, w_pos, compute_dtype=rope_dtype, t_pos=t_pos)
+    k = diffvae_rmsnorm_3d_abs_rope(
+        k,
+        k_norm_w,
+        rope_split,
+        inv_freqs,
+        w_pos=w_pos,
+        t_pos=t_pos,
+        eps=eps,
+        attn_scale=1.0,
+        do_rmsnorm=True,
+        rope_compute_bf16=rope_compute_bf16,
+    )
     v = F.linear(y, v_w, v_b).view(head_shape)
     return q, k, v
 
@@ -204,8 +231,7 @@ def _attn_on_chunk_impl(
     inv_freqs = (inv_t, inv_h, inv_w)
     rope_split = (d_t, d_h, d_w)
 
-    y = F.rms_norm(x_chunk, (dim,), norm_weight, 1e-6)
-    y = y * (1.0 + scale) + shift
+    y = diffvae_rmsnorm_modulate(x_chunk, norm_weight, scale, shift, eps=1e-6)
 
     q, k, v = _slab_qkv(
         y,
@@ -282,10 +308,8 @@ def _joint_attn_on_chunk_impl(
     weights = (q_w, q_b, k_w, k_b, v_w, v_b, q_norm_w, k_norm_w)
     meta = (rope_split, inv_freqs, num_heads, head_dim, attn_scale, rope_dtype)
 
-    y = F.rms_norm(x_chunk, (dim,), norm_weight, 1e-6)
-    y = y * (1.0 + scale) + shift
-    keyframe_y = F.rms_norm(keyframe_chunk, (dim,), norm_weight, 1e-6)
-    keyframe_y = keyframe_y * (1.0 + scale) + shift
+    y = diffvae_rmsnorm_modulate(x_chunk, norm_weight, scale, shift, eps=1e-6)
+    keyframe_y = diffvae_rmsnorm_modulate(keyframe_chunk, norm_weight, scale, shift, eps=1e-6)
 
     q, k, v = _slab_qkv(y, w_pos, *weights, *meta)
     del y
@@ -368,6 +392,18 @@ def _cut_slab(
     approximation of the untiled window at the two volume edges, and it is shared verbatim
     by the video-only and keyframe arms so both streams' slabs stay phase-comparable.
     """
+    fast_buf = diffvae_cut_slab(
+        x,
+        core_start,
+        core_end,
+        halo,
+        extent,
+        left_halo,
+        has_right_neighbor=has_right_neighbor,
+    )
+    if fast_buf is not None:
+        return fast_buf
+
     w = x.shape[3]
     c = x.shape[4]
     buf = x.new_zeros(*x.shape[:3], extent, c)
@@ -432,7 +468,7 @@ def _run_w_chunked_residual(
 
         w_pos = torch.arange(extent, device=x.device, dtype=torch.float32) + (core_start - halo)
         out = attn_fn(buf, w_pos, scale, shift, *packed)
-        x[:, :, :, core_start:core_end, :].add_(out[:, :, :, halo : halo + core_len, :])
+        diffvae_w_slice_add(x, out, core_start, halo, core_len)
 
     return x
 
@@ -497,8 +533,8 @@ def _run_w_chunked_joint_residual(
             shift,
             *packed,
         )
-        x[:, :, :, core_start:core_end, :].add_(out[:, :, :, halo : halo + core_len, :])
-        keyframe_x[:, :, :, core_start:core_end, :].add_(keyframe_out[:, :, :, halo : halo + core_len, :])
+        diffvae_w_slice_add(x, out, core_start, halo, core_len)
+        diffvae_w_slice_add(keyframe_x, keyframe_out, core_start, halo, core_len)
 
     return x, keyframe_x
 

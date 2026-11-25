@@ -25,9 +25,15 @@ from worldfoundry.core.attention import (
     get_nd_rotary_pos_embed,
     scaled_dot_product_attention,
 )
-from worldfoundry.core.kernels.diffusion import (
-    fused_layer_norm_scale_shift,
-    residual_gate_add,
+from worldfoundry.core.kernels.triton_dit_block_ops import (
+    dit_block_ops_enabled,
+    fused_dit_dual_res_gate_add,
+    fused_dit_layernorm_adaln,
+    fused_dit_res_gate_ln_adaln,
+    fused_hunyuan_double_qkv_rmsnorm_rope_hopper,
+    fused_hunyuan_qkv_rmsnorm_rope_hopper,
+    fused_strided_gelu_tanh,
+    fused_wan_res_gate_add,
 )
 from worldfoundry.core.nn import (
     DiTModulation,
@@ -46,6 +52,27 @@ from worldfoundry.core.nn import (
 attention = partial(flattened_attention, backend="torch")
 
 
+def _no_hooks(module: torch.nn.Module) -> bool:
+    return not module._forward_hooks and not module._forward_pre_hooks
+
+
+def _can_fuse_gelu_ff(ff: torch.nn.Module) -> bool:
+    return (
+        type(ff) is torch.nn.Sequential
+        and len(ff) == 3
+        and type(ff[1]) is torch.nn.GELU
+        and ff[1].approximate == "tanh"
+        and _no_hooks(ff)
+        and _no_hooks(ff[1])
+    )
+
+
+def _run_fused_gelu_ff(ff: torch.nn.Module, x: torch.Tensor) -> torch.Tensor:
+    if isinstance(ff, torch.nn.Sequential) and _can_fuse_gelu_ff(ff):
+        return ff[2](fused_strided_gelu_tanh(ff[0](x)))
+    return ff(x)
+
+
 class PatchEmbed(torch.nn.Module):
     """3D patch embed: ``B C T H W`` → ``B (T' H' W') C`` via strided Conv3d."""
 
@@ -56,7 +83,7 @@ class PatchEmbed(torch.nn.Module):
     def forward(self, x):
         """Flatten the patch grid onto the sequence axis after the conv."""
         x = self.proj(x)
-        x = x.flatten(2).transpose(1, 2)
+        x = x.flatten(2).transpose(1, 2).contiguous()
         return x
 
 
@@ -260,8 +287,8 @@ class MMDoubleStreamBlockComponent(torch.nn.Module):
             if self._fuse_fp8_ffn:
                 ff_out = run_fused_fp8_gelu_down_proj(self.ff[0](norm2_mod), self.ff[2], runtime=runtime)
             else:
-                ff_out = self.ff(norm2_mod)
-            return residual_gate_add(hidden_states, ff_out, mod2_gate.unsqueeze(1))
+                ff_out = _run_fused_gelu_ff(self.ff, norm2_mod)
+            return fused_wan_res_gate_add(hidden_states, ff_out, None, mod2_gate)
 
         hidden_states = hidden_states + apply_gate(attn_proj, mod1_gate)
         norm2_mod = modulate(self.norm2(hidden_states), shift=mod2_shift, scale=mod2_scale)
@@ -286,6 +313,43 @@ class MMDoubleStreamBlock(torch.nn.Module):
         """Bind the request-scoped attention backend for joint MM-DiT attention."""
         self.attention_backend = "torch" if backend is None else str(backend)
 
+    def _can_use_hopper_double_ops(self, hidden_states_a: torch.Tensor, hidden_states_b: torch.Tensor) -> bool:
+        ca = self.component_a
+        cb = self.component_b
+        return (
+            not self.training
+            and not torch.is_grad_enabled()
+            and hidden_states_a.is_cuda
+            and hidden_states_b.is_cuda
+            and dit_block_ops_enabled()
+            and _no_hooks(ca)
+            and _no_hooks(cb)
+            and type(ca.norm1) is torch.nn.LayerNorm
+            and not ca.norm1.elementwise_affine
+            and type(ca.norm2) is torch.nn.LayerNorm
+            and not ca.norm2.elementwise_affine
+            and type(cb.norm1) is torch.nn.LayerNorm
+            and not cb.norm1.elementwise_affine
+            and type(cb.norm2) is torch.nn.LayerNorm
+            and not cb.norm2.elementwise_affine
+            and type(ca.norm_q) is RMSNorm
+            and type(ca.norm_k) is RMSNorm
+            and type(cb.norm_q) is RMSNorm
+            and type(cb.norm_k) is RMSNorm
+            and ca.norm_q.weight is not None
+            and ca.norm_k.weight is not None
+            and cb.norm_q.weight is not None
+            and cb.norm_k.weight is not None
+            and _no_hooks(ca.norm1)
+            and _no_hooks(ca.norm2)
+            and _no_hooks(ca.norm_q)
+            and _no_hooks(ca.norm_k)
+            and _no_hooks(cb.norm1)
+            and _no_hooks(cb.norm2)
+            and _no_hooks(cb.norm_q)
+            and _no_hooks(cb.norm_k)
+        )
+
     def forward(
         self,
         hidden_states_a,
@@ -300,6 +364,80 @@ class MMDoubleStreamBlock(torch.nn.Module):
         max_seqlen_kv=None,
     ):
         """Joint-attend video stream A and text stream B; return updated ``B S C`` pairs."""
+        if token_replace_vec is None and self._can_use_hopper_double_ops(hidden_states_a, hidden_states_b):
+            ca = self.component_a
+            cb = self.component_b
+            a_shift1, a_scale1, a_gate1, a_shift2, a_scale2, a_gate2 = ca.mod(conditioning).chunk(6, dim=-1)
+            b_shift1, b_scale1, b_gate1, b_shift2, b_scale2, b_gate2 = cb.mod(conditioning).chunk(6, dim=-1)
+            qkv_a = ca.to_qkv(fused_dit_layernorm_adaln(hidden_states_a, a_scale1, a_shift1, eps=float(ca.norm1.eps)))
+            qkv_b = cb.to_qkv(fused_dit_layernorm_adaln(hidden_states_b, b_scale1, b_shift1, eps=float(cb.norm1.eps)))
+            image_length = int(qkv_a.shape[1])
+            assert ca.norm_q.weight is not None and ca.norm_k.weight is not None
+            assert cb.norm_q.weight is not None and cb.norm_k.weight is not None
+            q, k, v = fused_hunyuan_double_qkv_rmsnorm_rope_hopper(
+                qkv_a,
+                qkv_b,
+                ca.norm_q.weight,
+                ca.norm_k.weight,
+                cb.norm_q.weight,
+                cb.norm_k.weight,
+                freqs_cis,
+                num_heads=ca.heads_num,
+                eps=float(ca.norm_q.eps),
+            )
+            if self.attention_backend in (None, "torch"):
+                attn_output = attention(
+                    q,
+                    k,
+                    v,
+                    cu_seqlens_q=cu_seqlens_q,
+                    cu_seqlens_k=cu_seqlens_kv,
+                    max_seqlen_q=max_seqlen_q,
+                    max_seqlen_k=max_seqlen_kv,
+                )
+            else:
+                attn_output = flattened_attention(
+                    q,
+                    k,
+                    v,
+                    cu_seqlens_q=cu_seqlens_q,
+                    cu_seqlens_k=cu_seqlens_kv,
+                    max_seqlen_q=max_seqlen_q,
+                    max_seqlen_k=max_seqlen_kv,
+                    backend=self.attention_backend,
+                )
+            attn_output_a = attn_output[:, :image_length]
+            attn_output_b = attn_output[:, image_length:]
+            hidden_states_a, norm2_a = fused_dit_res_gate_ln_adaln(
+                hidden_states_a,
+                ca.to_out(attn_output_a),
+                a_gate1,
+                a_scale2,
+                a_shift2,
+                eps=float(ca.norm2.eps),
+            )
+            hidden_states_a = fused_wan_res_gate_add(
+                hidden_states_a,
+                _run_fused_gelu_ff(ca.ff, norm2_a),
+                None,
+                a_gate2,
+            )
+            hidden_states_b, norm2_b = fused_dit_res_gate_ln_adaln(
+                hidden_states_b,
+                cb.to_out(attn_output_b),
+                b_gate1,
+                b_scale2,
+                b_shift2,
+                eps=float(cb.norm2.eps),
+            )
+            hidden_states_b = fused_wan_res_gate_add(
+                hidden_states_b,
+                _run_fused_gelu_ff(cb.ff, norm2_b),
+                None,
+                b_gate2,
+            )
+            return hidden_states_a, hidden_states_b
+
         (q_a, k_a, v_a), mod_a, mod_tr = self.component_a(
             hidden_states_a, conditioning, freqs_cis, token_replace_vec, tr_token
         )
@@ -578,6 +716,23 @@ class MMSingleStreamBlock(torch.nn.Module):
         """Bind the request-scoped attention backend for single-stream MM-DiT attention."""
         self.attention_backend = "torch" if backend is None else str(backend)
 
+    def _can_use_hopper_single_ops(self, hidden_states: torch.Tensor) -> bool:
+        return (
+            not self.training
+            and not torch.is_grad_enabled()
+            and hidden_states.is_cuda
+            and dit_block_ops_enabled()
+            and type(self.norm) is torch.nn.LayerNorm
+            and not self.norm.elementwise_affine
+            and type(self.norm_q) is RMSNorm
+            and type(self.norm_k) is RMSNorm
+            and self.norm_q.weight is not None
+            and self.norm_k.weight is not None
+            and _no_hooks(self.norm)
+            and _no_hooks(self.norm_q)
+            and _no_hooks(self.norm_k)
+        )
+
     def forward(
         self,
         hidden_states,
@@ -592,6 +747,70 @@ class MMSingleStreamBlock(torch.nn.Module):
         max_seqlen_kv=None,
     ):
         """Run gated self-attn + FFN on the joint ``B S C`` sequence."""
+        if token_replace_vec is None and self._can_use_hopper_single_ops(hidden_states):
+            mod_shift, mod_scale, mod_gate = self.mod(conditioning).chunk(3, dim=-1)
+            norm_hidden_states = fused_dit_layernorm_adaln(
+                hidden_states,
+                mod_scale,
+                mod_shift,
+                eps=float(self.norm.eps),
+            )
+            if self.linear1 is not None:
+                proj = self.linear1(norm_hidden_states)
+                qkv = proj[..., : self._qkv_out_features]
+                mlp_in = proj[..., self._qkv_out_features :]
+            else:
+                qkv = self.to_qkv(norm_hidden_states)
+                mlp_in = None
+
+            img_len = int(hidden_states.shape[1]) - int(txt_len)
+            assert self.norm_q.weight is not None and self.norm_k.weight is not None
+            q, k, v = fused_hunyuan_qkv_rmsnorm_rope_hopper(
+                qkv,
+                self.norm_q.weight,
+                self.norm_k.weight,
+                freqs_cis,
+                num_heads=self.heads_num,
+                rope_len=img_len,
+                eps=float(self.norm_q.eps),
+            )
+            if self.attention_backend in (None, "torch"):
+                attn_output = attention(
+                    q,
+                    k,
+                    v,
+                    cu_seqlens_q=cu_seqlens_q,
+                    cu_seqlens_k=cu_seqlens_kv,
+                    max_seqlen_q=max_seqlen_q,
+                    max_seqlen_k=max_seqlen_kv,
+                )
+            else:
+                attn_output = flattened_attention(
+                    q,
+                    k,
+                    v,
+                    cu_seqlens_q=cu_seqlens_q,
+                    cu_seqlens_k=cu_seqlens_kv,
+                    max_seqlen_q=max_seqlen_q,
+                    max_seqlen_k=max_seqlen_kv,
+                    backend=self.attention_backend,
+                )
+            attn_proj = self.to_out(attn_output)
+            if mlp_in is not None:
+                if (
+                    isinstance(self.ff, torch.nn.Sequential)
+                    and len(self.ff) >= 3
+                    and type(self.ff[1]) is torch.nn.GELU
+                    and self.ff[1].approximate == "tanh"
+                    and _no_hooks(self.ff[1])
+                ):
+                    mlp_out = self.ff[2](fused_strided_gelu_tanh(mlp_in))
+                else:
+                    mlp_out = self.ff[2](self.ff[1](mlp_in))
+            else:
+                mlp_out = _run_fused_gelu_ff(self.ff, norm_hidden_states)
+            return fused_dit_dual_res_gate_add(hidden_states, attn_proj, mlp_out, mod_gate)
+
         mod_shift, mod_scale, mod_gate = self.mod(conditioning).chunk(3, dim=-1)
         if token_replace_vec is not None:
             assert tr_token is not None
@@ -704,10 +923,10 @@ class MMSingleStreamBlock(torch.nn.Module):
             mlp_in = proj[..., self._qkv_out_features :]
         else:
             if use_fused:
-                norm_hidden_states = fused_layer_norm_scale_shift(
+                norm_hidden_states = fused_dit_layernorm_adaln(
                     hidden_states,
-                    mod_scale.unsqueeze(1),
-                    mod_shift.unsqueeze(1),
+                    mod_scale,
+                    mod_shift,
                     eps=float(self.norm.eps),
                 )
                 if runtime is not None and not torch.compiler.is_compiling():
@@ -795,6 +1014,15 @@ class MMSingleStreamBlock(torch.nn.Module):
         attn_proj = self.to_out(attn_output)
         if self._fuse_fp8_ffn:
             mlp_proj = run_fused_fp8_gelu_down_proj(mlp_in, self.ff[2], runtime=runtime)
+        elif (
+            use_fused
+            and isinstance(self.ff, torch.nn.Sequential)
+            and len(self.ff) >= 3
+            and type(self.ff[1]) is torch.nn.GELU
+            and self.ff[1].approximate == "tanh"
+            and _no_hooks(self.ff[1])
+        ):
+            mlp_proj = self.ff[2](fused_strided_gelu_tanh(mlp_in))
         else:
             mlp_proj = self.ff[2](self.ff[1](mlp_in))
 
@@ -823,6 +1051,17 @@ class FinalLayer(torch.nn.Module):
     def forward(self, x, c):
         """Map video tokens ``B S C`` to packed patch channels using timestep AdaLN ``c``."""
         shift, scale = self.adaLN_modulation(c).chunk(2, dim=1)
+        if (
+            x.is_cuda
+            and not self.training
+            and not torch.is_grad_enabled()
+            and dit_block_ops_enabled()
+            and type(self.norm_final) is torch.nn.LayerNorm
+            and not self.norm_final.elementwise_affine
+            and _no_hooks(self.norm_final)
+        ):
+            x = fused_dit_layernorm_adaln(x, scale, shift, eps=float(self.norm_final.eps))
+            return self.linear(x)
         x = modulate(self.norm_final(x), shift=shift, scale=scale)
         x = self.linear(x)
         return x

@@ -64,7 +64,7 @@ from worldfoundry.core.nn import (
 )
 
 from .camera_attention import sequence_parallel_attention_bi_fa3, sequence_parallel_attention_bi_fp8
-from .camera_modulation import fused_layernorm_modulate, fused_residual_gate
+from .camera_modulation import fused_layernorm_modulate, fused_residual_gate, fused_residual_gate_layernorm_modulate
 from .modules.embed_layers import ByT5Mapper, PatchEmbed, VisionProjection
 from .modules.token_refiner import SingleTokenRefiner
 
@@ -327,29 +327,25 @@ class MMDoubleStreamBlock(nn.Module):
 
         img_attn, txt_attn = attn[:, : img_q.shape[1]].contiguous(), attn[:, img_q.shape[1] :].contiguous()
 
-        img = fused_residual_gate(img, self.img_attn_proj(img_attn), img_mod1_gate)
-        img = fused_residual_gate(
+        img, img_mod2 = fused_residual_gate_layernorm_modulate(
             img,
-            _run_hy15_mlp(
-                self.img_mlp,
-                fused_layernorm_modulate(
-                    img, shift=img_mod2_shift, scale=img_mod2_scale, eps=float(self.img_norm2.eps)
-                ),
-            ),
-            img_mod2_gate,
+            self.img_attn_proj(img_attn),
+            img_mod1_gate,
+            shift=img_mod2_shift,
+            scale=img_mod2_scale,
+            eps=float(self.img_norm2.eps),
         )
+        img = fused_residual_gate(img, _run_hy15_mlp(self.img_mlp, img_mod2), img_mod2_gate)
 
-        txt = fused_residual_gate(txt, self.txt_attn_proj(txt_attn), txt_mod1_gate)
-        txt = fused_residual_gate(
+        txt, txt_mod2 = fused_residual_gate_layernorm_modulate(
             txt,
-            _run_hy15_mlp(
-                self.txt_mlp,
-                fused_layernorm_modulate(
-                    txt, shift=txt_mod2_shift, scale=txt_mod2_scale, eps=float(self.txt_norm2.eps)
-                ),
-            ),
-            txt_mod2_gate,
+            self.txt_attn_proj(txt_attn),
+            txt_mod1_gate,
+            shift=txt_mod2_shift,
+            scale=txt_mod2_scale,
+            eps=float(self.txt_norm2.eps),
         )
+        txt = fused_residual_gate(txt, _run_hy15_mlp(self.txt_mlp, txt_mod2), txt_mod2_gate)
 
         return img, txt
 

@@ -126,6 +126,25 @@ def test_dvlt_runtime_data_is_excluded_with_or_without_its_local_namespace(tmp_p
     )
 
 
+@pytest.mark.parametrize("populated", [False, True])
+def test_open_sora_runtime_data_is_excluded_with_or_without_its_local_namespace(
+    tmp_path: Path, populated: bool
+) -> None:
+    visual_gen = tmp_path / "worldfoundry/synthesis/visual_generation"
+    visual_gen.mkdir(parents=True)
+    if populated:
+        (visual_gen / "open_sora/open_sora_runtime").mkdir(parents=True)
+    config = load_find_config()
+    kept = selected_packages(discover_packages(config, repo_root=tmp_path), config["exclude"])
+    data_excludes = load_pyproject()["tool"]["setuptools"]["exclude-package-data"]
+    assert (
+        package_data_exclusion_gaps(
+            ["worldfoundry/synthesis/visual_generation/open_sora/open_sora_runtime"], kept, data_excludes
+        )
+        == []
+    )
+
+
 def _write_wheel(path: Path, entries: list[str]) -> None:
     with zipfile.ZipFile(path, "w") as wheel:
         for entry in entries:

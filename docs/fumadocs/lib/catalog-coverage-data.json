@@ -1,5 +1,5 @@
 {
-  "modelsListed": 260,
+  "modelsListed": 259,
   "benchmarksTotal": 75,
   "modelFamilies": [
     {
@@ -540,7 +540,7 @@
       "id": "world_models",
       "label": "World models",
       "blurb": "Interactive worlds, camera/action conditioning, navigation, and simulator-shaped systems.",
-      "count": 103,
+      "count": 102,
       "entries": [
         {
           "id": "abot-world-0-5b-lf",
@@ -793,14 +793,6 @@
           "status": "runtime_ported",
           "aliases": [
             "giga-world-0"
-          ]
-        },
-        {
-          "id": "h3-world",
-          "name": "H 3-World",
-          "status": "integrated",
-          "aliases": [
-            "h3-world"
           ]
         },
         {
