@@ -24,26 +24,28 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
-import torch
-import torch.nn.functional as F
-
 from worldfoundry.core.execution.deadline import check_deadline
 from worldfoundry.runtime.assets import expand_worldfoundry_path, local_file_is_ready
 from worldfoundry.runtime.env import resolve_hfd_root
 
-from .acceleration import (
-    LTX25AcceleratedExecutor,
-    LTX25AccelerationConfig,
-    LTX25CFGParallelRunner,
-    accelerate_ltx25_video_vae,
-    coerce_ltx25_acceleration_config,
-    convert_ltx25_conv_video_decoder_state_dict,
-    convert_ltx25_conv_video_encoder_state_dict,
-)
-
 if TYPE_CHECKING:
+    import torch
+    import torch.nn.functional as F
+
     from worldfoundry.base_models.diffusion_model import NativeDiffusionPipeline
     from worldfoundry.base_models.diffusion_model.models.networks.ltx.modality import Modality
+
+    from .acceleration import (
+        LTX25AcceleratedExecutor,
+        LTX25AccelerationConfig,
+    )
+else:
+    try:
+        import torch
+        import torch.nn.functional as F
+    except ModuleNotFoundError:
+        torch = None  # type: ignore[assignment]
+        F = None  # type: ignore[assignment]
 
 UPSTREAM_REVISION = "a95ab856bf29407b6b066ede0abe1846050db56c"
 CHECKPOINT_REVISION = "bf86adedf518142442575d1ce2e767b7d01c8c76"
@@ -71,6 +73,10 @@ def _expand_path(value: str | Path | None) -> Path | None:
         return None
     expanded = os.path.expandvars(str(value))
     return Path(expand_worldfoundry_path(expanded)).expanduser().resolve()
+
+
+def _torch_inference_mode() -> Any:
+    return torch.inference_mode() if torch is not None else (lambda fn: fn)
 
 
 def _cuda_sync(device: torch.device) -> None:
@@ -307,16 +313,22 @@ class LTX25DistilledRuntime:
         self.prompt_enhancer_gemma_root = _expand_path(prompt_enhancer_gemma_root)
 
         sm_major = 9
-        if self.device.lower().startswith("cuda") and torch.cuda.is_available():
+        if self.device.lower().startswith("cuda") and torch is not None and torch.cuda.is_available():
             try:
                 sm_major = torch.cuda.get_device_capability(torch.device(self.device))[0]
             except Exception:
                 sm_major = 9
-        self.acceleration: LTX25AccelerationConfig | None = coerce_ltx25_acceleration_config(
-            acceleration,
-            variant=self.model_variant,
-            sm_major=sm_major,
-        )
+        self.acceleration: LTX25AccelerationConfig | None
+        if acceleration is None:
+            self.acceleration = None
+        else:
+            from .acceleration import coerce_ltx25_acceleration_config
+
+            self.acceleration = coerce_ltx25_acceleration_config(
+                acceleration,
+                variant=self.model_variant,
+                sm_major=sm_major,
+            )
 
         # Native recipe cache (unaccelerated default path)
         self._pipeline: NativeDiffusionPipeline | None = None
@@ -356,12 +368,17 @@ class LTX25DistilledRuntime:
     ) -> LTX25AccelerationConfig | None:
         """Set or replace the active SOL-Engine acceleration configuration."""
         sm_major = 9
-        if self.device.lower().startswith("cuda") and torch.cuda.is_available():
+        if self.device.lower().startswith("cuda") and torch is not None and torch.cuda.is_available():
             try:
                 sm_major = torch.cuda.get_device_capability(torch.device(self.device))[0]
             except Exception:
                 sm_major = 9
-        parsed = coerce_ltx25_acceleration_config(acceleration, variant=self.model_variant, sm_major=sm_major)
+        if acceleration is None:
+            parsed = None
+        else:
+            from .acceleration import coerce_ltx25_acceleration_config
+
+            parsed = coerce_ltx25_acceleration_config(acceleration, variant=self.model_variant, sm_major=sm_major)
         self.acceleration = parsed
         # Drop cached executor so next load applies the updated acceleration stack cleanly.
         self._executor = None
@@ -546,6 +563,8 @@ class LTX25DistilledRuntime:
     def _effective_accel_config(self) -> LTX25AccelerationConfig:
         if self.acceleration is not None:
             return self.acceleration
+        from .acceleration import LTX25AccelerationConfig
+
         return LTX25AccelerationConfig(
             fuse_qkv=False,
             fuse_cross_kv=False,
@@ -618,6 +637,8 @@ class LTX25DistilledRuntime:
         wrapper.eval()
         wrapper.velocity_model.refresh_preprocessor_bindings()
         self._transformer_wrapper = wrapper
+        from .acceleration import LTX25AcceleratedExecutor
+
         accel_cfg = self._effective_accel_config()
         self._executor = LTX25AcceleratedExecutor(
             wrapper.velocity_model,
@@ -809,6 +830,11 @@ class LTX25DistilledRuntime:
             LTXVideoEncoderModule,
         )
 
+        from .acceleration import (
+            accelerate_ltx25_video_vae,
+            convert_ltx25_conv_video_encoder_state_dict,
+        )
+
         policy = self._resident_policy()
         encoder = NativeModuleLoader().load(
             ModuleLoadSpec(
@@ -891,6 +917,11 @@ class LTX25DistilledRuntime:
             return decoder, "diffvae"
 
         # Fast CausalVideoAutoencoder (Conv VAE)
+        from .acceleration import (
+            accelerate_ltx25_video_vae,
+            convert_ltx25_conv_video_decoder_state_dict,
+        )
+
         decoder = NativeModuleLoader().load(
             ModuleLoadSpec(
                 module_class=LTXVideoDecoderModule,
@@ -1237,7 +1268,7 @@ class LTX25DistilledRuntime:
     # High-Level Accelerated Execution Modes: Distilled / Dev / 3-Step V2V
     # ------------------------------------------------------------------ #
 
-    @torch.inference_mode()
+    @_torch_inference_mode()
     def generate_dev(
         self,
         *,
@@ -1296,6 +1327,8 @@ class LTX25DistilledRuntime:
 
         executor = self.load_transformer_executor(sp_group=sp_group, sp_rank=sp_rank)
         executor.begin_request()
+
+        from .acceleration import LTX25CFGParallelRunner
 
         accel_cfg = self._effective_accel_config()
         if accel_cfg.parallel.cfg_parallel == 2:
@@ -1441,7 +1474,7 @@ class LTX25DistilledRuntime:
             "acceleration_report": report,
         }
 
-    @torch.inference_mode()
+    @_torch_inference_mode()
     def generate_distilled(
         self,
         *,
@@ -1641,7 +1674,7 @@ class LTX25DistilledRuntime:
             "acceleration_report": report,
         }
 
-    @torch.inference_mode()
+    @_torch_inference_mode()
     def refine_video_3step(
         self,
         draft_video: torch.Tensor,

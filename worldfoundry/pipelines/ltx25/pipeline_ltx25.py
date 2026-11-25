@@ -6,14 +6,14 @@ import json
 import time
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from worldfoundry.core.execution.deadline import check_deadline
 from worldfoundry.pipelines.pipeline_utils import PipelineABC
-from worldfoundry.synthesis.visual_generation.ltx25 import (
-    LTX25AccelerationConfig,
-    LTX25DistilledRuntime,
-)
+from worldfoundry.synthesis.visual_generation.ltx25.runtime import LTX25DistilledRuntime
+
+if TYPE_CHECKING:
+    from worldfoundry.synthesis.visual_generation.ltx25.acceleration import LTX25AccelerationConfig
 
 
 def _runtime_options(
