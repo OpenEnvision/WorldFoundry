@@ -781,6 +781,22 @@ class VideoDecoder(nn.Module):
         self._compiled_forward: Callable[[torch.Tensor], torch.Tensor] | None = None
         self._compiled_decode_rgb: Callable[[torch.Tensor], torch.Tensor] | None = None
         self._compile_mode: str | None = None
+        self._tile_parallelism_enabled: bool = False
+        self._tile_parallel_group: Any | None = None
+
+    def enable_tile_parallelism(
+        self,
+        enabled: bool = True,
+        *,
+        group: Any | None = None,
+    ) -> None:
+        """Enable or disable multi-GPU spatial tile sharding during ``tiled_decode``."""
+        self._tile_parallelism_enabled = bool(enabled)
+        if group is not None or not self._tile_parallelism_enabled:
+            self._tile_parallel_group = group if self._tile_parallelism_enabled else None
+
+    def disable_tile_parallelism(self) -> None:
+        self.enable_tile_parallelism(False)
 
     def enable_channels_last_3d(self) -> int:
         """Convert Conv3d weights to ``channels_last_3d`` (NDHWC) for Tensor Core acceleration."""
@@ -1046,12 +1062,39 @@ class VideoDecoder(nn.Module):
 
         return create_tiles(latent.shape, splitters, mappers)
 
+    def parallel_tiled_decode(
+        self,
+        latent: torch.Tensor,
+        tiling_config: TilingConfig | None = None,
+        timestep: torch.Tensor | None = None,
+        generator: torch.Generator | None = None,
+        *,
+        group: Any | None = None,
+    ) -> Iterator[torch.Tensor]:
+        """Decode a latent tensor into video frames with multi-GPU spatial tile sharding."""
+        import torch.distributed as dist
+
+        if not dist.is_available() or not dist.is_initialized():
+            raise RuntimeError("parallel LTX tiled decode requires an initialized process group")
+        comm_group = group if group is not None else self._tile_parallel_group
+        if int(dist.get_world_size(comm_group)) <= 1:
+            raise RuntimeError("parallel LTX tiled decode requires more than one rank")
+        yield from self._tiled_decode_impl(
+            latent,
+            tiling_config=tiling_config,
+            timestep=timestep,
+            generator=generator,
+            parallel_group=comm_group,
+            use_parallel=True,
+        )
+
     def tiled_decode(
         self,
         latent: torch.Tensor,
         tiling_config: TilingConfig | None = None,
         timestep: torch.Tensor | None = None,
         generator: torch.Generator | None = None,
+        parallel_group: Any | None = None,
     ) -> Iterator[torch.Tensor]:
         """
         Decode a latent tensor into video frames using tiled processing.
@@ -1062,10 +1105,32 @@ class VideoDecoder(nn.Module):
             tiling_config: Tiling configuration for the latent tensor.
             timestep: Optional timestep for decoder conditioning.
             generator: Optional random generator for deterministic decoding.
+            parallel_group: Optional ``torch.distributed.ProcessGroup`` for multi-GPU
+                spatial tile sharding. When omitted, honors ``enable_tile_parallelism()``.
         Yields:
             Video chunks (B, C, T, H, W) by temporal slices;
         """
+        use_parallel = parallel_group is not None or self._tile_parallelism_enabled
+        active_group = parallel_group if parallel_group is not None else self._tile_parallel_group
+        yield from self._tiled_decode_impl(
+            latent,
+            tiling_config=tiling_config,
+            timestep=timestep,
+            generator=generator,
+            parallel_group=active_group,
+            use_parallel=use_parallel,
+        )
 
+    def _tiled_decode_impl(
+        self,
+        latent: torch.Tensor,
+        tiling_config: TilingConfig | None = None,
+        timestep: torch.Tensor | None = None,
+        generator: torch.Generator | None = None,
+        *,
+        parallel_group: Any | None = None,
+        use_parallel: bool = False,
+    ) -> Iterator[torch.Tensor]:
         # Calculate full video shape from latent shape to get spatial dimensions
         full_video_shape = VideoLatentShape.from_torch_shape(latent.shape).upscale(self.video_downscale_factors)
         tiles = self._prepare_tiles(latent, tiling_config)
@@ -1078,7 +1143,10 @@ class VideoDecoder(nn.Module):
         previous_temporal_slice = None
 
         for temporal_group_tiles in temporal_groups:
-            curr_temporal_slice = temporal_group_tiles[0].out_coords[2]
+            raw_temporal_slice = temporal_group_tiles[0].out_coords[2]
+            curr_start = 0 if raw_temporal_slice.start is None else raw_temporal_slice.start
+            curr_stop = full_video_shape.frames if raw_temporal_slice.stop is None else raw_temporal_slice.stop
+            curr_temporal_slice = slice(curr_start, curr_stop)
 
             # Calculate the shape of the temporal buffer for this group of tiles.
             # The temporal length depends on whether this is the first tile (starts at 0) or not.
@@ -1101,10 +1169,12 @@ class VideoDecoder(nn.Module):
                 latent=latent,
                 timestep=timestep,
                 generator=generator,
+                parallel_group=parallel_group,
+                use_parallel=use_parallel,
             )
 
             # Blend with previous temporal chunk if it exists
-            if previous_chunk is not None:
+            if previous_chunk is not None and previous_weights is not None and previous_temporal_slice is not None:
                 # Check if current temporal slice overlaps with previous temporal slice
                 if previous_temporal_slice.stop > curr_temporal_slice.start:
                     overlap_len = previous_temporal_slice.stop - curr_temporal_slice.start
@@ -1135,7 +1205,7 @@ class VideoDecoder(nn.Module):
             previous_temporal_slice = curr_temporal_slice
 
         # Yield any remaining chunk
-        if previous_chunk is not None:
+        if previous_chunk is not None and previous_weights is not None:
             previous_weights = previous_weights.clamp(min=1e-8)
             yield previous_chunk / previous_weights
 
@@ -1199,15 +1269,27 @@ class VideoDecoder(nn.Module):
         latent: torch.Tensor,
         timestep: torch.Tensor | None,
         generator: torch.Generator | None,
+        *,
+        parallel_group: Any | None = None,
+        use_parallel: bool = False,
     ) -> torch.Tensor:
         """
         Decode and accumulate all tiles of a temporal group into a local buffer.
         The buffer is local to the group and always starts at time 0; temporal coordinates
         are rebased by subtracting temporal_slice.start.
+
+        When multi-GPU tile parallelism is active and the temporal group contains
+        more than one spatial tile, each rank decodes ``group_tiles[rank::world_size]``
+        on-device and combines partial accumulations with ``all_reduce(SUM)``.
         """
         temporal_slice = group_tiles[0].out_coords[2]
+        temporal_start = 0 if temporal_slice.start is None else temporal_slice.start
 
-        weights = torch.zeros_like(buffer)
+        weights = torch.zeros(
+            (1, 1, buffer.shape[2], buffer.shape[3], buffer.shape[4]),
+            device=buffer.device,
+            dtype=buffer.dtype,
+        )
 
         use_compiled = (
             self._compiled_forward is not None
@@ -1216,7 +1298,21 @@ class VideoDecoder(nn.Module):
             and not torch.is_grad_enabled()
             and not self.training
         )
-        for tile in group_tiles:
+
+        sharded = False
+        comm_group = parallel_group
+        tiles_to_decode = group_tiles
+        if (use_parallel or parallel_group is not None) and len(group_tiles) > 1:
+            import torch.distributed as dist
+
+            if dist.is_available() and dist.is_initialized():
+                world_size = int(dist.get_world_size(comm_group))
+                if world_size > 1:
+                    rank = int(dist.get_rank(comm_group))
+                    tiles_to_decode = group_tiles[rank::world_size]
+                    sharded = True
+
+        for tile in tiles_to_decode:
             tile_in = latent[tile.in_coords]
             decoded_tile = (
                 self._call_compiled(self._compiled_forward, tile_in)
@@ -1224,10 +1320,14 @@ class VideoDecoder(nn.Module):
                 else self.forward(tile_in, timestep, generator)
             )
             mask = tile.blend_mask.to(device=buffer.device, dtype=buffer.dtype)
-            temporal_offset = tile.out_coords[2].start - temporal_slice.start
+            tile_t_start = 0 if tile.out_coords[2].start is None else tile.out_coords[2].start
+            tile_t_stop = (
+                temporal_start + buffer.shape[2] if tile.out_coords[2].stop is None else tile.out_coords[2].stop
+            )
+            temporal_offset = tile_t_start - temporal_start
             # Use the tile's output coordinate length, not the decoded tile's length,
             # as the decoder may produce a different number of frames than expected
-            expected_temporal_len = tile.out_coords[2].stop - tile.out_coords[2].start
+            expected_temporal_len = tile_t_stop - tile_t_start
             decoded_temporal_len = decoded_tile.shape[2]
 
             # Ensure we don't exceed the buffer or decoded tile bounds
@@ -1247,6 +1347,16 @@ class VideoDecoder(nn.Module):
 
             buffer[chunk_coords] += decoded_slice * mask_slice
             weights[chunk_coords] += mask_slice
+
+        if sharded:
+            import torch.distributed as dist
+
+            buf_work = dist.all_reduce(buffer, op=dist.ReduceOp.SUM, group=comm_group, async_op=True)
+            wt_work = dist.all_reduce(weights, op=dist.ReduceOp.SUM, group=comm_group, async_op=True)
+            if buf_work is not None:
+                buf_work.wait()
+            if wt_work is not None:
+                wt_work.wait()
 
         return weights
 

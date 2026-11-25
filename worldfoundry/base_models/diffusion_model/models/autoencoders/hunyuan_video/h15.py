@@ -812,80 +812,106 @@ class AutoencoderKLConv3D(nn.Module, NativeConfigMixin):
     def disable_tile_parallelism(self):
         self._tile_parallelism_enabled = False
 
-    def tile_parallel_spatial_tiled_decode(self, z: torch.Tensor):
-        B, C, T, H, W = z.shape
+    def tile_parallel_spatial_tiled_decode(
+        self,
+        z: torch.Tensor,
+        *,
+        group: dist.ProcessGroup | None = None,
+    ):
+        B, _C, T, H, W = z.shape
         overlap_size = int(self.tile_latent_min_size * (1 - self.tile_overlap_factor))
         blend_extent = int(self.tile_sample_min_size * self.tile_overlap_factor)
         row_limit = self.tile_sample_min_size - blend_extent
 
-        rank = get_parallel_state().sp_rank
-        world_size = get_parallel_state().sp
+        if group is not None:
+            comm_group = group
+            rank = int(dist.get_rank(group))
+            world_size = int(dist.get_world_size(group))
+        elif z.is_cuda:
+            ps = get_parallel_state()
+            if ps.sp > 1 and ps.sp_group is not None:
+                comm_group = ps.sp_group
+                rank = int(ps.sp_rank)
+                world_size = int(ps.sp)
+            elif dist.is_available() and dist.is_initialized() and dist.get_world_size() > 1:
+                comm_group = None
+                rank = int(dist.get_rank())
+                world_size = int(dist.get_world_size())
+            else:
+                comm_group = None
+                rank = 0
+                world_size = 1
+        elif dist.is_available() and dist.is_initialized() and dist.get_world_size() > 1:
+            comm_group = None
+            rank = int(dist.get_rank())
+            world_size = int(dist.get_world_size())
+        else:
+            comm_group = None
+            rank = 0
+            world_size = 1
 
         num_rows = math.ceil(H / overlap_size)
         num_cols = math.ceil(W / overlap_size)
         total_tiles = num_rows * num_cols
         tiles_per_rank = math.ceil(total_tiles / world_size)
 
-        my_linear_indices = list(range(rank, total_tiles, world_size))
-        decoded_tiles = []
-        decoded_metas = []
-        H_out_std = self.tile_sample_min_size
-        W_out_std = self.tile_sample_min_size
-        for lin_idx in my_linear_indices:
+        H_out_std = max(self.tile_sample_min_size, self.tile_latent_min_size * self.ffactor_spatial)
+        W_out_std = max(self.tile_sample_min_size, self.tile_latent_min_size * self.ffactor_spatial)
+        out_T = (T - 1) * self.ffactor_temporal + 1
+        out_channels = int(getattr(self.config, "out_channels", 3))
+        if z.device.type in ("cuda", "cpu") and torch.is_autocast_enabled(z.device.type):
+            out_dtype = torch.get_autocast_dtype(z.device.type)
+        else:
+            conv_out = getattr(self.decoder, "conv_out", None)
+            inner_conv = getattr(conv_out, "conv", conv_out)
+            weight = getattr(inner_conv, "weight", None)
+            out_dtype = weight.dtype if isinstance(weight, torch.Tensor) else z.dtype
+
+        local_tiles = torch.zeros(
+            (tiles_per_rank, B, out_channels, out_T, H_out_std, W_out_std),
+            device=z.device,
+            dtype=out_dtype,
+        )
+        for slot, lin_idx in enumerate(range(rank, total_tiles, world_size)):
             ri = lin_idx // num_cols
             rj = lin_idx % num_cols
             i = ri * overlap_size
             j = rj * overlap_size
             tile = z[:, :, :, i : i + self.tile_latent_min_size, j : j + self.tile_latent_min_size]
             dec = self.decoder(tile)
+            if dec.dtype != local_tiles.dtype:
+                local_tiles = local_tiles.to(dtype=dec.dtype)
+            local_tiles[slot, :, :, :, : dec.shape[-2], : dec.shape[-1]].copy_(dec)
 
-            pad_h = max(0, H_out_std - dec.shape[-2])
-            pad_w = max(0, W_out_std - dec.shape[-1])
-            if pad_h > 0 or pad_w > 0:
-                dec = F.pad(dec, (0, pad_w, 0, pad_h, 0, 0), "constant", 0)
-            decoded_tiles.append(dec)
-            decoded_metas.append(torch.tensor([ri, rj, pad_w, pad_h], device=z.device, dtype=torch.int64))
-
-        while len(decoded_tiles) < tiles_per_rank:
-            zero_tile = torch.zeros(
-                [1, 3, (T - 1) * self.ffactor_temporal + 1, self.tile_sample_min_size, self.tile_sample_min_size],
-                device=dec.device,
-                dtype=dec.dtype,
+        if world_size == 1:
+            gathered_tiles = local_tiles.unsqueeze(0)
+        else:
+            gathered_tiles = torch.empty(
+                (world_size, *local_tiles.shape),
+                device=local_tiles.device,
+                dtype=local_tiles.dtype,
             )
-            decoded_tiles.append(zero_tile)
-            meta_tensor = torch.tensor(
-                [-1, -1, self.tile_sample_min_size, self.tile_sample_min_size], device=z.device, dtype=torch.int64
-            )
-            decoded_metas.append(meta_tensor)
-
-        decoded_tiles = torch.stack(decoded_tiles, dim=0)
-        decoded_metas = torch.stack(decoded_metas, dim=0)
-
-        tiles_gather_list = [torch.empty_like(decoded_tiles) for _ in range(world_size)]
-        metas_gather_list = [torch.empty_like(decoded_metas) for _ in range(world_size)]
-
-        dist.all_gather(tiles_gather_list, decoded_tiles, group=get_parallel_state().sp_group)
-        dist.all_gather(metas_gather_list, decoded_metas, group=get_parallel_state().sp_group)
+            if local_tiles.is_cuda and hasattr(dist, "all_gather_into_tensor"):
+                dist.all_gather_into_tensor(gathered_tiles, local_tiles, group=comm_group)
+            else:
+                dist.all_gather(list(gathered_tiles.unbind(0)), local_tiles, group=comm_group)
 
         if rank != 0:
-            return torch.empty(0, device=z.device)
+            return torch.empty(0, device=z.device, dtype=local_tiles.dtype)
 
-        rows = [[None for _ in range(num_cols)] for _ in range(num_rows)]
+        rows: list[list[torch.Tensor | None]] = [[None for _ in range(num_cols)] for _ in range(num_rows)]
         for r in range(world_size):
-            gathered_tiles_r = tiles_gather_list[r]  # [tiles_per_rank, B, C, T, H, W]
-            gathered_metas_r = metas_gather_list[r]  # [tiles_per_rank, 4]
-            for k in range(gathered_tiles_r.shape[0]):
-                ri = int(gathered_metas_r[k][0])
-                rj = int(gathered_metas_r[k][1])
-                if ri < 0 or rj < 0:
-                    continue
-                if ri < num_rows and rj < num_cols:
-                    # remove padding
-                    pad_w = int(gathered_metas_r[k][2])
-                    pad_h = int(gathered_metas_r[k][3])
-                    h_end = None if pad_h == 0 else -pad_h
-                    w_end = None if pad_w == 0 else -pad_w
-                    rows[ri][rj] = gathered_tiles_r[k][:, :, :, :h_end, :w_end]
+            for k in range(tiles_per_rank):
+                lin_idx = r + k * world_size
+                if lin_idx >= total_tiles:
+                    break
+                ri = lin_idx // num_cols
+                rj = lin_idx % num_cols
+                i = ri * overlap_size
+                j = rj * overlap_size
+                tile_out_h = min(self.tile_latent_min_size, H - i) * self.ffactor_spatial
+                tile_out_w = min(self.tile_latent_min_size, W - j) * self.ffactor_spatial
+                rows[ri][rj] = gathered_tiles[r, k, :, :, :, :tile_out_h, :tile_out_w]
 
         result_rows = []
         for i, row in enumerate(rows):
@@ -894,9 +920,13 @@ class AutoencoderKLConv3D(nn.Module, NativeConfigMixin):
                 if tile is None:
                     continue
                 if i > 0:
-                    tile = self.blend_v(rows[i - 1][j], tile, blend_extent)
+                    prev_row_tile = rows[i - 1][j]
+                    assert prev_row_tile is not None
+                    tile = self.blend_v(prev_row_tile, tile, blend_extent)
                 if j > 0:
-                    tile = self.blend_h(row[j - 1], tile, blend_extent)
+                    prev_col_tile = row[j - 1]
+                    assert prev_col_tile is not None
+                    tile = self.blend_h(prev_col_tile, tile, blend_extent)
                 result_row.append(tile[:, :, :, :row_limit, :row_limit])
             result_rows.append(torch.cat(result_row, dim=-1))
 

@@ -10,11 +10,12 @@ do not comment every conv.  Runner recipes use
 
 import contextlib
 import itertools
+import math
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from einops import rearrange, repeat
+from einops import rearrange
 from tqdm import tqdm
 
 from worldfoundry.core.attention import scaled_dot_product_attention as _worldfoundry_scaled_dot_product_attention
@@ -1872,25 +1873,23 @@ class WanVideoVAE(nn.Module):
             return contextlib.nullcontext()
         return torch.autocast(device_type="cuda", dtype=dtype)
 
-    def build_1d_mask(self, length, left_bound, right_bound, border_width):
-        x = torch.ones((length,))
-        if not left_bound:
-            x[:border_width] = (torch.arange(border_width) + 1) / border_width
-        if not right_bound:
-            x[-border_width:] = torch.flip((torch.arange(border_width) + 1) / border_width, dims=(0,))
-        return x
+    def build_1d_mask(self, length, left_bound, right_bound, border_width, *, device=None, dtype=None):
+        x = torch.ones((length,), dtype=torch.float32, device=device)
+        if not left_bound and border_width > 0:
+            x[:border_width] = (torch.arange(border_width, dtype=torch.float32, device=device) + 1) / border_width
+        if not right_bound and border_width > 0:
+            x[-border_width:] = torch.flip(
+                (torch.arange(border_width, dtype=torch.float32, device=device) + 1) / border_width,
+                dims=(0,),
+            )
+        return x.to(dtype=dtype) if dtype is not None else x
 
-    def build_mask(self, data, is_bound, border_width):
+    def build_mask(self, data, is_bound, border_width, *, device=None, dtype=None):
         _, _, _, H, W = data.shape
-        h = self.build_1d_mask(H, is_bound[0], is_bound[1], border_width[0])
-        w = self.build_1d_mask(W, is_bound[2], is_bound[3], border_width[1])
-
-        h = repeat(h, "H -> H W", H=H, W=W)
-        w = repeat(w, "W -> H W", H=H, W=W)
-
-        mask = torch.stack([h, w]).min(dim=0).values
-        mask = rearrange(mask, "H W -> 1 1 1 H W")
-        return mask
+        h = self.build_1d_mask(H, is_bound[0], is_bound[1], border_width[0], device=device)
+        w = self.build_1d_mask(W, is_bound[2], is_bound[3], border_width[1], device=device)
+        mask = torch.minimum(h[:, None], w[None, :]).reshape(1, 1, 1, H, W)
+        return mask.to(dtype=dtype) if dtype is not None else mask
 
     @staticmethod
     def _spatial_tile_tasks(height, width, tile_size, tile_stride):
@@ -1906,6 +1905,127 @@ class WanVideoVAE(nn.Module):
                 tasks.append((h, h + size_h, w, w + size_w))
         return tasks
 
+    @staticmethod
+    def parallel_tile_config_for_world_size(
+        height: int,
+        width: int,
+        world_size: int,
+        *,
+        min_overlap: int = 4,
+    ) -> tuple[tuple[int, int], tuple[int, int]]:
+        """Suggest balanced ``(tile_size, tile_stride)`` yielding ``world_size`` spatial tiles.
+
+        Callers must opt in explicitly; ``parallel_tiled_decode`` never silently
+        overrides user-specified ``tile_size`` / ``tile_stride`` so parallel
+        output remains bit-exact with single-GPU ``tiled_decode``.
+        """
+        height = int(height)
+        width = int(width)
+        world_size = int(world_size)
+        if height <= 0 or width <= 0 or world_size <= 0:
+            raise ValueError("height, width, and world_size must be positive")
+        if min_overlap < 0:
+            raise ValueError("min_overlap cannot be negative")
+        if world_size == 1:
+            return (height, width), (height, width)
+
+        best_pair: tuple[int, int] | None = None
+        best_score = float("inf")
+        for rows in range(1, world_size + 1):
+            if world_size % rows != 0:
+                continue
+            cols = world_size // rows
+            if rows > height or cols > width:
+                continue
+            tile_h = height / rows
+            tile_w = width / cols
+            aspect_penalty = max(tile_h / tile_w, tile_w / tile_h)
+            if aspect_penalty < best_score:
+                best_score = aspect_penalty
+                best_pair = (rows, cols)
+
+        if best_pair is None:
+            rows = min(height, max(1, math.isqrt(world_size)))
+            cols = min(width, max(1, math.ceil(world_size / rows)))
+            best_pair = (rows, cols)
+
+        def _axis_size_stride(length: int, count: int) -> tuple[int, int]:
+            if count <= 1 or length <= 1:
+                return length, length
+            count = min(count, length)
+            max_overlap = max(0, (length - count) // max(count - 1, 1))
+            overlap = min(min_overlap, max_overlap)
+            while overlap >= 0:
+                stride = max(1, math.ceil((length - overlap) / count))
+                size = stride + overlap
+                if (count - 1) * stride + size >= length and (count - 2) * stride + size < length:
+                    return size, stride
+                overlap -= 1
+            stride = max(1, math.ceil(length / count))
+            return stride, stride
+
+        size_h, stride_h = _axis_size_stride(height, best_pair[0])
+        size_w, stride_w = _axis_size_stride(width, best_pair[1])
+        return (size_h, size_w), (stride_h, stride_w)
+
+    @staticmethod
+    def _resolve_merge_device(
+        decoded_tiles,
+        merge_device: torch.device | str | None = None,
+    ) -> torch.device:
+        if merge_device is not None:
+            return torch.device(merge_device)
+        if decoded_tiles and all(tile.device.type == "cuda" for tile in decoded_tiles):
+            return decoded_tiles[0].device
+        return torch.device("cpu")
+
+    def _accumulate_spatial_decode_tile(
+        self,
+        values: torch.Tensor,
+        weight: torch.Tensor,
+        decoded_tile: torch.Tensor,
+        task: tuple[int, int, int, int],
+        *,
+        height: int,
+        width: int,
+        border_width: tuple[int, int],
+        data_device: torch.device,
+        target_dtype: torch.dtype,
+        mask_cache: dict[tuple[int, int, bool, bool, bool, bool], torch.Tensor],
+    ) -> None:
+        h, h_, w, w_ = task
+        hidden_states_batch = decoded_tile.to(device=data_device, dtype=target_dtype)
+        tile_h = int(hidden_states_batch.shape[3])
+        tile_w = int(hidden_states_batch.shape[4])
+        is_bound = (h == 0, h_ >= height, w == 0, w_ >= width)
+        cache_key = (tile_h, tile_w, *is_bound)
+        mask = mask_cache.get(cache_key)
+        if mask is None:
+            mask = self.build_mask(
+                hidden_states_batch,
+                is_bound=is_bound,
+                border_width=border_width,
+                device=data_device,
+                dtype=target_dtype,
+            )
+            mask_cache[cache_key] = mask
+        target_h = h * self.upsampling_factor
+        target_w = w * self.upsampling_factor
+        values[
+            :,
+            :,
+            :,
+            target_h : target_h + tile_h,
+            target_w : target_w + tile_w,
+        ].addcmul_(hidden_states_batch, mask)
+        weight[
+            :,
+            :,
+            :,
+            target_h : target_h + tile_h,
+            target_w : target_w + tile_w,
+        ] += mask
+
     def _merge_spatial_decode_tiles(
         self,
         decoded_tiles,
@@ -1914,68 +2034,58 @@ class WanVideoVAE(nn.Module):
         hidden_states,
         tile_size,
         tile_stride,
+        merge_device: torch.device | str | None = None,
     ):
         _, _, latent_frames, height, width = hidden_states.shape
         size_h, size_w = tile_size
         stride_h, stride_w = tile_stride
         output_frames = latent_frames * 4 - 3
-        data_device = torch.device("cpu")
-        weight = torch.zeros(
-            (
-                1,
-                1,
-                output_frames,
-                height * self.upsampling_factor,
-                width * self.upsampling_factor,
-            ),
-            dtype=hidden_states.dtype,
-            device=data_device,
-        )
-        values = torch.zeros(
-            (
-                1,
-                3,
-                output_frames,
-                height * self.upsampling_factor,
-                width * self.upsampling_factor,
-            ),
-            dtype=hidden_states.dtype,
-            device=data_device,
-        )
         if len(decoded_tiles) != len(tasks):
             raise RuntimeError(f"decoded {len(decoded_tiles)} VAE tiles for {len(tasks)} spatial tasks")
-        for index, (h, h_, w, w_) in enumerate(tasks):
-            hidden_states_batch = decoded_tiles[index].to(
-                device=data_device,
+        data_device = self._resolve_merge_device(decoded_tiles, merge_device=merge_device)
+        out_h = height * self.upsampling_factor
+        out_w = width * self.upsampling_factor
+        border_width = (
+            (size_h - stride_h) * self.upsampling_factor,
+            (size_w - stride_w) * self.upsampling_factor,
+        )
+        # Spatial blending weights are time-invariant: shape (1, 1, 1, H, W)
+        # broadcasts across T and C, cutting weight memory/traffic by T x.
+        try:
+            weight = torch.zeros(
+                (1, 1, 1, out_h, out_w),
                 dtype=hidden_states.dtype,
+                device=data_device,
             )
-            mask = self.build_mask(
-                hidden_states_batch,
-                is_bound=(h == 0, h_ >= height, w == 0, w_ >= width),
-                border_width=(
-                    (size_h - stride_h) * self.upsampling_factor,
-                    (size_w - stride_w) * self.upsampling_factor,
-                ),
-            ).to(dtype=hidden_states.dtype, device=data_device)
-            target_h = h * self.upsampling_factor
-            target_w = w * self.upsampling_factor
-            values[
-                :,
-                :,
-                :,
-                target_h : target_h + hidden_states_batch.shape[3],
-                target_w : target_w + hidden_states_batch.shape[4],
-            ] += hidden_states_batch * mask
-            weight[
-                :,
-                :,
-                :,
-                target_h : target_h + hidden_states_batch.shape[3],
-                target_w : target_w + hidden_states_batch.shape[4],
-            ] += mask
+            values = torch.zeros(
+                (1, 3, output_frames, out_h, out_w),
+                dtype=hidden_states.dtype,
+                device=data_device,
+            )
+        except torch.OutOfMemoryError:
+            if data_device.type != "cuda":
+                raise
+            data_device = torch.device("cpu")
+            torch.cuda.empty_cache()
+            weight = torch.zeros((1, 1, 1, out_h, out_w), dtype=hidden_states.dtype, device=data_device)
+            values = torch.zeros((1, 3, output_frames, out_h, out_w), dtype=hidden_states.dtype, device=data_device)
+        mask_cache: dict[tuple[int, int, bool, bool, bool, bool], torch.Tensor] = {}
+        for index, task in enumerate(tasks):
+            self._accumulate_spatial_decode_tile(
+                values,
+                weight,
+                decoded_tiles[index],
+                task,
+                height=height,
+                width=width,
+                border_width=border_width,
+                data_device=data_device,
+                target_dtype=hidden_states.dtype,
+                mask_cache=mask_cache,
+            )
         if bool((weight == 0).any()):
             raise RuntimeError("Wan VAE spatial tiles did not cover the complete output")
-        return (values / weight).clamp_(-1, 1)
+        return values.div_(weight).clamp_(-1, 1)
 
     def _decode_tile(self, hidden_states, device, temporal_chunk_size=0):
         if temporal_chunk_size:
@@ -1994,19 +2104,64 @@ class WanVideoVAE(nn.Module):
         tile_stride,
         temporal_chunk_size=0,
     ):
-        _, _, T, H, W = hidden_states.shape
-        tasks = self._spatial_tile_tasks(H, W, tile_size, tile_stride)
-        decoded_tiles = []
-        for h, h_, w, w_ in tqdm(tasks, desc="VAE decoding"):
-            tile = hidden_states[:, :, :, h:h_, w:w_].to(device)
-            decoded_tiles.append(self._decode_tile(tile, device, temporal_chunk_size).to("cpu"))
-        return self._merge_spatial_decode_tiles(
-            decoded_tiles,
-            tasks,
-            hidden_states=hidden_states,
-            tile_size=tile_size,
-            tile_stride=tile_stride,
+        _, _, latent_frames, height, width = hidden_states.shape
+        tasks = self._spatial_tile_tasks(height, width, tile_size, tile_stride)
+        target_device = torch.device(device)
+        merge_device = (
+            target_device if (target_device.type == "cuda" and not temporal_chunk_size) else torch.device("cpu")
         )
+        size_h, size_w = tile_size
+        stride_h, stride_w = tile_stride
+        output_frames = latent_frames * 4 - 3
+        out_h = height * self.upsampling_factor
+        out_w = width * self.upsampling_factor
+        border_width = (
+            (size_h - stride_h) * self.upsampling_factor,
+            (size_w - stride_w) * self.upsampling_factor,
+        )
+        try:
+            weight = torch.zeros((1, 1, 1, out_h, out_w), dtype=hidden_states.dtype, device=merge_device)
+            values = torch.zeros((1, 3, output_frames, out_h, out_w), dtype=hidden_states.dtype, device=merge_device)
+        except torch.OutOfMemoryError:
+            if merge_device.type != "cuda":
+                raise
+            merge_device = torch.device("cpu")
+            torch.cuda.empty_cache()
+            weight = torch.zeros((1, 1, 1, out_h, out_w), dtype=hidden_states.dtype, device=merge_device)
+            values = torch.zeros((1, 3, output_frames, out_h, out_w), dtype=hidden_states.dtype, device=merge_device)
+        mask_cache: dict[tuple[int, int, bool, bool, bool, bool], torch.Tensor] = {}
+        for task in tqdm(tasks, desc="VAE decoding"):
+            h, h_, w, w_ = task
+            tile = hidden_states[:, :, :, h:h_, w:w_]
+            if tile.device != target_device:
+                tile = tile.to(target_device)
+            try:
+                decoded = self._decode_tile(tile, target_device, temporal_chunk_size)
+            except torch.OutOfMemoryError:
+                if merge_device.type != "cuda":
+                    raise
+                merge_device = torch.device("cpu")
+                values = values.to(merge_device)
+                weight = weight.to(merge_device)
+                mask_cache.clear()
+                torch.cuda.empty_cache()
+                decoded = self._decode_tile(tile, target_device, temporal_chunk_size)
+            self._accumulate_spatial_decode_tile(
+                values,
+                weight,
+                decoded,
+                task,
+                height=height,
+                width=width,
+                border_width=border_width,
+                data_device=merge_device,
+                target_dtype=hidden_states.dtype,
+                mask_cache=mask_cache,
+            )
+            del decoded
+        if bool((weight == 0).any()):
+            raise RuntimeError("Wan VAE spatial tiles did not cover the complete output")
+        return values.div_(weight).clamp_(-1, 1)
 
     def parallel_tiled_decode(
         self,
@@ -2018,11 +2173,13 @@ class WanVideoVAE(nn.Module):
         temporal_chunk_size=0,
         group=None,
     ):
-        """Shard spatial VAE tiles across ranks and gather decoded tiles.
+        """Shard spatial VAE tiles across ranks and gather decoded tiles on-device.
 
-        Every rank reconstructs the same output so downstream runner control
-        flow remains rank-consistent. Only shape/index metadata uses object
-        collectives; decoded pixels travel through typed tensor collectives.
+        Every rank reconstructs the same output in exact task order so results
+        remain bit-exact with single-GPU ``tiled_decode`` and downstream runner
+        control flow stays rank-consistent. On CUDA without temporal chunking,
+        the entire decode -> contiguous ``all_gather_into_tensor`` -> merge
+        pipeline stays 100% GPU-resident with zero CPU round-trips.
         """
 
         import torch.distributed as dist
@@ -2033,51 +2190,107 @@ class WanVideoVAE(nn.Module):
         rank = int(dist.get_rank(group))
         if world_size <= 1:
             raise RuntimeError("parallel Wan VAE decode requires more than one rank")
-        _, _, _, height, width = hidden_states.shape
+        target_device = torch.device(device)
+        _, _, latent_frames, height, width = hidden_states.shape
+        output_frames = latent_frames * 4 - 3
         tasks = self._spatial_tile_tasks(height, width, tile_size, tile_stride)
+
+        def _expected_tile_shape(task: tuple[int, int, int, int]) -> tuple[int, int, int, int, int]:
+            h, h_, w, w_ = task
+            return (
+                1,
+                3,
+                output_frames,
+                (min(h_, height) - h) * self.upsampling_factor,
+                (min(w_, width) - w) * self.upsampling_factor,
+            )
+
         local_metadata = []
-        local_flat = []
+        local_tiles = []
         local_error = None
+        nonstandard_shape = False
         try:
             for task_index in range(rank, len(tasks), world_size):
                 h, h_, w, w_ = tasks[task_index]
-                tile = hidden_states[:, :, :, h:h_, w:w_].to(device)
-                decoded = self._decode_tile(tile, device, temporal_chunk_size).to(
-                    device=device,
+                tile = hidden_states[:, :, :, h:h_, w:w_]
+                if tile.device != target_device:
+                    tile = tile.to(target_device)
+                decoded = self._decode_tile(tile, target_device, temporal_chunk_size).to(
+                    device=target_device,
                     dtype=hidden_states.dtype,
                 )
-                local_metadata.append((task_index, tuple(decoded.shape), decoded.numel()))
-                local_flat.append(decoded.reshape(-1))
+                decoded_shape = tuple(int(dim) for dim in decoded.shape)
+                if decoded_shape != _expected_tile_shape(tasks[task_index]):
+                    nonstandard_shape = True
+                local_metadata.append((task_index, decoded_shape, decoded.numel()))
+                local_tiles.append(decoded)
         except Exception as error:  # all ranks must reach the status collective
             local_error = f"rank {rank}: {type(error).__name__}: {error}"
 
-        errors = [None] * world_size
-        dist.all_gather_object(errors, local_error, group=group)
-        failures = [error for error in errors if error]
-        if failures:
+        status = torch.tensor(
+            [1 if local_error is not None else 0, 1 if nonstandard_shape else 0],
+            dtype=torch.int32,
+            device=target_device,
+        )
+        dist.all_reduce(status, op=dist.ReduceOp.MAX, group=group)
+        if int(status[0].item()):
+            errors = [None] * world_size
+            dist.all_gather_object(errors, local_error, group=group)
+            failures = [error for error in errors if error]
             raise RuntimeError("parallel Wan VAE tile decode failed: " + "; ".join(failures))
 
-        metadata_by_rank = [None] * world_size
-        dist.all_gather_object(metadata_by_rank, local_metadata, group=group)
+        if int(status[1].item()):
+            metadata_by_rank = [None] * world_size
+            dist.all_gather_object(metadata_by_rank, local_metadata, group=group)
+        else:
+            metadata_by_rank = [
+                [
+                    (
+                        task_index,
+                        (shape := _expected_tile_shape(tasks[task_index])),
+                        math.prod(shape),
+                    )
+                    for task_index in range(rank_index, len(tasks), world_size)
+                ]
+                for rank_index in range(world_size)
+            ]
+
         rank_sizes = [sum(int(item[2]) for item in (metadata or [])) for metadata in metadata_by_rank]
         max_size = max(rank_sizes, default=0)
         if max_size == 0:
             raise RuntimeError("parallel Wan VAE decode produced no tile payloads")
-        payload = torch.zeros(max_size, dtype=hidden_states.dtype, device=device)
-        if local_flat:
-            flattened = torch.cat(local_flat)
-            payload[: flattened.numel()] = flattened
-        gathered_payloads = [torch.empty_like(payload) for _ in range(world_size)]
-        dist.all_gather(gathered_payloads, payload.contiguous(), group=group)
 
-        decoded_tiles = [None] * len(tasks)
+        payload = torch.empty(max_size, dtype=hidden_states.dtype, device=target_device)
+        offset = 0
+        for decoded in local_tiles:
+            flat = decoded.contiguous().reshape(-1)
+            numel = flat.numel()
+            payload[offset : offset + numel].copy_(flat)
+            offset += numel
+        if offset < max_size:
+            payload[offset:].zero_()
+        del local_tiles
+
+        gathered_flat = torch.empty((world_size, max_size), dtype=hidden_states.dtype, device=target_device)
+        if target_device.type == "cuda" and hasattr(dist, "all_gather_into_tensor"):
+            dist.all_gather_into_tensor(gathered_flat, payload, group=group)
+        else:
+            dist.all_gather(list(gathered_flat.unbind(0)), payload, group=group)
+        del payload
+
+        merge_device = (
+            target_device if (target_device.type == "cuda" and not temporal_chunk_size) else torch.device("cpu")
+        )
+        decoded_tiles: list[torch.Tensor | None] = [None] * len(tasks)
         for rank_index, metadata in enumerate(metadata_by_rank):
-            offset = 0
+            rank_offset = 0
+            rank_buffer = gathered_flat[rank_index]
             for task_index, shape, numel in metadata or []:
+                tile_view = rank_buffer[rank_offset : rank_offset + int(numel)].reshape(tuple(shape))
                 decoded_tiles[int(task_index)] = (
-                    gathered_payloads[rank_index][offset : offset + int(numel)].reshape(tuple(shape)).to("cpu")
+                    tile_view if merge_device == target_device else tile_view.to(merge_device)
                 )
-                offset += int(numel)
+                rank_offset += int(numel)
         if any(tile is None for tile in decoded_tiles):
             raise RuntimeError("parallel Wan VAE gather did not return every spatial tile")
         return self._merge_spatial_decode_tiles(
@@ -2086,6 +2299,7 @@ class WanVideoVAE(nn.Module):
             hidden_states=hidden_states,
             tile_size=tile_size,
             tile_stride=tile_stride,
+            merge_device=merge_device,
         )
 
     def temporal_chunked_decode(self, hidden_states, device, *, chunk_size):
@@ -2269,12 +2483,11 @@ class WanVideoVAE(nn.Module):
         tile_stride,
         temporal_chunk_size,
     ):
-        # CPU staging is part of the bounded-memory spatial-tiling contract.
-        # Dense and temporal-streaming decode can consume resident CUDA
-        # latents directly.  Moving them to CPU here only for single_decode()
-        # to move them back was a measurable hot-path regression versus
-        # LightX2V, especially at production resolution.
-        source_hidden_states = hidden_states.to("cpu") if tiled else hidden_states
+        # Keep CUDA latents GPU-resident for spatial tiling when temporal
+        # chunking is disabled; stage on CPU only when bounded-memory temporal
+        # streaming is requested or target execution is non-CUDA.
+        stage_on_cpu = bool(tiled and (temporal_chunk_size or torch.device(device).type != "cuda"))
+        source_hidden_states = hidden_states.to("cpu") if stage_on_cpu else hidden_states
         videos = []
         for hidden_state in source_hidden_states:
             hidden_state = hidden_state.unsqueeze(0)
