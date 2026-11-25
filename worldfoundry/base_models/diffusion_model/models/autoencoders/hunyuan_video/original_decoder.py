@@ -15,10 +15,23 @@ Sibling of :mod:`.original_encoder`.  The runner adapter lives in
 import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from einops import rearrange, repeat
 
 from worldfoundry.core.attention import scaled_dot_product_attention as _worldfoundry_scaled_dot_product_attention
+from worldfoundry.core.kernels.triton_pad_3d import triton_pad_3d
+
+from .triton_vae_ops import triton_group_norm_3d_silu, triton_upsample_causal_3d
+
+
+def _can_fuse_gn_silu(norm: nn.Module, act: nn.Module) -> bool:
+    return (
+        type(norm) is nn.GroupNorm
+        and type(act) is nn.SiLU
+        and not norm._forward_hooks
+        and not norm._forward_pre_hooks
+        and not act._forward_hooks
+        and not act._forward_pre_hooks
+    )
 
 
 class CausalConv3d(nn.Module):
@@ -38,7 +51,7 @@ class CausalConv3d(nn.Module):
         self.conv = nn.Conv3d(in_channel, out_channel, kernel_size, stride=stride, dilation=dilation, **kwargs)
 
     def forward(self, x):
-        x = F.pad(x, self.time_causal_padding, mode=self.pad_mode)
+        x = triton_pad_3d(x, self.time_causal_padding, spatial_mode=self.pad_mode)
         return self.conv(x)
 
 
@@ -58,26 +71,7 @@ class UpsampleCausal3D(nn.Module):
             self.conv = CausalConv3d(self.channels, self.out_channels, kernel_size=kernel_size, bias=bias)
 
     def forward(self, hidden_states):
-        # Cast to float32 to as 'upsample_nearest2d_out_frame' op does not support bfloat16
-        dtype = hidden_states.dtype
-        if dtype == torch.bfloat16:
-            hidden_states = hidden_states.to(torch.float32)
-
-        # upsample_nearest_nhwc fails with large batch sizes. see https://github.com/huggingface/diffusers/issues/984
-        if hidden_states.shape[0] >= 64:
-            hidden_states = hidden_states.contiguous()
-
-        # interpolate
-        B, C, T, H, W = hidden_states.shape
-        first_h, other_h = hidden_states.split((1, T - 1), dim=2)
-        if T > 1:
-            other_h = F.interpolate(other_h, scale_factor=self.upsample_factor, mode="nearest")
-        first_h = F.interpolate(first_h.squeeze(2), scale_factor=self.upsample_factor[1:], mode="nearest").unsqueeze(2)
-        hidden_states = torch.cat((first_h, other_h), dim=2) if T > 1 else first_h
-
-        # If the input is bfloat16, we cast back to bfloat16
-        if dtype == torch.bfloat16:
-            hidden_states = hidden_states.to(dtype)
+        hidden_states = triton_upsample_causal_3d(hidden_states, self.upsample_factor)
 
         if self.conv:
             hidden_states = self.conv(hidden_states)
@@ -113,13 +107,33 @@ class ResnetBlockCausal3D(nn.Module):
     def forward(self, input_tensor):
         hidden_states = input_tensor
         # conv1
-        hidden_states = self.norm1(hidden_states)
-        hidden_states = self.nonlinearity(hidden_states)
+        if _can_fuse_gn_silu(self.norm1, self.nonlinearity):
+            hidden_states = triton_group_norm_3d_silu(
+                hidden_states,
+                self.norm1.num_groups,
+                self.norm1.weight,
+                self.norm1.bias,
+                self.norm1.eps,
+                apply_silu=True,
+            )
+        else:
+            hidden_states = self.norm1(hidden_states)
+            hidden_states = self.nonlinearity(hidden_states)
         hidden_states = self.conv1(hidden_states)
 
         # conv2
-        hidden_states = self.norm2(hidden_states)
-        hidden_states = self.nonlinearity(hidden_states)
+        if _can_fuse_gn_silu(self.norm2, self.nonlinearity):
+            hidden_states = triton_group_norm_3d_silu(
+                hidden_states,
+                self.norm2.num_groups,
+                self.norm2.weight,
+                self.norm2.bias,
+                self.norm2.eps,
+                apply_silu=True,
+            )
+        else:
+            hidden_states = self.norm2(hidden_states)
+            hidden_states = self.nonlinearity(hidden_states)
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.conv2(hidden_states)
         # shortcut
@@ -133,10 +147,8 @@ class ResnetBlockCausal3D(nn.Module):
 
 def prepare_causal_attention_mask(n_frame, n_hw, dtype, device, batch_size=None):
     seq_len = n_frame * n_hw
-    mask = torch.full((seq_len, seq_len), float("-inf"), dtype=dtype, device=device)
-    for i in range(seq_len):
-        i_frame = i // n_hw
-        mask[i, : (i_frame + 1) * n_hw] = 0
+    frame_mask = torch.triu(torch.full((n_frame, n_frame), float("-inf"), dtype=dtype, device=device), diagonal=1)
+    mask = frame_mask[:, None, :, None].expand(n_frame, n_hw, n_frame, n_hw).reshape(seq_len, seq_len)
     if batch_size is not None:
         mask = mask.unsqueeze(0).expand(batch_size, -1, -1)
     return mask
@@ -166,7 +178,30 @@ class Attention(nn.Module):
         self.to_out = nn.Sequential(nn.Linear(dim_inner, in_channels, bias=bias), nn.Dropout(dropout))
 
     def forward(self, input_tensor, attn_mask=None):
-        hidden_states = self.group_norm(input_tensor.transpose(1, 2)).transpose(1, 2)
+        if (
+            type(self.group_norm) is nn.GroupNorm
+            and not self.group_norm._forward_hooks
+            and not self.group_norm._forward_pre_hooks
+            and input_tensor.ndim == 3
+            and input_tensor.is_cuda
+        ):
+            x_5d = input_tensor.transpose(1, 2).unsqueeze(-1).unsqueeze(-1)
+            hidden_states = (
+                triton_group_norm_3d_silu(
+                    x_5d,
+                    self.group_norm.num_groups,
+                    self.group_norm.weight,
+                    self.group_norm.bias,
+                    self.group_norm.eps,
+                    apply_silu=False,
+                )
+                .squeeze(-1)
+                .squeeze(-1)
+                .transpose(1, 2)
+                .contiguous()
+            )
+        else:
+            hidden_states = self.group_norm(input_tensor.transpose(1, 2)).transpose(1, 2)
         batch_size = hidden_states.shape[0]
 
         q = self.to_q(hidden_states)
@@ -394,8 +429,18 @@ class DecoderCausal3D(nn.Module):
             for up_block in self.up_blocks:
                 hidden_states = up_block(hidden_states)
         # post-process
-        hidden_states = self.conv_norm_out(hidden_states)
-        hidden_states = self.conv_act(hidden_states)
+        if _can_fuse_gn_silu(self.conv_norm_out, self.conv_act):
+            hidden_states = triton_group_norm_3d_silu(
+                hidden_states,
+                self.conv_norm_out.num_groups,
+                self.conv_norm_out.weight,
+                self.conv_norm_out.bias,
+                self.conv_norm_out.eps,
+                apply_silu=True,
+            )
+        else:
+            hidden_states = self.conv_norm_out(hidden_states)
+            hidden_states = self.conv_act(hidden_states)
         hidden_states = self.conv_out(hidden_states)
 
         return hidden_states

@@ -31,6 +31,8 @@ from torch.nn import Conv3d
 
 from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.model import RMS_norm as RMS_norm
 from worldfoundry.core.distributed.model_parallel.sequence_mesh_state import get_parallel_state
+from worldfoundry.core.kernels.triton_pad_3d import triton_pad_3d
+from worldfoundry.core.kernels.triton_wan_vae import can_use_wan_vae_rms_norm, wan_vae_rms_norm
 from worldfoundry.core.model_loading.model_configuration import NativeConfigMixin, register_to_config
 from worldfoundry.core.nn.latent.distributions import AutoencoderKLOutput, DecoderOutput, DiagonalGaussianDistribution
 
@@ -145,28 +147,15 @@ class CausalConv3d(nn.Module):
             self.conv = nn.Conv3d(chan_in, chan_out, kernel_size, stride=stride, dilation=dilation, **kwargs)
 
     def forward(self, x):
-        x = F.pad(x, self.time_causal_padding, mode=self.pad_mode)
+        x = triton_pad_3d(x, self.time_causal_padding, spatial_mode=self.pad_mode)
         return self.conv(x)
 
 
 def prepare_causal_attention_mask(n_frame: int, n_hw: int, dtype, device, batch_size: int | None = None):
-    """Prepare a causal attention mask for 3D videos.
-
-    Args:
-        n_frame (int): Number of frames (temporal length).
-        n_hw (int): Product of height and width.
-        dtype: Desired mask dtype.
-        device: Device for the mask.
-        batch_size (int, optional): If set, expands for batch.
-
-    Returns:
-        torch.Tensor: Causal attention mask.
-    """
+    """Prepare a causal attention mask for 3D videos."""
     seq_len = n_frame * n_hw
-    mask = torch.full((seq_len, seq_len), float("-inf"), dtype=dtype, device=device)
-    for i in range(seq_len):
-        i_frame = i // n_hw
-        mask[i, : (i_frame + 1) * n_hw] = 0
+    frame_mask = torch.triu(torch.full((n_frame, n_frame), float("-inf"), dtype=dtype, device=device), diagonal=1)
+    mask = frame_mask[:, None, :, None].expand(n_frame, n_hw, n_frame, n_hw).reshape(seq_len, seq_len)
     if batch_size is not None:
         mask = mask.unsqueeze(0).expand(batch_size, -1, -1)
     return mask
@@ -205,6 +194,24 @@ class AttnBlock(nn.Module):
         return x + self.proj_out(self.attention(x))
 
 
+def _rms_norm_silu_h15(x: Tensor, norm: nn.Module) -> Tensor:
+    """Fuse ``RMS_norm -> SiLU`` via the shared Hopper Triton kernel on CUDA inference."""
+    if (
+        isinstance(norm, RMS_norm)
+        and norm.channel_first
+        and x.is_cuda
+        and norm.gamma.device == x.device
+        and not norm._forward_hooks
+        and not norm._forward_pre_hooks
+    ):
+        bias_t = norm.bias if isinstance(norm.bias, torch.Tensor) else None
+        if (bias_t is None or bias_t.device == x.device) and can_use_wan_vae_rms_norm(
+            x, channel_first=norm.channel_first
+        ):
+            return wan_vae_rms_norm(x, norm.gamma, bias_t, scale=norm.scale, apply_silu=True)
+    return swish(norm(x), inplace=True)
+
+
 class ResnetBlock(nn.Module):
     """ResNet-style block for 3D video tensors."""
 
@@ -223,14 +230,8 @@ class ResnetBlock(nn.Module):
             self.nin_shortcut = Conv3d(in_channels, out_channels, kernel_size=1, stride=1, padding=0)
 
     def forward(self, x):
-        h = x
-        h = self.norm1(h)
-        h = swish(h, inplace=True)
-        h = self.conv1(h)
-
-        h = self.norm2(h)
-        h = swish(h, inplace=True)
-        h = self.conv2(h)
+        h = self.conv1(_rms_norm_silu_h15(x, self.norm1))
+        h = self.conv2(_rms_norm_silu_h15(h, self.norm2))
 
         if self.in_channels != self.out_channels:
             x = self.nin_shortcut(x)

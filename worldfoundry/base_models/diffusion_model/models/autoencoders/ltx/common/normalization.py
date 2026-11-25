@@ -46,6 +46,12 @@ class PixelNorm(nn.Module):
         """
         Apply RMS normalization along the configured dimension.
         """
+        if x.is_cuda and x.ndim in (4, 5) and self.dim in (1, 1 - x.ndim):
+            from worldfoundry.base_models.diffusion_model.models.autoencoders.ltx.video.triton_vae_ops import (
+                triton_pixel_norm_adaln_silu,
+            )
+
+            return triton_pixel_norm_adaln_silu(x, None, None, self.eps, apply_silu=False)
         # Compute mean of squared values along `dim`, keep dimensions for broadcasting.
         mean_sq = torch.mean(x**2, dim=self.dim, keepdim=True)
         # Normalize by the root-mean-square (RMS).

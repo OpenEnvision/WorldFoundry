@@ -19,9 +19,24 @@ from worldfoundry.base_models.diffusion_model.models.autoencoders.ltx.video.conv
     make_linear_nd,
 )
 from worldfoundry.base_models.diffusion_model.models.autoencoders.ltx.video.enums import NormLayerType, PaddingModeType
+from worldfoundry.base_models.diffusion_model.models.autoencoders.ltx.video.triton_vae_ops import (
+    triton_pixel_norm_adaln_silu,
+)
 from worldfoundry.core.nn.diffusion.timestep import (
     PixArtAlphaCombinedTimestepSizeEmbeddings,
 )
+
+
+def _can_fuse_pixel_norm_silu(norm: nn.Module, act: nn.Module, x: torch.Tensor) -> bool:
+    return (
+        type(norm) is PixelNorm
+        and norm.dim in (1, 1 - x.ndim)
+        and type(act) is nn.SiLU
+        and not norm._forward_hooks
+        and not norm._forward_pre_hooks
+        and not act._forward_hooks
+        and not act._forward_pre_hooks
+    )
 
 
 class ResnetBlock3D(nn.Module):
@@ -143,7 +158,7 @@ class ResnetBlock3D(nn.Module):
         hidden_states = input_tensor
         batch_size = hidden_states.shape[0]
 
-        hidden_states = self.norm1(hidden_states)
+        shift1 = scale1 = shift2 = scale2 = None
         if self.timestep_conditioning:
             if timestep is None:
                 raise ValueError("'timestep' parameter must be provided when 'timestep_conditioning' is True")
@@ -159,9 +174,19 @@ class ResnetBlock3D(nn.Module):
             )
             shift1, scale1, shift2, scale2 = ada_values.unbind(dim=1)
 
-            hidden_states = hidden_states * (1 + scale1) + shift1
-
-        hidden_states = self.non_linearity(hidden_states)
+        if _can_fuse_pixel_norm_silu(self.norm1, self.non_linearity, hidden_states):
+            hidden_states = triton_pixel_norm_adaln_silu(
+                hidden_states,
+                scale1,
+                shift1,
+                self.norm1.eps,
+                apply_silu=True,
+            )
+        else:
+            hidden_states = self.norm1(hidden_states)
+            if self.timestep_conditioning and scale1 is not None and shift1 is not None:
+                hidden_states = hidden_states * (1 + scale1) + shift1
+            hidden_states = self.non_linearity(hidden_states)
 
         hidden_states = self.conv1(hidden_states, causal=causal)
 
@@ -172,12 +197,19 @@ class ResnetBlock3D(nn.Module):
                 generator=generator,
             )
 
-        hidden_states = self.norm2(hidden_states)
-
-        if self.timestep_conditioning:
-            hidden_states = hidden_states * (1 + scale2) + shift2
-
-        hidden_states = self.non_linearity(hidden_states)
+        if _can_fuse_pixel_norm_silu(self.norm2, self.non_linearity, hidden_states):
+            hidden_states = triton_pixel_norm_adaln_silu(
+                hidden_states,
+                scale2,
+                shift2,
+                self.norm2.eps,
+                apply_silu=True,
+            )
+        else:
+            hidden_states = self.norm2(hidden_states)
+            if self.timestep_conditioning and scale2 is not None and shift2 is not None:
+                hidden_states = hidden_states * (1 + scale2) + shift2
+            hidden_states = self.non_linearity(hidden_states)
 
         hidden_states = self.dropout(hidden_states)
 

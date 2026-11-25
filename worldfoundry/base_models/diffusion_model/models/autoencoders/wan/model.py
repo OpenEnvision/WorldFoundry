@@ -62,6 +62,70 @@ class CausalConv3d(nn.Conv3d):
         return super().forward(x)
 
 
+def _has_hooks(module: nn.Module) -> bool:
+    return bool(module._forward_hooks or module._forward_pre_hooks)
+
+
+def _try_fused_rms_silu_causal_conv3d(
+    x: torch.Tensor,
+    rms: nn.Module,
+    silu: nn.Module,
+    conv: nn.Module,
+    feat_cache: list | None,
+    feat_idx: list[int],
+) -> torch.Tensor | None:
+    """Super-fuse ``RMS_norm -> SiLU -> CausalConv3d`` (with cache + pad) on CUDA inference."""
+    if (
+        torch.is_grad_enabled()
+        or not x.is_cuda
+        or x.ndim != 5
+        or type(rms) is not RMS_norm
+        or not rms.channel_first
+        or type(silu) is not nn.SiLU
+        or type(conv) is not CausalConv3d
+        or _has_hooks(rms)
+        or _has_hooks(silu)
+        or _has_hooks(conv)
+        or rms.gamma.device != x.device
+        or conv.weight.device != x.device
+    ):
+        return None
+    from worldfoundry.core.kernels.triton_wan_vae import can_use_wan_vae_rms_norm, wan_vae_rms_norm_silu_causal_pad
+
+    if not can_use_wan_vae_rms_norm(x, channel_first=True):
+        return None
+    pad_w_l, pad_w_r, pad_h_t, pad_h_b, pad_t_l, pad_t_r = conv._padding
+    if pad_w_l != pad_w_r or pad_h_t != pad_h_b or pad_t_r != 0:
+        return None
+    bias_t = rms.bias if isinstance(rms.bias, torch.Tensor) else None
+    if bias_t is not None and bias_t.device != x.device:
+        return None
+
+    write_cache = feat_cache is not None
+    prev_cache = None
+    if write_cache:
+        idx = feat_idx[0]
+        raw_prev = feat_cache[idx]
+        if isinstance(raw_prev, torch.Tensor):
+            prev_cache = raw_prev
+    x_pad, new_cache = wan_vae_rms_norm_silu_causal_pad(
+        x,
+        rms.gamma,
+        bias_t,
+        cache_in=prev_cache,
+        pad_w=pad_w_l,
+        pad_h=pad_h_t,
+        pad_t_left=pad_t_l,
+        scale=rms.scale,
+        write_cache=write_cache,
+        cache_t=CACHE_T,
+    )
+    if write_cache:
+        feat_cache[feat_idx[0]] = new_cache
+        feat_idx[0] += 1
+    return F.conv3d(x_pad, conv.weight, conv.bias, conv.stride, (0, 0, 0), conv.dilation, conv.groups)
+
+
 class RMS_norm(nn.Module):
     """Norm implementation."""
 
@@ -76,6 +140,14 @@ class RMS_norm(nn.Module):
         self.bias = nn.Parameter(torch.zeros(shape)) if bias else 0.0
 
     def forward(self, x):
+        if x.is_cuda and not torch.is_grad_enabled() and self.channel_first and self.gamma.device == x.device:
+            from worldfoundry.core.kernels.triton_wan_vae import can_use_wan_vae_rms_norm, wan_vae_rms_norm
+
+            bias_t = self.bias if isinstance(self.bias, torch.Tensor) else None
+            if (bias_t is None or bias_t.device == x.device) and can_use_wan_vae_rms_norm(
+                x, channel_first=self.channel_first
+            ):
+                return wan_vae_rms_norm(x, self.gamma, bias_t, scale=self.scale, apply_silu=False)
         return F.normalize(x, dim=(1 if self.channel_first else -1)) * self.scale * self.gamma + self.bias
 
 
@@ -84,6 +156,17 @@ class Upsample(nn.Upsample):
         """
         Fix bfloat16 support for nearest neighbor interpolation.
         """
+        if (
+            x.is_cuda
+            and not torch.is_grad_enabled()
+            and x.ndim == 4
+            and self.mode in ("nearest", "nearest-exact")
+            and self.scale_factor == (2.0, 2.0)
+            and x.dtype in (torch.bfloat16, torch.float16, torch.float32)
+        ):
+            from worldfoundry.core.kernels.triton_wan_vae import wan_vae_nearest_upsample_2x
+
+            return wan_vae_nearest_upsample_2x(x)
         return super().forward(x.float()).type_as(x)
 
 
@@ -254,7 +337,38 @@ class ResidualBlock(nn.Module):
 
     def forward(self, x, feat_cache=None, feat_idx=[0]):  # noqa: B006 - Keeps the upstream default object and signature.
         h = self.shortcut(x)
-        for layer in self.residual:
+        layers = self.residual
+        if (
+            not self.training
+            and not torch.is_grad_enabled()
+            and x.is_cuda
+            and x.ndim == 5
+            and len(layers) == 7
+            and type(layers[5]) is nn.Dropout
+            and not _has_hooks(layers[5])
+        ):
+            out1 = _try_fused_rms_silu_causal_conv3d(x, layers[0], layers[1], layers[2], feat_cache, feat_idx)
+            if out1 is not None:
+                out2 = _try_fused_rms_silu_causal_conv3d(out1, layers[3], layers[4], layers[6], feat_cache, feat_idx)
+                if out2 is not None:
+                    return out2 + h, feat_cache, feat_idx
+                # Fall through for second half only if conv2 was hooked/wrapped.
+                x = out1
+                for layer in (layers[3], layers[4], layers[5], layers[6]):
+                    if check_is_instance(layer, CausalConv3d) and feat_cache is not None:
+                        idx = feat_idx[0]
+                        cache_x = x[:, :, -CACHE_T:, :, :].clone()
+                        if cache_x.shape[2] < 2 and feat_cache[idx] is not None:
+                            cache_x = torch.cat(
+                                [feat_cache[idx][:, :, -1, :, :].unsqueeze(2).to(cache_x.device), cache_x], dim=2
+                            )
+                        x = layer(x, feat_cache[idx])
+                        feat_cache[idx] = cache_x
+                        feat_idx[0] += 1
+                    else:
+                        x = layer(x)
+                return x + h, feat_cache, feat_idx
+        for layer in layers:
             if check_is_instance(layer, CausalConv3d) and feat_cache is not None:
                 idx = feat_idx[0]
                 cache_x = x[:, :, -CACHE_T:, :, :].clone()
@@ -388,6 +502,21 @@ class DupUp3D(nn.Module):
         self.repeats = out_channels * self.factor // in_channels
 
     def forward(self, x: torch.Tensor, first_chunk=False) -> torch.Tensor:
+        if (
+            x.is_cuda
+            and not torch.is_grad_enabled()
+            and x.ndim == 5
+            and x.dtype in (torch.bfloat16, torch.float16, torch.float32)
+        ):
+            from worldfoundry.core.kernels.triton_wan_vae import wan_vae_dup_up_3d
+
+            return wan_vae_dup_up_3d(
+                x,
+                out_channels=self.out_channels,
+                factor_t=self.factor_t,
+                factor_s=self.factor_s,
+                first_chunk=bool(first_chunk),
+            )
         x = x.repeat_interleave(self.repeats, dim=1)
         x = x.view(
             x.size(0),
@@ -473,7 +602,7 @@ class Up_ResidualBlock(nn.Module):
         self.upsamples = nn.Sequential(*upsamples)
 
     def forward(self, x, feat_cache=None, feat_idx=[0], first_chunk=False):  # noqa: B006 - Keeps the upstream default object and signature.
-        x_main = x.clone()
+        x_main = x if (not self.training and not torch.is_grad_enabled()) else x.clone()
         for module in self.upsamples:
             x_main, feat_cache, feat_idx = module(x_main, feat_cache, feat_idx)
         if self.avg_shortcut is not None:
@@ -566,6 +695,13 @@ class Encoder3d(nn.Module):
                 x = layer(x)
 
         ## head
+        head_out = (
+            _try_fused_rms_silu_causal_conv3d(x, self.head[0], self.head[1], self.head[2], feat_cache, feat_idx)
+            if (not self.training and len(self.head) == 3)
+            else None
+        )
+        if head_out is not None:
+            return head_out, feat_cache, feat_idx
         for layer in self.head:
             if check_is_instance(layer, CausalConv3d) and feat_cache is not None:
                 idx = feat_idx[0]
@@ -780,6 +916,13 @@ class Decoder3d(nn.Module):
                 x = layer(x)
 
         ## head
+        head_out = (
+            _try_fused_rms_silu_causal_conv3d(x, self.head[0], self.head[1], self.head[2], feat_cache, feat_idx)
+            if (not self.training and len(self.head) == 3)
+            else None
+        )
+        if head_out is not None:
+            return head_out, feat_cache, feat_idx
         for layer in self.head:
             if check_is_instance(layer, CausalConv3d) and feat_cache is not None:
                 idx = feat_idx[0]

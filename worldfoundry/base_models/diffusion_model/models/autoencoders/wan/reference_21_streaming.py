@@ -23,6 +23,10 @@ from einops import rearrange
 from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.model import CausalConv3d as CausalConv3d
 from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.model import RMS_norm as RMS_norm
 from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.model import Upsample as Upsample
+from worldfoundry.base_models.diffusion_model.models.autoencoders.wan.model import (
+    _has_hooks,
+    _try_fused_rms_silu_causal_conv3d,
+)
 from worldfoundry.core.attention import scaled_dot_product_attention as _worldfoundry_scaled_dot_product_attention
 from worldfoundry.core.model_loading import load_torch_state_dict
 
@@ -149,7 +153,37 @@ class ResidualBlock(nn.Module):
 
     def forward(self, x, feat_cache=None, feat_idx=[0]):  # noqa: B006 - Keeps the upstream default object and signature.
         h = self.shortcut(x)
-        for layer in self.residual:
+        layers = self.residual
+        if (
+            not self.training
+            and not torch.is_grad_enabled()
+            and x.is_cuda
+            and x.ndim == 5
+            and len(layers) == 7
+            and type(layers[5]) is nn.Dropout
+            and not _has_hooks(layers[5])
+        ):
+            out1 = _try_fused_rms_silu_causal_conv3d(x, layers[0], layers[1], layers[2], feat_cache, feat_idx)
+            if out1 is not None:
+                out2 = _try_fused_rms_silu_causal_conv3d(out1, layers[3], layers[4], layers[6], feat_cache, feat_idx)
+                if out2 is not None:
+                    return out2 + h
+                x = out1
+                for layer in (layers[3], layers[4], layers[5], layers[6]):
+                    if isinstance(layer, CausalConv3d) and feat_cache is not None:
+                        idx = feat_idx[0]
+                        cache_x = x[:, :, -CACHE_T:, :, :].clone()
+                        if cache_x.shape[2] < 2 and feat_cache[idx] is not None:
+                            cache_x = torch.cat(
+                                [feat_cache[idx][:, :, -1, :, :].unsqueeze(2).to(cache_x.device), cache_x], dim=2
+                            )
+                        x = layer(x, feat_cache[idx])
+                        feat_cache[idx] = cache_x
+                        feat_idx[0] += 1
+                    else:
+                        x = layer(x)
+                return x + h
+        for layer in layers:
             if isinstance(layer, CausalConv3d) and feat_cache is not None:
                 idx = feat_idx[0]
                 cache_x = x[:, :, -CACHE_T:, :, :].clone()

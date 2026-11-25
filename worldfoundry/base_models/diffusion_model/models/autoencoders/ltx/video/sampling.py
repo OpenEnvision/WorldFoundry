@@ -20,6 +20,7 @@ from torch import nn
 
 from .convolution import make_conv_nd
 from .enums import PaddingModeType
+from .triton_vae_ops import triton_depth_to_space_3d
 
 
 class SpaceToDepthDownsample(nn.Module):
@@ -112,6 +113,15 @@ class DepthToSpaceUpsample(nn.Module):
         x: torch.Tensor,
         causal: bool = True,
     ) -> torch.Tensor:
+        if x.is_cuda and x.ndim == 5:
+            x_conv = self.conv(x, causal=causal)
+            return triton_depth_to_space_3d(
+                x_conv,
+                self.stride,
+                residual=x if self.residual else None,
+                out_channels_reduction_factor=self.out_channels_reduction_factor,
+            )
+
         if self.residual:
             # Reshape and duplicate the input to match the output shape
             x_in = rearrange(

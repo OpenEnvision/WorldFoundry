@@ -18,7 +18,8 @@ import torch
 import torch.nn as nn
 from einops import rearrange, repeat
 
-from .original_decoder import CausalConv3d, ResnetBlockCausal3D, UNetMidBlockCausal3D
+from .original_decoder import CausalConv3d, ResnetBlockCausal3D, UNetMidBlockCausal3D, _can_fuse_gn_silu
+from .triton_vae_ops import triton_group_norm_3d_silu
 
 
 class DownsampleCausal3D(nn.Module):
@@ -179,8 +180,18 @@ class EncoderCausal3D(nn.Module):
             # middle
             hidden_states = self.mid_block(hidden_states)
         # post-process
-        hidden_states = self.conv_norm_out(hidden_states)
-        hidden_states = self.conv_act(hidden_states)
+        if _can_fuse_gn_silu(self.conv_norm_out, self.conv_act):
+            hidden_states = triton_group_norm_3d_silu(
+                hidden_states,
+                self.conv_norm_out.num_groups,
+                self.conv_norm_out.weight,
+                self.conv_norm_out.bias,
+                self.conv_norm_out.eps,
+                apply_silu=True,
+            )
+        else:
+            hidden_states = self.conv_norm_out(hidden_states)
+            hidden_states = self.conv_act(hidden_states)
         hidden_states = self.conv_out(hidden_states)
 
         return hidden_states
