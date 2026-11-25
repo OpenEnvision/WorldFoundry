@@ -373,3 +373,44 @@ def test_diffvae_ops_cuda_graph_and_autograd_fallback() -> None:
     y = diffvae_rmsnorm_3d_abs_rope(x_grad, w_grad, rope_split, inv_freqs, attn_scale=0.125)
     y.sum().backward()
     assert x_grad.grad is not None and w_grad.grad is not None
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
+@pytest.mark.parametrize(
+    ("shape", "planes", "ktimes_v", "kvalid_v", "ks"),
+    [
+        ((1, 13, 19, 23, 4, 64), 3, [0.0, 6.3, 12.0], [True, True, True], (11, 11, 11)),
+        ((1, 9, 13, 17, 4, 64), 3, [0.0, 4.5, 8.0], [True, False, True], (5, 7, 7)),
+        ((1, 7, 11, 13, 2, 64), 2, [0.0, 6.0], [False, False], (3, 5, 5)),
+    ],
+)
+def test_joint_na3d_3d_tiled_parity(
+    shape: tuple[int, ...],
+    planes: int,
+    ktimes_v: list[float],
+    kvalid_v: list[bool],
+    ks: tuple[int, int, int],
+) -> None:
+    from worldfoundry.base_models.diffusion_model.models.autoencoders.ltx.video.transformer.fallback_na import (
+        joint_eager,
+        joint_triton,
+    )
+
+    torch.manual_seed(6)
+    b, _, h, w, nh, hd = shape
+    q = torch.randn(*shape, device="cuda", dtype=torch.bfloat16) * 0.25
+    k = torch.randn_like(q) * 0.25
+    v = torch.randn_like(q) * 0.25
+    kq = torch.randn(b, planes, h, w, nh, hd, device="cuda", dtype=torch.bfloat16) * 0.25
+    kk = torch.randn_like(kq) * 0.25
+    kv = torch.randn_like(kq) * 0.25
+    ktimes = torch.tensor(ktimes_v, device="cuda", dtype=torch.float32)
+    kvalid = torch.tensor(kvalid_v, device="cuda", dtype=torch.bool)
+    with torch.inference_mode():
+        vo, ko = joint_triton.joint_na3d(q, k, v, kq, kk, kv, ktimes, kvalid, ks)
+        vr, kr = joint_eager.joint_na3d(q, k, v, kq, kk, kv, ktimes, kvalid, ks)
+    assert _psnr_db(vr, vo) >= 60.0
+    if any(kvalid_v):
+        assert _psnr_db(kr, ko) >= 60.0
+    else:
+        assert torch.equal(ko, torch.zeros_like(ko))
