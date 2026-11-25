@@ -48,6 +48,45 @@ from worldfoundry.core.execution.graphs.cuda_graph import _tensor_tree_signature
 _DEFAULT_WARMUP = 3
 _DEFAULT_MAX_GRAPHS = 16
 
+_EXACT_SCALAR_TYPES = frozenset((bool, int, float, str, torch.dtype, torch.device, type(None)))
+_ELIGIBLE_LEAF_TYPES = (torch.Tensor, bool, int, float, str, torch.dtype, torch.device)
+
+# Resolve version-dependent autocast and TF32 getters once at import time so
+# steady-state replay skips per-call try/except and __getattr__ wrappers.
+try:
+    torch.is_autocast_enabled("cuda")
+    _AUTOCAST_ENABLED_TAKES_DEVICE = True
+except TypeError:  # pragma: no cover - PyTorch < 2.4
+    _AUTOCAST_ENABLED_TAKES_DEVICE = False
+
+_HAS_GET_AUTOCAST_DTYPE = hasattr(torch, "get_autocast_dtype")
+
+
+def _read_matmul_allow_tf32() -> bool:
+    return bool(torch.backends.cuda.matmul.allow_tf32)
+
+
+def _read_cudnn_allow_tf32() -> bool:
+    return bool(torch.backends.cudnn.allow_tf32)
+
+
+_c_get_cublas_allow_tf32 = getattr(torch._C, "_get_cublas_allow_tf32", None)
+_c_get_cudnn_allow_tf32 = getattr(torch._C, "_get_cudnn_allow_tf32", None)
+_c_get_float32_matmul_precision = getattr(torch._C, "_get_float32_matmul_precision", None)
+
+_get_matmul_allow_tf32: Callable[[], bool] = (
+    _c_get_cublas_allow_tf32 if callable(_c_get_cublas_allow_tf32) else _read_matmul_allow_tf32
+)
+_get_cudnn_allow_tf32: Callable[[], bool] = (
+    _c_get_cudnn_allow_tf32 if callable(_c_get_cudnn_allow_tf32) else _read_cudnn_allow_tf32
+)
+_get_float32_matmul_precision: Callable[[], str] = (
+    _c_get_float32_matmul_precision if callable(_c_get_float32_matmul_precision) else torch.get_float32_matmul_precision
+)
+_is_grad_enabled = torch.is_grad_enabled
+_is_inference_mode_enabled = torch.is_inference_mode_enabled
+_are_deterministic_algorithms_enabled = torch.are_deterministic_algorithms_enabled
+
 
 # ──────────────────────────────────────────────────────────────────────────
 # Signature helpers — Graph identity binds tensors + ambient math policy
@@ -60,27 +99,160 @@ def _flatten_tensors(args: Sequence[Any], kwargs: Mapping[str, Any] | None = Non
     return [leaf for leaf in leaves if isinstance(leaf, torch.Tensor)]
 
 
+def _ambient_policy_key_tuple() -> tuple[bool, bool, torch.dtype, str, bool, bool, bool]:
+    """Compact hashable ambient policy tuple for eligible (no-grad) calls.
+
+    ``grad_enabled`` is guaranteed ``False`` by the caller's eligibility check.
+    Keeping ``autocast_dtype`` as a ``torch.dtype`` avoids per-replay string
+    allocation while preserving exact bucket identity.
+    """
+    autocast_enabled = (
+        torch.is_autocast_enabled("cuda") if _AUTOCAST_ENABLED_TAKES_DEVICE else torch.is_autocast_enabled()
+    )
+    autocast_dtype = torch.get_autocast_dtype("cuda") if _HAS_GET_AUTOCAST_DTYPE else torch.get_autocast_gpu_dtype()
+    return (
+        _is_inference_mode_enabled(),
+        bool(autocast_enabled),
+        autocast_dtype,
+        _get_float32_matmul_precision(),
+        _get_matmul_allow_tf32(),
+        _get_cudnn_allow_tf32(),
+        _are_deterministic_algorithms_enabled(),
+    )
+
+
 def _ambient_policy_key() -> dict[str, Any]:
     """Math/autocast/grad policy that a captured graph implicitly binds."""
-
-    try:
-        autocast_enabled = torch.is_autocast_enabled("cuda")
-    except TypeError:  # PyTorch < 2.4
-        autocast_enabled = torch.is_autocast_enabled()
-    try:
-        autocast_dtype = torch.get_autocast_dtype("cuda")
-    except AttributeError:  # PyTorch < 2.4
-        autocast_dtype = torch.get_autocast_gpu_dtype()
+    (
+        inference_mode,
+        autocast_enabled,
+        autocast_dtype,
+        float32_matmul_precision,
+        matmul_allow_tf32,
+        cudnn_allow_tf32,
+        deterministic_algorithms,
+    ) = _ambient_policy_key_tuple()
     return {
-        "grad_enabled": torch.is_grad_enabled(),
-        "inference_mode": torch.is_inference_mode_enabled(),
-        "autocast_enabled": bool(autocast_enabled),
+        "grad_enabled": _is_grad_enabled(),
+        "inference_mode": inference_mode,
+        "autocast_enabled": autocast_enabled,
         "autocast_dtype": str(autocast_dtype),
-        "float32_matmul_precision": torch.get_float32_matmul_precision(),
-        "matmul_allow_tf32": torch.backends.cuda.matmul.allow_tf32,
-        "cudnn_allow_tf32": torch.backends.cudnn.allow_tf32,
-        "deterministic_algorithms": torch.are_deterministic_algorithms_enabled(),
+        "float32_matmul_precision": float32_matmul_precision,
+        "matmul_allow_tf32": matmul_allow_tf32,
+        "cudnn_allow_tf32": cudnn_allow_tf32,
+        "deterministic_algorithms": deterministic_algorithms,
     }
+
+
+def _scalar_leaf_key(leaf: Any) -> Any:
+    """Build a collision-free hashable key for an eligible non-tensor leaf.
+
+    Includes ``type(leaf)`` so ``1``, ``1.0``, and ``True`` never collide in
+    Python tuple/dict hashing, and normalizes signed zero (``+0.0`` vs ``-0.0``)
+    and ``NaN`` via ``repr`` so repeated ``NaN`` constants still cache-hit.
+    """
+    if leaf is None:
+        return None
+    leaf_type = type(leaf)
+    if leaf_type is float:
+        if leaf == 0.0 or leaf != leaf:
+            return (float, repr(leaf))
+        return (float, leaf)
+    if leaf_type in _EXACT_SCALAR_TYPES:
+        return (leaf_type, leaf)
+    return (leaf_type, repr(leaf))
+
+
+_INELIGIBLE = object()
+_PYTREE_FALLBACK = object()
+
+
+def _inspect_builtin_value(
+    value: Any,
+    tensors: list[torch.Tensor],
+    device_box: list[torch.device | None],
+) -> Any:
+    """Single-pass walker for plain tensors, exact scalars, and built-in containers.
+
+    Preserves exact container types (``tuple``, ``list``, ``dict``) and ``dict``
+    insertion order to match :func:`torch.utils._pytree.tree_flatten` leaf order.
+    Returns a hashable key, ``_INELIGIBLE`` when the input cannot be graphed, or
+    ``_PYTREE_FALLBACK`` for subclasses / custom pytree nodes.
+    """
+    v_type = type(value)
+    if v_type is torch.Tensor:
+        if not value.is_cuda or value.requires_grad:
+            return _INELIGIBLE
+        dev = value.device
+        first = device_box[0]
+        if first is None:
+            device_box[0] = dev
+        elif dev != first:
+            return _INELIGIBLE
+        tensors.append(value)
+        return (
+            value.shape,
+            value.stride(),
+            value.dtype,
+            value.layout,
+            value.names if value.has_names() else None,
+            value.is_conj(),
+            value.is_neg(),
+        )
+    if v_type in _EXACT_SCALAR_TYPES:
+        return _scalar_leaf_key(value)
+    if v_type is tuple or v_type is list:
+        out: list[Any] = [v_type]
+        for item in value:
+            item_key = _inspect_builtin_value(item, tensors, device_box)
+            if item_key is _INELIGIBLE or item_key is _PYTREE_FALLBACK:
+                return item_key
+            out.append(item_key)
+        return tuple(out)
+    if v_type is dict:
+        out = [dict]
+        for dk, dv in value.items():
+            dk_type = type(dk)
+            if dk_type not in _EXACT_SCALAR_TYPES:
+                return _PYTREE_FALLBACK
+            key_sig = _scalar_leaf_key(dk)
+            val_sig = _inspect_builtin_value(dv, tensors, device_box)
+            if val_sig is _INELIGIBLE or val_sig is _PYTREE_FALLBACK:
+                return val_sig
+            out.append((key_sig, val_sig))
+        return tuple(out)
+    return _PYTREE_FALLBACK
+
+
+def _tensor_leaf_key(tensor: torch.Tensor) -> tuple[Any, ...]:
+    """Hashable tensor-layout key matching ``_tensor_tree_signature`` fields.
+
+    Device equality and ``requires_grad is False`` are enforced once per call;
+    CUDA capability is a pure function of ``device``. Also binds ``is_conj``
+    and ``is_neg`` so conjugated/negated views stay in distinct buckets.
+    """
+    names = tensor.names if tensor.has_names() else None
+    t_type = type(tensor)
+    if t_type is torch.Tensor:
+        return (
+            tensor.shape,
+            tensor.stride(),
+            tensor.dtype,
+            tensor.layout,
+            names,
+            tensor.is_conj(),
+            tensor.is_neg(),
+        )
+    return (
+        t_type,
+        tensor.shape,
+        tensor.stride(),
+        tensor.dtype,
+        tensor.layout,
+        names,
+        tensor.is_conj(),
+        tensor.is_neg(),
+    )
 
 
 def _arg_signature(value: Any) -> Any:
@@ -171,6 +343,7 @@ class InferenceCUDAGraphRunner:
         clone_outputs: bool = True,
         enabled: bool = True,
         extra_key: str | None = None,
+        pool: Any | None = None,
     ) -> None:
         """Wrap ``fn`` with an instance-local Graph cache.
 
@@ -186,6 +359,11 @@ class InferenceCUDAGraphRunner:
             extra_key: Optional salt folded into the signature (for example a
                 model revision or compile mode) so two policies do not share
                 one Graph.
+            pool: Optional CUDA Graph memory pool handle (from
+                :func:`torch.cuda.graph_pool_handle`). When ``None`` (default),
+                the runner lazily allocates its own private pool on first
+                capture. Pass one shared pool handle across mutually-exclusive
+                sequential runners to reuse intermediate activation buffers.
         """
         self._fn = fn
         self._warmup = int(warmup)
@@ -193,13 +371,19 @@ class InferenceCUDAGraphRunner:
         self._clone_outputs = bool(clone_outputs)
         self._enabled = bool(enabled)
         self._extra_key = extra_key
-        self._graphs: OrderedDict[str, _CapturedGraph] = OrderedDict()
-        self._pool: Any | None = None
-        self._disabled_keys: set[str] = set()
+        self._graphs: OrderedDict[Any, _CapturedGraph] = OrderedDict()
+        self._pool: Any | None = pool
+        self._owns_pool: bool = pool is None
+        self._disabled_keys: set[Any] = set()
         self.stats = {"capture": 0, "replay": 0, "eager": 0, "capture_failed": 0}
         self._request_window_id = 0
         self._request_window_baseline = dict(self.stats)
         self._capture_on_miss = True
+
+    @property
+    def pool(self) -> Any | None:
+        """CUDA Graph memory pool handle (None until supplied or first capture)."""
+        return self._pool
 
     def freeze(self) -> None:
         """Use eager execution for uncaptured signatures after service warmup.
@@ -230,9 +414,12 @@ class InferenceCUDAGraphRunner:
         This does not return graph-owned outputs or count a replay. CPU and
         unsupported inputs return False; allocator OOM propagates.
         """
-        if not self._eligible(args, kwargs):
+        if not torch.cuda.is_available():
             return False
-        key = _signature_key(args, kwargs, self._extra_key)
+        inspected = self._inspect_call(args, kwargs)
+        if inspected is None:
+            return False
+        key, _, _ = inspected
         if key in self._graphs:
             return True
         if key in self._disabled_keys or len(self._graphs) >= self._max_graphs:
@@ -265,13 +452,223 @@ class InferenceCUDAGraphRunner:
             return False
         if any(t.device.type != "cuda" or t.device != tensors[0].device for t in tensors):
             return False
-        if any(t.requires_grad for t in tensors) or torch.is_grad_enabled():
+        if any(t.requires_grad for t in tensors) or _is_grad_enabled():
             return False
         leaves, _ = tree_flatten((args, kwargs))
-        return all(
-            isinstance(leaf, (torch.Tensor, bool, int, float, str, torch.dtype, torch.device)) or leaf is None
-            for leaf in leaves
-        )
+        return all(isinstance(leaf, _ELIGIBLE_LEAF_TYPES) or leaf is None for leaf in leaves)
+
+    def _inspect_call(
+        self,
+        args: tuple[Any, ...],
+        kwargs: dict[str, Any],
+    ) -> tuple[tuple[Any, ...], Sequence[torch.Tensor], bool] | None:
+        """Single-pass eligibility validation, key construction, and tensor extraction.
+
+        Returns ``(key, tensor_leaves, inference_mode)`` when the call is
+        CUDA-Graph eligible, or ``None`` when it must run eagerly. Avoids
+        ``tree_flatten``, JSON serialization, and SHA-256 hashing on flat tensor
+        and scalar calls, and flattens nested pytrees at most once.
+        """
+        if not self._enabled or _is_grad_enabled():
+            return None
+        # Only query torch.cuda.is_available() before the first capture; once
+        # graphs exist, every eligible call still checks tensor.is_cuda below.
+        if not self._graphs and not torch.cuda.is_available():
+            return None
+
+        # Fast path 0 & 1: positional-only calls (most block-stack segments).
+        if not kwargs:
+            if len(args) == 1:
+                arg0 = args[0]
+                if type(arg0) is torch.Tensor:
+                    if not arg0.is_cuda or arg0.requires_grad:
+                        return None
+                    policy = _ambient_policy_key_tuple()
+                    key: tuple[Any, ...] = (
+                        0,
+                        self._extra_key,
+                        arg0.device,
+                        policy,
+                        arg0.shape,
+                        arg0.stride(),
+                        arg0.dtype,
+                        arg0.layout,
+                        arg0.names if arg0.has_names() else None,
+                        arg0.is_conj(),
+                        arg0.is_neg(),
+                    )
+                    return key, args, policy[0]
+
+            device_box: list[torch.device | None] = [None]
+            builtin_ok = True
+            arg_keys: list[Any] = []
+            tensors: list[torch.Tensor] = []
+
+            for arg in args:
+                arg_type = type(arg)
+                if arg_type is torch.Tensor:
+                    if not arg.is_cuda or arg.requires_grad:
+                        return None
+                    dev = arg.device
+                    first = device_box[0]
+                    if first is None:
+                        device_box[0] = dev
+                    elif dev != first:
+                        return None
+                    tensors.append(arg)
+                    arg_keys.append(
+                        (
+                            arg.shape,
+                            arg.stride(),
+                            arg.dtype,
+                            arg.layout,
+                            arg.names if arg.has_names() else None,
+                            arg.is_conj(),
+                            arg.is_neg(),
+                        )
+                    )
+                elif arg_type in _EXACT_SCALAR_TYPES:
+                    arg_keys.append(_scalar_leaf_key(arg))
+                elif arg_type is tuple or arg_type is list or arg_type is dict:
+                    nested_key = _inspect_builtin_value(arg, tensors, device_box)
+                    if nested_key is _INELIGIBLE:
+                        return None
+                    if nested_key is _PYTREE_FALLBACK:
+                        builtin_ok = False
+                        break
+                    arg_keys.append(nested_key)
+                else:
+                    builtin_ok = False
+                    break
+
+            if builtin_ok:
+                first_device = device_box[0]
+                if first_device is None:
+                    return None
+                policy = _ambient_policy_key_tuple()
+                key = (1, self._extra_key, first_device, policy, tuple(arg_keys))
+                return key, tensors, policy[0]
+
+        # Fast path 2: positional + keyword args over plain tensors, scalars, and built-in containers.
+        else:
+            device_box = [None]
+            builtin_ok = True
+            arg_keys = []
+            tensors = []
+
+            for arg in args:
+                arg_type = type(arg)
+                if arg_type is torch.Tensor:
+                    if not arg.is_cuda or arg.requires_grad:
+                        return None
+                    dev = arg.device
+                    first = device_box[0]
+                    if first is None:
+                        device_box[0] = dev
+                    elif dev != first:
+                        return None
+                    tensors.append(arg)
+                    arg_keys.append(
+                        (
+                            arg.shape,
+                            arg.stride(),
+                            arg.dtype,
+                            arg.layout,
+                            arg.names if arg.has_names() else None,
+                            arg.is_conj(),
+                            arg.is_neg(),
+                        )
+                    )
+                elif arg_type in _EXACT_SCALAR_TYPES:
+                    arg_keys.append(_scalar_leaf_key(arg))
+                elif arg_type is tuple or arg_type is list or arg_type is dict:
+                    nested_key = _inspect_builtin_value(arg, tensors, device_box)
+                    if nested_key is _INELIGIBLE:
+                        return None
+                    if nested_key is _PYTREE_FALLBACK:
+                        builtin_ok = False
+                        break
+                    arg_keys.append(nested_key)
+                else:
+                    builtin_ok = False
+                    break
+
+            if builtin_ok:
+                kw_names = tuple(kwargs) if len(kwargs) == 1 else tuple(sorted(kwargs))
+                kw_keys: list[Any] = []
+                for name in kw_names:
+                    val = kwargs[name]
+                    val_type = type(val)
+                    if val_type is torch.Tensor:
+                        if not val.is_cuda or val.requires_grad:
+                            return None
+                        dev = val.device
+                        first = device_box[0]
+                        if first is None:
+                            device_box[0] = dev
+                        elif dev != first:
+                            return None
+                        tensors.append(val)
+                        kw_keys.append(
+                            (
+                                val.shape,
+                                val.stride(),
+                                val.dtype,
+                                val.layout,
+                                val.names if val.has_names() else None,
+                                val.is_conj(),
+                                val.is_neg(),
+                            )
+                        )
+                    elif val_type in _EXACT_SCALAR_TYPES:
+                        kw_keys.append(_scalar_leaf_key(val))
+                    elif val_type is tuple or val_type is list or val_type is dict:
+                        nested_key = _inspect_builtin_value(val, tensors, device_box)
+                        if nested_key is _INELIGIBLE:
+                            return None
+                        if nested_key is _PYTREE_FALLBACK:
+                            builtin_ok = False
+                            break
+                        kw_keys.append(nested_key)
+                    else:
+                        builtin_ok = False
+                        break
+
+                if builtin_ok:
+                    first_device = device_box[0]
+                    if first_device is None:
+                        return None
+                    policy = _ambient_policy_key_tuple()
+                    key = (2, self._extra_key, first_device, policy, tuple(arg_keys), kw_names, tuple(kw_keys))
+                    return key, tensors, policy[0]
+
+        # General path 3: single pytree flatten for custom pytree nodes / tensor subclasses.
+        canonical_kwargs = {name: kwargs[name] for name in sorted(kwargs)} if kwargs else {}
+        leaves, spec = tree_flatten((args, canonical_kwargs))
+        first_device = None
+        leaf_keys: list[Any] = []
+        tensors = []
+        for leaf in leaves:
+            if isinstance(leaf, torch.Tensor):
+                if not leaf.is_cuda or leaf.requires_grad:
+                    return None
+                dev = leaf.device
+                if first_device is None:
+                    first_device = dev
+                elif dev != first_device:
+                    return None
+                tensors.append(leaf)
+                leaf_keys.append(_tensor_leaf_key(leaf))
+            elif leaf is None or isinstance(leaf, _ELIGIBLE_LEAF_TYPES):
+                leaf_keys.append(_scalar_leaf_key(leaf))
+            else:
+                return None
+
+        if first_device is None:
+            return None
+        policy = _ambient_policy_key_tuple()
+        key = (3, self._extra_key, first_device, policy, spec, tuple(leaf_keys))
+        return key, tensors, policy[0]
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         """Replay a captured Graph for this signature, or run ``fn`` eagerly.
@@ -280,16 +677,19 @@ class InferenceCUDAGraphRunner:
         capture → replay. Any capture failure increments ``capture_failed``
         and subsequent calls for that key stay eager.
         """
-        if not self._eligible(args, kwargs):
+        inspected = self._inspect_call(args, kwargs)
+        if inspected is None:
             self.stats["eager"] += 1
             return self._fn(*args, **kwargs)
 
-        key = _signature_key(args, kwargs, self._extra_key)
-        captured = self._graphs.get(key)
+        key, tensor_leaves, inference_mode = inspected
+        graphs = self._graphs
+        captured = graphs.get(key)
         if captured is not None:
-            self._graphs.move_to_end(key)
-            return self._replay(captured, args, kwargs)
-        if not self._capture_on_miss or key in self._disabled_keys or len(self._graphs) >= self._max_graphs:
+            if len(graphs) > 1:
+                graphs.move_to_end(key)
+            return self._replay_leaves(captured, tensor_leaves, inference_mode)
+        if not self._capture_on_miss or key in self._disabled_keys or len(graphs) >= self._max_graphs:
             self.stats["eager"] += 1
             return self._fn(*args, **kwargs)
 
@@ -297,18 +697,19 @@ class InferenceCUDAGraphRunner:
         if captured is None:
             self.stats["eager"] += 1
             return self._fn(*args, **kwargs)
-        return self._replay(captured, args, kwargs)
+        return self._replay_leaves(captured, tensor_leaves, inference_mode)
 
-    def _capture(self, key: str, args: tuple[Any, ...], kwargs: dict[str, Any]) -> _CapturedGraph | None:
+    def _capture(self, key: Any, args: tuple[Any, ...], kwargs: dict[str, Any]) -> _CapturedGraph | None:
         """Warm up and capture; remember unsupported signatures, propagate OOM."""
         from worldfoundry.core.execution.inference_runtime import is_accelerator_out_of_memory
 
-        device = _flatten_tensors(args, kwargs)[0].device
         # Every tensor leaf becomes an explicit replay input, including nested
         # per-layer conditions. Warm these exact buffers: cloning a sliced or
         # expanded view changes its strides and therefore compiler guards.
-        leaves, spec = tree_flatten((args, {name: kwargs[name] for name in sorted(kwargs)}))
+        canonical_kwargs = {name: kwargs[name] for name in sorted(kwargs)} if kwargs else {}
+        leaves, spec = tree_flatten((args, canonical_kwargs))
         input_indices = [index for index, leaf in enumerate(leaves) if isinstance(leaf, torch.Tensor)]
+        device = leaves[input_indices[0]].device
         static_inputs = [leaves[index].clone() for index in input_indices]
         for index, buffer in zip(input_indices, static_inputs, strict=False):
             leaves[index] = buffer
@@ -344,7 +745,7 @@ class InferenceCUDAGraphRunner:
         if self._pool is None:
             self._pool = graph_pool_handle()
         graph = torch.cuda.CUDAGraph()
-        inference_mode = torch.is_inference_mode_enabled()
+        inference_mode = _is_inference_mode_enabled()
         gc_was_enabled = gc.isenabled()
         if gc_was_enabled:
             gc.disable()
@@ -377,20 +778,54 @@ class InferenceCUDAGraphRunner:
         self.stats["capture"] += 1
         return captured
 
+    def _replay_leaves(
+        self,
+        captured: _CapturedGraph,
+        tensor_leaves: Sequence[torch.Tensor],
+        already_inference_mode: bool,
+    ) -> Any:
+        """``copy_`` pre-extracted tensor leaves, replay, then materialize outputs."""
+        static_inputs = captured.static_inputs
+        if len(static_inputs) == 1:
+            buf = static_inputs[0]
+            src = tensor_leaves[0]
+            if buf is not src:
+                buf.copy_(src)
+        else:
+            for buf, src in zip(static_inputs, tensor_leaves, strict=False):
+                if buf is not src:
+                    buf.copy_(src)
+        if already_inference_mode:
+            captured.graph.replay()
+        else:
+            with torch.inference_mode():
+                captured.graph.replay()
+        self.stats["replay"] += 1
+        outputs = captured.static_outputs
+        if not self._clone_outputs:
+            return outputs
+        if type(outputs) is torch.Tensor:
+            return outputs.clone()
+        return self._materialize(outputs)
+
     def _replay(self, captured: _CapturedGraph, args: tuple[Any, ...], kwargs: dict[str, Any]) -> Any:
         """``copy_`` fresh tensor leaves, replay, then materialize owned outputs."""
-        leaves, _ = tree_flatten((args, {name: kwargs[name] for name in sorted(kwargs)}))
-        for buf, index in zip(captured.static_inputs, captured.input_indices, strict=False):
-            buf.copy_(leaves[index])
-        with torch.inference_mode():
-            captured.graph.replay()
-        self.stats["replay"] += 1
-        return self._materialize(captured.static_outputs)
+        canonical_kwargs = {name: kwargs[name] for name in sorted(kwargs)} if kwargs else {}
+        leaves, _ = tree_flatten((args, canonical_kwargs))
+        tensor_leaves = [leaves[index] for index in captured.input_indices]
+        return self._replay_leaves(captured, tensor_leaves, _is_inference_mode_enabled())
 
     def _materialize(self, outputs: Any) -> Any:
         """Clone tensor leaves so callers cannot alias static Graph output storage."""
         if not self._clone_outputs:
             return outputs
+        if type(outputs) is torch.Tensor:
+            return outputs.clone()
+        if type(outputs) is tuple:
+            for value in outputs:
+                if type(value) is not torch.Tensor:
+                    return tree_map(lambda v: v.clone() if isinstance(v, torch.Tensor) else v, outputs)
+            return tuple(value.clone() for value in outputs)
         return tree_map(lambda value: value.clone() if isinstance(value, torch.Tensor) else value, outputs)
 
     def report(self) -> dict[str, Any]:
@@ -425,6 +860,11 @@ class InferenceCUDAGraphRunner:
             torch.cuda.synchronize(device)
         self._graphs.clear()
         self._disabled_keys.clear()
+        # Only drop the pool handle when this runner owns it privately; when a
+        # pool is shared across segments, sibling runners may still hold active
+        # captures in that pool.
+        if self._owns_pool:
+            self._pool = None
 
 
 __all__ = ["InferenceCUDAGraphRunner"]

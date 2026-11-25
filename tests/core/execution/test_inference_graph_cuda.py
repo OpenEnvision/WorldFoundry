@@ -311,3 +311,164 @@ def test_cuda_graph_capture_pauses_and_restores_cyclic_gc(cuda_device: torch.dev
     assert fail_states == [True, False]
     assert gc.isenabled()
     assert failing_runner.report()["capture_failed"] == 1
+
+
+@torch.inference_mode()
+def test_fast_key_distinguishes_bool_int_float_signed_zero_and_reuses_nan(cuda_device: torch.device) -> None:
+    def op(value: torch.Tensor, tag: object) -> torch.Tensor:
+        if type(tag) is bool:
+            return value + (10.0 if tag else -10.0)
+        if type(tag) is int:
+            return value + float(tag) * 100.0
+        if type(tag) is float:
+            if tag != tag:
+                return value + 777.0
+            return value + (1.0 if repr(tag) == "-0.0" else 2.0 + tag)
+        return value
+
+    runner = InferenceCUDAGraphRunner(op, warmup=1, max_graphs=16)
+    x = torch.ones((4, 4), device=cuda_device, dtype=torch.float32)
+
+    # 1, 1.0, True must never collide in Python tuple/dict key hashing.
+    torch.testing.assert_close(runner(x, 1), x + 100.0, rtol=0, atol=0)
+    torch.testing.assert_close(runner(x, 1.0), x + 3.0, rtol=0, atol=0)
+    torch.testing.assert_close(runner(x, True), x + 10.0, rtol=0, atol=0)
+    # 0, 0.0, -0.0, False must never collide either.
+    torch.testing.assert_close(runner(x, 0), x, rtol=0, atol=0)
+    torch.testing.assert_close(runner(x, 0.0), x + 2.0, rtol=0, atol=0)
+    torch.testing.assert_close(runner(x, -0.0), x + 1.0, rtol=0, atol=0)
+    torch.testing.assert_close(runner(x, False), x - 10.0, rtol=0, atol=0)
+    # Repeated NaN must hit the same captured bucket rather than re-capturing.
+    torch.testing.assert_close(runner(x, float("nan")), x + 777.0, rtol=0, atol=0)
+    torch.testing.assert_close(runner(x, float("nan")), x + 777.0, rtol=0, atol=0)
+
+    report = runner.report()
+    assert report["graphs"] == report["capture"] == 8
+    assert report["replay"] == 9
+    assert report["eager"] == report["capture_failed"] == 0
+
+
+@torch.inference_mode()
+def test_fast_key_distinguishes_strides_views_conj_and_ambient_policy_changes(cuda_device: torch.device) -> None:
+    def scale(value: torch.Tensor) -> torch.Tensor:
+        return value * 2.0
+
+    runner = InferenceCUDAGraphRunner(scale, warmup=1, max_graphs=16)
+    base = torch.arange(12, device=cuda_device, dtype=torch.float32).reshape(3, 4)
+    transposed = torch.arange(12, device=cuda_device, dtype=torch.float32).reshape(4, 3).t()
+    sliced = torch.arange(24, device=cuda_device, dtype=torch.float32).reshape(3, 8)[:, ::2]
+
+    # All three share shape (3, 4) but have different strides -> 3 distinct graphs.
+    for tensor in (base, transposed, sliced):
+        torch.testing.assert_close(runner(tensor), scale(tensor), rtol=0, atol=0)
+    assert runner.report()["graphs"] == 3
+
+    # Complex tensor vs conjugated view (same shape & stride, different is_conj bit).
+    z = torch.complex(base, base + 1.0)
+    z_conj = z.conj()
+    assert z.shape == z_conj.shape and z.stride() == z_conj.stride() and z_conj.is_conj()
+    torch.testing.assert_close(runner(z), scale(z), rtol=0, atol=0)
+    torch.testing.assert_close(runner(z_conj), scale(z_conj), rtol=0, atol=0)
+    assert runner.report()["graphs"] == 5
+
+    # Ambient policy changes (autocast dtype, TF32, float32 matmul precision) must bucket separately.
+    policy_runner = InferenceCUDAGraphRunner(lambda t: t + 1.0, warmup=1, max_graphs=16)
+    with torch.autocast("cuda", dtype=torch.bfloat16):
+        policy_runner(base)
+    with torch.autocast("cuda", dtype=torch.float16):
+        policy_runner(base)
+    assert policy_runner.report()["graphs"] == 2
+
+    prev_matmul_tf32 = torch.backends.cuda.matmul.allow_tf32
+    prev_cudnn_tf32 = torch.backends.cudnn.allow_tf32
+    prev_prec = torch.get_float32_matmul_precision()
+    try:
+        torch.backends.cuda.matmul.allow_tf32 = False
+        policy_runner(base)
+        torch.backends.cuda.matmul.allow_tf32 = True
+        policy_runner(base)
+        torch.backends.cudnn.allow_tf32 = not prev_cudnn_tf32
+        policy_runner(base)
+        torch.set_float32_matmul_precision("highest" if prev_prec != "highest" else "high")
+        policy_runner(base)
+    finally:
+        torch.backends.cuda.matmul.allow_tf32 = prev_matmul_tf32
+        torch.backends.cudnn.allow_tf32 = prev_cudnn_tf32
+        torch.set_float32_matmul_precision(prev_prec)
+
+    assert policy_runner.report()["graphs"] >= 5
+    assert policy_runner.report()["capture_failed"] == 0
+
+
+@torch.inference_mode()
+def test_fast_paths_cover_tuples_nested_containers_namedtuples_and_parameters(cuda_device: torch.device) -> None:
+    Pair = namedtuple("Pair", ("left", "right"))
+
+    # Built-in tuple/list/dict outputs & inputs (fast path) + namedtuple (pytree path)
+    def add_pair(pair: object) -> tuple[torch.Tensor, torch.Tensor]:
+        if isinstance(pair, Pair):
+            return pair.left + pair.right, pair.left - pair.right
+        if isinstance(pair, list):
+            return pair[0] + pair[1] + 1.0, pair[0] - pair[1]
+        if isinstance(pair, tuple):
+            return pair[0] + pair[1] + 2.0, pair[0] - pair[1]
+        raise TypeError(type(pair))
+
+    runner = InferenceCUDAGraphRunner(add_pair, warmup=1, max_graphs=8)
+    a = torch.full((3, 4), 5.0, device=cuda_device)
+    b = torch.full((3, 4), 2.0, device=cuda_device)
+
+    out_list = runner([a, b])
+    out_tup = runner((a, b))
+    out_nt = runner(Pair(a, b))
+
+    torch.testing.assert_close(out_list[0], a + b + 1.0, rtol=0, atol=0)
+    torch.testing.assert_close(out_tup[0], a + b + 2.0, rtol=0, atol=0)
+    torch.testing.assert_close(out_nt[0], a + b, rtol=0, atol=0)
+    assert type(out_list) is tuple and type(out_tup) is tuple and type(out_nt) is tuple
+    assert out_list[0].data_ptr() != out_tup[0].data_ptr()
+    assert runner.report()["graphs"] == 3
+
+    # Tensor subclass (nn.Parameter with requires_grad=False) runs cleanly via pytree path
+    # and does not collide with plain torch.Tensor.
+    param_runner = InferenceCUDAGraphRunner(lambda t: t * 3.0, warmup=1, max_graphs=4)
+    p = torch.nn.Parameter(a.clone(), requires_grad=False)
+    torch.testing.assert_close(param_runner(a), a * 3.0, rtol=0, atol=0)
+    torch.testing.assert_close(param_runner(p), p * 3.0, rtol=0, atol=0)
+    assert param_runner.report()["graphs"] == 2
+    assert param_runner.report()["eager"] == 0
+
+
+@torch.inference_mode()
+def test_shared_pool_between_runners_and_isolated_invalidation(cuda_device: torch.device) -> None:
+    from worldfoundry.core.execution.graphs.cuda_graph import graph_pool_handle
+
+    shared_pool = graph_pool_handle()
+    runner_a = InferenceCUDAGraphRunner(lambda x: (x * 2.0).sin() + x, warmup=1, pool=shared_pool)
+    runner_b = InferenceCUDAGraphRunner(lambda x: (x * 3.0).cos() - x, warmup=1, pool=shared_pool)
+    assert runner_a.pool == shared_pool
+    assert runner_b.pool == shared_pool
+
+    x = torch.linspace(-1.0, 1.0, 256, device=cuda_device).reshape(16, 16)
+    out_a1 = runner_a(x)
+    out_b1 = runner_b(out_a1)
+    expected_a1 = (x * 2.0).sin() + x
+    expected_b1 = (expected_a1 * 3.0).cos() - expected_a1
+    torch.testing.assert_close(out_a1, expected_a1, rtol=1e-6, atol=1e-6)
+    torch.testing.assert_close(out_b1, expected_b1, rtol=1e-6, atol=1e-6)
+
+    # Invalidating runner_a must NOT break runner_b or drop runner_a's shared pool handle.
+    runner_a.invalidate()
+    assert runner_a.pool == shared_pool
+    assert runner_b.pool == shared_pool
+    assert runner_a.report()["graphs"] == 0
+    assert runner_b.report()["graphs"] == 1
+
+    x2 = x + 0.5
+    out_b2 = runner_b(x2)
+    torch.testing.assert_close(out_b2, (x2 * 3.0).cos() - x2, rtol=1e-6, atol=1e-6)
+    out_a2 = runner_a(x2)
+    torch.testing.assert_close(out_a2, (x2 * 2.0).sin() + x2, rtol=1e-6, atol=1e-6)
+    # Earlier outputs retained across both replays and invalidation remain intact.
+    torch.testing.assert_close(out_a1, expected_a1, rtol=1e-6, atol=1e-6)
+    torch.testing.assert_close(out_b1, expected_b1, rtol=1e-6, atol=1e-6)
