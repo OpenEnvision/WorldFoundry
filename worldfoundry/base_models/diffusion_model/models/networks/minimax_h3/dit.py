@@ -2238,7 +2238,7 @@ class MiniMaxH3DiTModel(nn.Module):
             )
         text_rows = prompt_embeds[:text_len].to(device=device, dtype=self.condition_proj.weight.dtype)
         # Preserve caller-provided document boundaries (single document [0, text_len]
-        # or per-segment bounds such as H3-World's isolated action annotations).
+        # or caller-supplied per-segment bounds).
         refiner_cu = refiner_cu_seqlens.to(device=device, dtype=torch.int32)
         text_embed = self.condition_proj(text_rows)
         return self.token_refiner(text_embed, cu_seqlens=refiner_cu, cu_seqlens_host=tuple(bounds))

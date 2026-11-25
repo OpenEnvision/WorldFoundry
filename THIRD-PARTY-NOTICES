@@ -825,22 +825,6 @@ inference contract onto the canonical MiniMax-H3 components. The adapter
 weights and MiniMax-H3 base weights remain separate model assets.
 
 
-H3-World action-conditioned world model
----------------------------------------
-Copyright 2026 Danze Chen
-Source: https://github.com/Danzer1xxxxChan/H3-World
-Source revision: f0c7be2acbbde8256b2473f6e7b088f58272acae
-Source license: Apache-2.0
-Model license: MiniMax H3 Community License Agreement
-
-WorldFoundry adapts H3-World's per-latent action-to-language rule table,
-rank-32 LoRA loading, mirrored temporal RoPE placement, segmented token
-refinement, and directed attention routing (including modifications derived
-from DiffSynth-Studio, Apache-2.0) onto the canonical MiniMax-H3 components.
-The H3-World LoRA checkpoint (DANNY621/H3-World) and MiniMax-H3 base weights
-remain separate model assets subject to the MiniMax H3 Community License Agreement.
-
-
 H3-Tiny structured-pruned MiniMax-H3 inference
 ----------------------------------------------
 Copyright 2026 Haoshuai Fu and Bin Chen

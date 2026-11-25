@@ -114,14 +114,10 @@ def minimax_h3_packed_sequence(
     include_keyframe_cond: bool,
     keyframe_frame_indices: list[int] | tuple[int, ...] | None = None,
     frame_count: int | None = None,
-    action_text_spans: Sequence[tuple[int, int]] | None = None,
 ) -> dict[str, Any]:
     """Build the packed-sequence structural fields for one CFG branch.
 
-    The used length is padded up to a multiple of 64. When ``action_text_spans``
-    is supplied (H3-World per-latent action conditioning), each annotation span
-    receives a mirrored temporal offset relative to its bound video latent and
-    the span metadata is attached for segmented refiner and directed attention.
+    The used length is padded up to a multiple of 64.
     """
 
     ph, pw = latent_h // _PATCH_H, latent_w // _PATCH_W
@@ -154,36 +150,6 @@ def minimax_h3_packed_sequence(
 
     g = torch.zeros(seq_len, 3, dtype=torch.float64)
     g[text_sl, 0] = torch.arange(text_len, dtype=torch.float64)
-
-    action_text_rows = None
-    action_text_spans_local: list[tuple[int, int]] | None = None
-    if action_text_spans is not None:
-        if len(action_text_spans) != latent_t:
-            raise ValueError(f"action_text_spans must have {latent_t} entries, got {len(action_text_spans)}")
-        prev = 0
-        rows: list[tuple[int, int]] = []
-        for k, (lo_raw, hi_raw) in enumerate(action_text_spans):
-            lo, hi = int(lo_raw), int(hi_raw)
-            if not (0 <= lo < hi <= text_len):
-                raise ValueError(f"action_text_spans[{k}] ({lo}, {hi}) is outside text segment [0, {text_len})")
-            if lo < prev:
-                raise ValueError(f"action_text_spans[{k}] ({lo}, {hi}) overlaps or is out of order")
-            prev = hi
-            rows.append((lo, hi))
-        s_k = _video_t_grid(latent_t, 0.0)
-        # Back off by one step so the last annotation row stays strictly before
-        # the first-frame anchor at text_len.
-        origin = float(text_len) - float(s_k[-1]) - 1.0
-        head_end = rows[0][0]
-        if origin < head_end:
-            raise ValueError(
-                f"action annotations require t in [{origin:.0f}, {origin + float(s_k[-1]):.0f}], "
-                f"overlapping head segment [0, {head_end})"
-            )
-        for k, (lo, hi) in enumerate(rows):
-            g[lo:hi, 0] = origin + float(s_k[k])
-        action_text_rows = torch.tensor(rows, dtype=torch.long)
-        action_text_spans_local = rows
 
     t_grid = _video_t_grid(latent_t, float(text_len))
     sqrt_area = np.sqrt(latent_h * latent_w)
@@ -220,7 +186,7 @@ def minimax_h3_packed_sequence(
     token_tags[img_pos] = 0  # VIDEO
 
     cu = torch.tensor([0, used, seq_len], dtype=torch.int32)
-    out: dict[str, Any] = {
+    return {
         "seq_len": seq_len,
         "img_pos": img_pos,
         "audio_pos": audio_pos,
@@ -230,12 +196,6 @@ def minimax_h3_packed_sequence(
         "token_tags": token_tags,
         "cu_seqlens": cu,
     }
-    if action_text_rows is not None:
-        out["action_text_rows"] = action_text_rows
-        out["action_text_spans_local"] = action_text_spans_local
-        out["action_video_start"] = video_sl.start
-        out["action_frame_rows"] = frame_rows
-    return out
 
 
 def _positive_int(

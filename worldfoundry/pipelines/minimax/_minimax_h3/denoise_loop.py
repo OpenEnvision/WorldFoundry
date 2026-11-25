@@ -11,7 +11,6 @@ Single-GPU port: SGLang's Ulysses sequence-parallel context collapses to
 
 from __future__ import annotations
 
-import itertools
 import math
 from collections.abc import Callable, Mapping
 from contextlib import AbstractContextManager, nullcontext
@@ -808,28 +807,8 @@ class MiniMaxH3DenoiseBranch:
         local_row_stop = local_row_start + local_seq_len
         self.local_row_slice = slice(local_row_start, local_row_stop)
         self.block_token_tags = token_tags_host[local_row_start:local_row_stop].clamp(min=0).to(device)
-        spans_for_refiner = packed.get("action_text_spans_local")
-        if spans_for_refiner is None and packed.get("action_text_rows") is not None:
-            spans_for_refiner = [(int(lo), int(hi)) for lo, hi in packed["action_text_rows"].tolist()]
-        if spans_for_refiner:
-            refiner_bounds = [0, int(spans_for_refiner[0][0]), *(int(hi) for _, hi in spans_for_refiner)]
-            if refiner_bounds[-1] != text_len:
-                raise ValueError(f"action refiner segmentation ends at {refiner_bounds[-1]} != text_len {text_len}")
-            if any(left >= right for left, right in itertools.pairwise(refiner_bounds)):
-                raise ValueError(f"action refiner bounds must be strictly increasing: {refiner_bounds}")
-            refiner_max = max(right - left for left, right in itertools.pairwise(refiner_bounds))
-        else:
-            refiner_bounds = [0, text_len]
-            refiner_max = text_len
-        self.action_mask_spec: dict[str, Any] | None = (
-            {
-                "action_text_rows": packed["action_text_rows"],
-                "video_start": int(packed["action_video_start"]),
-                "frame_rows": int(packed["action_frame_rows"]),
-            }
-            if packed.get("action_text_rows") is not None
-            else None
-        )
+        refiner_bounds = [0, text_len]
+        refiner_max = text_len
         self.static_kwargs: dict[str, Any] = {
             # Cast the fp64 position grid on the host; MiniMaxH3Rope casts to
             # fp32 anyway, and some devices cannot execute fp64.
@@ -976,7 +955,6 @@ def minimax_h3_denoise_loop(
     positive: MiniMaxH3DenoiseBranch,
     negative: MiniMaxH3DenoiseBranch | None = None,
     cfg_scale: float = 1.0,
-    branch_context: Callable[[MiniMaxH3DenoiseBranch], AbstractContextManager] | None = None,
     initial_video_rows: torch.Tensor,
     initial_audio_rows: torch.Tensor,
     keyframe_cond_rows: torch.Tensor | None,
@@ -1006,8 +984,6 @@ def minimax_h3_denoise_loop(
     pin those rows across every step. When ``negative`` is provided with
     ``cfg_scale != 1.0``, classifier-free guidance combines the positive and
     negative velocity predictions; otherwise the raw positive velocity is used.
-    ``branch_context`` optionally wraps model forwards with branch-scoped state
-    (such as H3-World's directed attention mask).
 
     Optional SOL-Engine accelerations:
     - ``step_cache``: calibrated cross-step hidden-state residual cache
@@ -1221,89 +1197,81 @@ def minimax_h3_denoise_loop(
             return model(**fk)
         return model_forward(model, fk, step)
 
-    loop_cm = branch_context(positive) if (branch_context is not None and not use_cfg) else nullcontext()
-    with loop_cm:
-        for step in range(num_steps):
-            step_cm = step_profiler(step) if step_profiler is not None else nullcontext()
-            with step_cm:
-                s_v = sigmas_video[step]
-                s_a = sigmas_audio[step]
+    for step in range(num_steps):
+        step_cm = step_profiler(step) if step_profiler is not None else nullcontext()
+        with step_cm:
+            s_v = sigmas_video[step]
+            s_a = sigmas_audio[step]
 
-                with torch.inference_mode():
-                    video_target = video_rows[video_target_slice]
-                    audio_target = audio_rows[audio_target_slice]
-                    if use_cfg and negative is not None and cfg_parallel_active:
-                        assert cfg_all_gather is not None
-                        assert cfg_local_payload is not None and cfg_gathered_payloads is not None
-                        if cfg_rank == 0:
-                            assert timestep_plan is not None
-                            local_branch = positive
-                            local_step_t = timestep_plan[step]
-                        else:
-                            assert negative_timestep_plan is not None
-                            local_branch = negative
-                            local_step_t = negative_timestep_plan[step]
-                        local_cm = branch_context(local_branch) if branch_context is not None else nullcontext()
-                        with local_cm:
-                            v_video_local, v_audio_local = _run_branch(local_branch, local_step_t, step)
-                        cfg_local_payload[:cfg_video_elems].copy_(v_video_local.float().reshape(-1))
-                        cfg_local_payload[cfg_video_elems:].copy_(v_audio_local[audio_target_slice].float().reshape(-1))
-                        cfg_all_gather(cfg_gathered_payloads, cfg_local_payload, cfg_group)
-                        cfg_collectives += 1
-                        pos_payload, neg_payload = cfg_gathered_payloads[0], cfg_gathered_payloads[1]
-                        v_video_pos = pos_payload[:cfg_video_elems].view_as(video_target)
-                        v_video_neg = neg_payload[:cfg_video_elems].view_as(video_target)
-                        mv_audio_pos = pos_payload[cfg_video_elems:].view_as(audio_target)
-                        mv_audio_neg = neg_payload[cfg_video_elems:].view_as(audio_target)
-                        scale = float(cfg_scale)
-                        mv_video_t = v_video_neg + scale * (v_video_pos - v_video_neg)
-                        mv_audio_t = mv_audio_neg + scale * (mv_audio_pos - mv_audio_neg)
-                    elif use_cfg and negative is not None and negative_timestep_plan is not None:
+            with torch.inference_mode():
+                video_target = video_rows[video_target_slice]
+                audio_target = audio_rows[audio_target_slice]
+                if use_cfg and negative is not None and cfg_parallel_active:
+                    assert cfg_all_gather is not None
+                    assert cfg_local_payload is not None and cfg_gathered_payloads is not None
+                    if cfg_rank == 0:
                         assert timestep_plan is not None
-                        pos_cm = branch_context(positive) if branch_context is not None else nullcontext()
-                        with pos_cm:
-                            v_video_pos, v_audio_pos = _run_branch(positive, timestep_plan[step], step)
-                        neg_cm = branch_context(negative) if branch_context is not None else nullcontext()
-                        with neg_cm:
-                            v_video_neg, v_audio_neg = _run_branch(negative, negative_timestep_plan[step], step)
-                        scale = float(cfg_scale)
-                        mv_video_t = v_video_neg.float() + scale * (v_video_pos.float() - v_video_neg.float())
-                        mv_audio_pos = v_audio_pos[audio_target_slice].float()
-                        mv_audio_neg = v_audio_neg[audio_target_slice].float()
-                        mv_audio_t = mv_audio_neg + scale * (mv_audio_pos - mv_audio_neg)
+                        local_branch = positive
+                        local_step_t = timestep_plan[step]
                     else:
-                        assert timestep_plan is not None
-                        v_video, v_audio = _run_branch(positive, timestep_plan[step], step)
-                        mv_video_t = v_video.float()
-                        mv_audio_t = v_audio[audio_target_slice].float()
+                        assert negative_timestep_plan is not None
+                        local_branch = negative
+                        local_step_t = negative_timestep_plan[step]
+                    v_video_local, v_audio_local = _run_branch(local_branch, local_step_t, step)
+                    cfg_local_payload[:cfg_video_elems].copy_(v_video_local.float().reshape(-1))
+                    cfg_local_payload[cfg_video_elems:].copy_(v_audio_local[audio_target_slice].float().reshape(-1))
+                    cfg_all_gather(cfg_gathered_payloads, cfg_local_payload, cfg_group)
+                    cfg_collectives += 1
+                    pos_payload, neg_payload = cfg_gathered_payloads[0], cfg_gathered_payloads[1]
+                    v_video_pos = pos_payload[:cfg_video_elems].view_as(video_target)
+                    v_video_neg = neg_payload[:cfg_video_elems].view_as(video_target)
+                    mv_audio_pos = pos_payload[cfg_video_elems:].view_as(audio_target)
+                    mv_audio_neg = neg_payload[cfg_video_elems:].view_as(audio_target)
+                    scale = float(cfg_scale)
+                    mv_video_t = v_video_neg + scale * (v_video_pos - v_video_neg)
+                    mv_audio_t = mv_audio_neg + scale * (mv_audio_pos - mv_audio_neg)
+                elif use_cfg and negative is not None and negative_timestep_plan is not None:
+                    assert timestep_plan is not None
+                    v_video_pos, v_audio_pos = _run_branch(positive, timestep_plan[step], step)
+                    v_video_neg, v_audio_neg = _run_branch(negative, negative_timestep_plan[step], step)
+                    scale = float(cfg_scale)
+                    mv_video_t = v_video_neg.float() + scale * (v_video_pos.float() - v_video_neg.float())
+                    mv_audio_pos = v_audio_pos[audio_target_slice].float()
+                    mv_audio_neg = v_audio_neg[audio_target_slice].float()
+                    mv_audio_t = mv_audio_neg + scale * (mv_audio_pos - mv_audio_neg)
+                else:
+                    assert timestep_plan is not None
+                    v_video, v_audio = _run_branch(positive, timestep_plan[step], step)
+                    mv_video_t = v_video.float()
+                    mv_audio_t = v_audio[audio_target_slice].float()
 
-                    _minimax_h3_update_target_rows_(
-                        video_target,
-                        mv_video_t,
-                        sigma_t=video_sigma_t[step],
-                        sigma_curr=s_v,
-                        sigma_next=sigmas_video[step + 1],
-                        sigma_ratio=video_sigma_ratios[step],
-                        one_minus_sigma_ratio=video_one_minus_sigma_ratios[step],
-                        denoised_scratch=video_denoised_scratch,
-                        renoise=renoise and step < num_steps - 1,
-                        noise_generator=noise_generator,
-                    )
+                _minimax_h3_update_target_rows_(
+                    video_target,
+                    mv_video_t,
+                    sigma_t=video_sigma_t[step],
+                    sigma_curr=s_v,
+                    sigma_next=sigmas_video[step + 1],
+                    sigma_ratio=video_sigma_ratios[step],
+                    one_minus_sigma_ratio=video_one_minus_sigma_ratios[step],
+                    denoised_scratch=video_denoised_scratch,
+                    renoise=renoise and step < num_steps - 1,
+                    noise_generator=noise_generator,
+                )
 
-                    _minimax_h3_update_target_rows_(
-                        audio_target,
-                        mv_audio_t,
-                        sigma_t=audio_sigma_t[step],
-                        sigma_curr=s_a,
-                        sigma_next=sigmas_audio[step + 1],
-                        sigma_ratio=audio_sigma_ratios[step],
-                        one_minus_sigma_ratio=audio_one_minus_sigma_ratios[step],
-                        denoised_scratch=audio_denoised_scratch,
-                        renoise=renoise and step < num_steps - 1,
-                        noise_generator=noise_generator,
-                    )
-                if on_step is not None:
-                    on_step(step, video_rows, audio_rows)
+                _minimax_h3_update_target_rows_(
+                    audio_target,
+                    mv_audio_t,
+                    sigma_t=audio_sigma_t[step],
+                    sigma_curr=s_a,
+                    sigma_next=sigmas_audio[step + 1],
+                    sigma_ratio=audio_sigma_ratios[step],
+                    one_minus_sigma_ratio=audio_one_minus_sigma_ratios[step],
+                    denoised_scratch=audio_denoised_scratch,
+                    renoise=renoise and step < num_steps - 1,
+                    noise_generator=noise_generator,
+                )
+            if on_step is not None:
+                on_step(step, video_rows, audio_rows)
 
     if step_cache_report is not None:
         step_cache_report.clear()
